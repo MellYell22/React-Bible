@@ -92,7 +92,19 @@ export default function VoiceScreen({ navigation }: any) {
         addLog("AudioContext resumed");
       }
 
-      const apiKey = process.env.GEMINI_API_KEY || (process.env as any).API_KEY || "";
+      const apiKey = 
+        process.env.GEMINI_API_KEY || 
+        (process.env as any).API_KEY || 
+        (window as any).GEMINI_API_KEY || 
+        "";
+      
+      addLog(`Gemini key present: ${!!apiKey}`);
+      console.log("Gemini key present:", !!apiKey);
+
+      if (!apiKey) {
+        throw new Error("Gemini API Key is missing. Please ensure it is set in the Secrets panel or selected via the key selector.");
+      }
+
       const ai = new GoogleGenAI({ apiKey });
       
       addLog("Connecting to Live API (12-2025)...");

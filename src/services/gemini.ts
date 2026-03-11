@@ -2,7 +2,18 @@ import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { MoodResponse } from "../types";
 
 const getAI = () => {
-  const apiKey = process.env.GEMINI_API_KEY || (process.env as any).API_KEY || "";
+  const apiKey = 
+    process.env.GEMINI_API_KEY || 
+    (process.env as any).API_KEY || 
+    (window as any).GEMINI_API_KEY || 
+    "";
+  
+  if (!apiKey) {
+    console.warn("Gemini API Key is missing. Some features may not work.");
+  } else {
+    console.log("Gemini key present:", !!apiKey);
+  }
+
   return new GoogleGenAI({ apiKey });
 };
 
