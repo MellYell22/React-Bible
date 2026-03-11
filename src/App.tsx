@@ -15,6 +15,7 @@ import AuthScreen from './screens/AuthScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
 
 import { FullScreenBackground } from './components/FullScreenBackground';
+import { Analytics } from "@vercel/analytics/react";
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
@@ -59,30 +60,43 @@ export default function App() {
 
   if (!isSupabaseConfigured) {
     return (
-      <View style={styles.configErrorContainer}>
-        <AlertTriangle color="#F59E0B" size={48} />
-        <Text style={styles.configErrorTitle}>Configuration Required</Text>
-        <Text style={styles.configErrorText}>
-          Please set the following environment variables in the Secrets panel. 
-          IMPORTANT: The URL must start with https://
-        </Text>
-        <View style={styles.configList}>
-          <Text style={styles.configItem}>• VITE_SUPABASE_URL</Text>
-          <Text style={styles.configItem}>• VITE_SUPABASE_ANON_KEY</Text>
+      <>
+        <Analytics />
+        <View style={styles.configErrorContainer}>
+          <AlertTriangle color="#F59E0B" size={48} />
+          <Text style={styles.configErrorTitle}>Configuration Required</Text>
+          <Text style={styles.configErrorText}>
+            Please set the following environment variables in the Secrets panel. 
+            IMPORTANT: The URL must start with https://
+          </Text>
+          <View style={styles.configList}>
+            <Text style={styles.configItem}>• VITE_SUPABASE_URL</Text>
+            <Text style={styles.configItem}>• VITE_SUPABASE_ANON_KEY</Text>
+          </View>
+          <Text style={styles.configErrorHelp}>
+            After adding these secrets, the app will refresh automatically.
+          </Text>
         </View>
-        <Text style={styles.configErrorHelp}>
-          After adding these secrets, the app will refresh automatically.
-        </Text>
-      </View>
+      </>
     );
   }
 
   if (!session) {
-    return <AuthScreen />;
+    return (
+      <>
+        <Analytics />
+        <AuthScreen />
+      </>
+    );
   }
 
   if (profile && !profile.has_completed_onboarding) {
-    return <OnboardingScreen onComplete={fetchProfile} />;
+    return (
+      <>
+        <Analytics />
+        <OnboardingScreen onComplete={fetchProfile} />
+      </>
+    );
   }
 
   const navigate = (name: string, params?: any) => {
@@ -123,6 +137,7 @@ export default function App() {
 
   return (
     <View style={styles.container}>
+      <Analytics />
       <FullScreenBackground>
         <View style={styles.screenContainer}>
           {renderScreen()}

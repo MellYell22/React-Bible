@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
-import { Send, Mic, ThumbsUp, ThumbsDown } from 'lucide-react';
-import { getChatResponse } from '../services/gemini';
+import { Send, Mic, ThumbsUp, ThumbsDown, Volume2 } from 'lucide-react';
+import { getChatResponse, generateSpeech } from '../services/gemini';
 import { ChatMessage, Profile } from '../types';
 import { supabase } from '../services/supabase';
 
@@ -12,10 +12,17 @@ export default function ChatScreen({ navigation }: any) {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
     fetchProfile();
+    return () => {
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
   }, []);
 
   const fetchProfile = async () => {
@@ -69,6 +76,48 @@ export default function ChatScreen({ navigation }: any) {
     ));
   };
 
+  const speakMessage = async (index: number, text: string) => {
+    if (speakingIndex !== null) return;
+    
+    setSpeakingIndex(index);
+    try {
+      const base64Audio = await generateSpeech(text);
+      if (base64Audio) {
+        if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        }
+        const context = audioContextRef.current;
+        if (context.state === 'suspended') {
+          await context.resume();
+        }
+
+        const binary = atob(base64Audio);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        
+        const pcmData = new Int16Array(bytes.buffer.slice(0, bytes.buffer.byteLength - (bytes.buffer.byteLength % 2)));
+        const float32Data = new Float32Array(pcmData.length);
+        for (let i = 0; i < pcmData.length; i++) {
+          float32Data[i] = pcmData[i] / 32768.0;
+        }
+        
+        const audioBuffer = context.createBuffer(1, float32Data.length, 24000);
+        audioBuffer.getChannelData(0).set(float32Data);
+        
+        const source = context.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(context.destination);
+        source.onended = () => setSpeakingIndex(null);
+        source.start();
+      } else {
+        setSpeakingIndex(null);
+      }
+    } catch (error) {
+      console.error("Speech error:", error);
+      setSpeakingIndex(null);
+    }
+  };
+
   useEffect(() => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
   }, [messages]);
@@ -115,6 +164,21 @@ export default function ChatScreen({ navigation }: any) {
             </Text>
             {msg.role === 'model' && (
               <View style={styles.feedbackContainer}>
+                <TouchableOpacity 
+                  onPress={() => speakMessage(index, msg.content)}
+                  style={styles.feedbackButton}
+                  disabled={speakingIndex !== null}
+                >
+                  {speakingIndex === index ? (
+                    <ActivityIndicator size="small" color="#d4af37" />
+                  ) : (
+                    <Volume2 
+                      size={14} 
+                      color="rgba(212, 175, 55, 0.6)" 
+                    />
+                  )}
+                </TouchableOpacity>
+                <View style={{ flex: 1 }} />
                 <TouchableOpacity 
                   onPress={() => handleFeedback(index, 'up')}
                   style={styles.feedbackButton}

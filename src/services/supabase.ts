@@ -1,5 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+// IMPORTANT: The frontend client MUST ONLY use the public anon key.
+// NEVER use the service_role key in the browser as it bypasses Row Level Security.
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -13,6 +15,8 @@ const isValidUrl = (url: string | undefined) => {
   }
 };
 
+// Initialize the Supabase client
+// If the key starts with 'eyJ' and contains 'service_role', Supabase will throw an error in the browser.
 export const supabase: SupabaseClient | null = (isValidUrl(supabaseUrl) && supabaseAnonKey) 
   ? createClient(supabaseUrl!, supabaseAnonKey)
   : null;

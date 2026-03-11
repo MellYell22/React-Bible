@@ -9,8 +9,6 @@ export default defineConfig(({mode}) => {
     plugins: [react(), tailwindcss()],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
-      'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
       'process.env.VITE_STRIPE_PUBLISHABLE_KEY': JSON.stringify(env.VITE_STRIPE_PUBLISHABLE_KEY),
       'process.env.STRIPE_PRICE_ID_PLUS': JSON.stringify(env.STRIPE_PRICE_ID_PLUS),
       'process.env.STRIPE_PRICE_ID_PRO': JSON.stringify(env.STRIPE_PRICE_ID_PRO),

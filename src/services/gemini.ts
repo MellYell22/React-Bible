@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { MoodResponse } from "../types";
 
 const getAI = () => {
@@ -70,4 +70,27 @@ export const getChatResponse = async (history: { role: 'user' | 'model', parts: 
 
   const result = await chat.sendMessage({ message: lastMessage });
   return result.text;
+};
+
+export const generateSpeech = async (text: string): Promise<string | null> => {
+  try {
+    const ai = getAI();
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: `Say warmly and compassionately: ${text}` }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: 'Zephyr' },
+          },
+        },
+      },
+    });
+
+    return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || null;
+  } catch (error) {
+    console.error("Speech generation error:", error);
+    return null;
+  }
 };

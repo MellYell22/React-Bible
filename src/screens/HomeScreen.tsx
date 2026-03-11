@@ -81,23 +81,25 @@ export default function HomeScreen({ navigation }: any) {
       >
         {/* Search Section */}
         <View style={styles.searchSection}>
-          <View style={styles.headerRow}>
-            <View style={styles.titleContainer}>
-              <Text style={styles.mainTitle}>Bible Mood Search</Text>
-            </View>
+          <View style={styles.heroHeader}>
+            <Text style={styles.mainTitle}>Bible Mood Search</Text>
+            <View style={styles.titleUnderline} />
+          </View>
+          
+          <View style={styles.versionRow}>
+            <Text style={styles.headerLabel}>SELECT TRANSLATION</Text>
+            <TouchableOpacity 
+              style={styles.translationSelector}
+              onPress={() => setShowTranslations(!showTranslations)}
+            >
+              <Globe size={12} color="#d4af37" />
+              <Text style={styles.translationText}>{profile?.preferred_translation || 'KJV'}</Text>
+              <Text style={styles.dropdownArrow}>▼</Text>
+            </TouchableOpacity>
             
-            <View style={styles.versionContainer}>
-              <Text style={styles.headerLabel}>VERSION</Text>
-              <TouchableOpacity 
-                style={styles.translationSelector}
-                onPress={() => setShowTranslations(!showTranslations)}
-              >
-                <Globe size={10} color="#d4af37" />
-                <Text style={styles.translationText}>{profile?.preferred_translation || 'KJV'}</Text>
-              </TouchableOpacity>
-              
-              {showTranslations && (
-                <View style={styles.translationDropdown}>
+            {showTranslations && (
+              <View style={styles.translationDropdown}>
+                <ScrollView style={{ maxHeight: 200 }}>
                   {TRANSLATIONS.map(t => (
                     <TouchableOpacity 
                       key={t} 
@@ -110,9 +112,9 @@ export default function HomeScreen({ navigation }: any) {
                       ]}>{t}</Text>
                     </TouchableOpacity>
                   ))}
-                </View>
-              )}
-            </View>
+                </ScrollView>
+              </View>
+            )}
           </View>
 
           <View style={styles.searchBar}>
@@ -159,19 +161,34 @@ export default function HomeScreen({ navigation }: any) {
           <Text style={styles.verseReference}>— PSALM 91:1</Text>
           
           {reflection ? (
-            <View style={styles.reflectionContainer}>
-              <Sparkles size={14} color="#d4af37" style={{ marginBottom: 8 }} />
-              <Text style={styles.reflectionBody}>{reflection}</Text>
-            </View>
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{ width: '100%' }}
+            >
+              <View style={styles.reflectionContainer}>
+                <View style={styles.reflectionHeader}>
+                  <Sparkles size={16} color="#d4af37" />
+                  <Text style={styles.reflectionTitle}>DAVID'S REFLECTION</Text>
+                </View>
+                <Text style={styles.reflectionBody}>{reflection}</Text>
+                <TouchableOpacity onPress={() => setReflection(null)} style={styles.closeReflection}>
+                  <Text style={styles.closeReflectionText}>CLOSE</Text>
+                </TouchableOpacity>
+              </View>
+            </motion.div>
           ) : (
             <TouchableOpacity 
               style={styles.reflectionButton} 
               onPress={handleReflect}
               disabled={loadingReflection}
             >
-              <Text style={styles.reflectionText}>
-                {loadingReflection ? 'DAVID IS REFLECTING...' : "TAP FOR DAVID'S REFLECTION"}
-              </Text>
+              <View style={styles.reflectionButtonContent}>
+                <Sparkles size={14} color="#0b1e3d" style={{ marginRight: 8 }} />
+                <Text style={styles.reflectionText}>
+                  {loadingReflection ? 'DAVID IS REFLECTING...' : "TAP FOR DAVID'S REFLECTION"}
+                </Text>
+              </View>
             </TouchableOpacity>
           )}
         </View>
@@ -191,73 +208,81 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
-  topHeader: {
-    display: 'none',
+  heroHeader: {
+    alignItems: 'center',
+    marginBottom: 25,
+    width: '100%',
   },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    width: '90%',
-    marginBottom: 15,
+  titleUnderline: {
+    width: 40,
+    height: 2,
+    backgroundColor: '#d4af37',
+    marginTop: 8,
+    opacity: 0.5,
   },
-  titleContainer: {
-    flex: 1,
-  },
-  versionContainer: {
-    alignItems: 'flex-end',
+  versionRow: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 20,
     zIndex: 1000,
   },
   headerLabel: {
-    fontSize: 7,
-    color: 'rgba(212, 175, 55, 0.4)',
+    fontSize: 8,
+    color: 'rgba(212, 175, 55, 0.6)',
     fontWeight: 'bold',
-    letterSpacing: 1,
-    marginBottom: 2,
+    letterSpacing: 2,
+    marginBottom: 6,
     textTransform: 'uppercase',
   },
   translationSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(212, 175, 55, 0.05)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
+    borderColor: 'rgba(212, 175, 55, 0.3)',
   },
   translationText: {
     color: '#d4af37',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: 'bold',
-    marginLeft: 4,
+    marginHorizontal: 8,
     letterSpacing: 1,
+  },
+  dropdownArrow: {
+    color: '#d4af37',
+    fontSize: 8,
+    opacity: 0.7,
   },
   translationDropdown: {
     position: 'absolute',
-    top: 32,
-    right: 0,
+    top: 65,
     backgroundColor: '#0f2a52',
-    borderRadius: 10,
-    padding: 6,
+    borderRadius: 15,
+    padding: 8,
     borderWidth: 1,
     borderColor: '#d4af37',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 10,
-    width: 70,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 20,
+    width: 120,
   },
   dropdownItem: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(212, 175, 55, 0.05)',
   },
   dropdownText: {
     color: 'rgba(212, 175, 55, 0.6)',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: 'bold',
     textAlign: 'center',
+    letterSpacing: 1,
   },
   dropdownTextActive: {
     color: '#d4af37',
@@ -266,7 +291,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingTop: 60,
+    paddingTop: 40,
     paddingBottom: 20,
   },
   searchSection: {
@@ -276,30 +301,32 @@ const styles = StyleSheet.create({
     marginTop: 0,
   },
   mainTitle: {
-    fontSize: 18,
+    fontSize: 28,
     color: '#d4af37',
     fontFamily: 'Playfair Display',
     fontWeight: '700',
-    letterSpacing: 2,
+    letterSpacing: 3,
     textTransform: 'uppercase',
+    textAlign: 'center',
   },
   searchBar: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: 20,
-    paddingLeft: 15,
-    paddingRight: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 25,
+    paddingLeft: 20,
+    paddingRight: 15,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
-    marginBottom: 15,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+    marginBottom: 20,
+    height: 50,
   },
   searchInput: {
     flex: 1,
-    height: 40,
+    height: 50,
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 16,
     fontFamily: 'Playfair Display',
     fontStyle: 'italic',
     paddingLeft: 10,
@@ -307,9 +334,6 @@ const styles = StyleSheet.create({
   searchIconContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  searchIcon: {
-    padding: 6,
   },
   moodPills: {
     flexDirection: 'row',
@@ -319,86 +343,119 @@ const styles = StyleSheet.create({
   },
   moodPill: {
     backgroundColor: '#0b1e3d',
-    width: '48%',
-    paddingVertical: 10,
-    borderRadius: 15,
-    marginBottom: 8,
+    paddingVertical: 12,
+    borderRadius: 20,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.15)',
+    borderColor: 'rgba(212, 175, 55, 0.2)',
   },
   moodPillText: {
     color: '#ffffff',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 'bold',
     letterSpacing: 1,
+    textTransform: 'uppercase',
   },
   verseCard: {
     backgroundColor: '#0b1e3d',
     marginHorizontal: 20,
-    borderRadius: 20,
-    paddingVertical: 35,
+    borderRadius: 24,
+    paddingVertical: 40,
     paddingHorizontal: 30,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.1)',
+    borderColor: 'rgba(212, 175, 55, 0.2)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 10,
-    marginTop: 15,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 15,
+    marginTop: 20,
   },
   verseLabel: {
     color: '#d4af37',
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: 'bold',
-    letterSpacing: 2,
-    marginBottom: 15,
+    letterSpacing: 3,
+    marginBottom: 20,
+    opacity: 0.8,
   },
   verseText: {
-    fontSize: 18,
+    fontSize: 20,
     color: '#ffffff',
     fontFamily: 'Playfair Display',
     fontStyle: 'italic',
     textAlign: 'center',
-    lineHeight: 26,
-    marginBottom: 15,
+    lineHeight: 30,
+    marginBottom: 20,
   },
   verseReference: {
     color: '#d4af37',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 'bold',
-    letterSpacing: 1,
-    marginBottom: 20,
+    letterSpacing: 2,
+    marginBottom: 30,
   },
   reflectionButton: {
-    padding: 10,
-    marginTop: 10,
+    backgroundColor: '#d4af37',
+    paddingHorizontal: 25,
+    paddingVertical: 15,
+    borderRadius: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  reflectionButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   reflectionText: {
+    color: '#0b1e3d',
+    fontSize: 11,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+  },
+  reflectionContainer: {
+    marginTop: 10,
+    padding: 25,
+    backgroundColor: 'rgba(212, 175, 55, 0.08)',
+    borderRadius: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+    width: '100%',
+  },
+  reflectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  reflectionTitle: {
     color: '#d4af37',
     fontSize: 10,
     fontWeight: 'bold',
     letterSpacing: 2,
-    opacity: 0.6,
-  },
-  reflectionContainer: {
-    marginTop: 20,
-    padding: 20,
-    backgroundColor: 'rgba(212, 175, 55, 0.05)',
-    borderRadius: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.1)',
+    marginLeft: 10,
   },
   reflectionBody: {
     color: '#f5d77a',
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 22,
     textAlign: 'center',
     fontFamily: 'Playfair Display',
     fontStyle: 'italic',
+  },
+  closeReflection: {
+    marginTop: 20,
+    padding: 5,
+  },
+  closeReflectionText: {
+    color: 'rgba(212, 175, 55, 0.4)',
+    fontSize: 9,
+    fontWeight: 'bold',
+    letterSpacing: 1,
   },
   footer: {
     marginTop: 40,

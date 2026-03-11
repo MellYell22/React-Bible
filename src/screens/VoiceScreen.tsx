@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform, ScrollView } from 'react-native';
 import { Mic, MicOff, Lock, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from "motion/react";
 import { supabase } from '../services/supabase';
@@ -12,11 +12,23 @@ export default function VoiceScreen({ navigation }: any) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isDavidThinking, setIsDavidThinking] = useState(false);
   const [isDavidSpeaking, setIsDavidSpeaking] = useState(false);
   const [hasKey, setHasKey] = useState(true);
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+  
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const audioQueue = useRef<string[]>([]);
+  const isPlaying = useRef(false);
+
+  const addLog = (msg: string) => {
+    console.log(`[VoiceDebug] ${msg}`);
+    setDebugLogs(prev => [msg, ...prev].slice(0, 20));
+  };
 
   useEffect(() => {
     fetchProfile();
@@ -52,6 +64,14 @@ export default function VoiceScreen({ navigation }: any) {
     }
   };
 
+  const getAudioContext = (sampleRate = 16000) => {
+    if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate });
+      addLog(`AudioContext created (${sampleRate}Hz)`);
+    }
+    return audioContextRef.current;
+  };
+
   const startSession = async () => {
     if (!hasProAccess(profile)) {
       alert('Voice chat is a Pro feature. Please upgrade to access.');
@@ -63,71 +83,90 @@ export default function VoiceScreen({ navigation }: any) {
     }
 
     setIsConnecting(true);
+    setError(null);
+    addLog("Starting session...");
     try {
-      // Ensure AudioContext is created on user gesture
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-      }
-      
-      if (audioContextRef.current.state === 'suspended') {
-        await audioContextRef.current.resume();
+      const context = getAudioContext(16000);
+      if (context.state === 'suspended') {
+        await context.resume();
+        addLog("AudioContext resumed");
       }
 
       const apiKey = process.env.GEMINI_API_KEY || (process.env as any).API_KEY || "";
       const ai = new GoogleGenAI({ apiKey });
       
+      addLog("Connecting to Live API (12-2025)...");
       const session = await ai.live.connect({
-        model: "gemini-2.5-flash-native-audio-preview-09-2025",
+        model: "gemini-2.5-flash-native-audio-preview-12-2025",
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } }, // Zephyr is closest to "David"
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
           },
-          systemInstruction: "You are David, a warm, compassionate, and grounded AI Bible companion. You are in a real-time voice conversation with a user. Your goal is to listen deeply and provide brief, scripture-based encouragement. Keep your responses short (1-3 sentences) so the conversation flows naturally. If the user is silent, you can gently ask how they are feeling or if they'd like to hear a verse of peace. Always be kind and grounded in the Word.",
+          systemInstruction: "You are David, a warm, compassionate AI Bible companion. This is a real-time voice conversation. RESPOND IMMEDIATELY AND VERY BRIEFLY (1 sentence max). Be warm, natural, and conversational. Do not wait. If the user stops speaking, respond right away with a word of peace or encouragement.",
         },
         callbacks: {
           onopen: () => {
+            addLog("Session opened");
             setIsConnected(true);
             setIsConnecting(false);
             startAudioCapture();
           },
           onmessage: async (message) => {
-            console.log("Received message from David:", message);
-            const parts = message.serverContent?.modelTurn?.parts;
-            if (parts) {
-              setIsDavidSpeaking(true);
-              for (const part of parts) {
-                if (part.inlineData?.data) {
-                  try {
-                    await playAudio(part.inlineData.data);
-                  } catch (e) {
-                    console.error("Playback error:", e);
+            // Log the type of message received
+            if (message.setupComplete) {
+              addLog("Setup complete received");
+            }
+            
+            if (message.serverContent?.modelTurn) {
+              addLog("David is responding...");
+              setIsDavidThinking(false);
+              const parts = message.serverContent.modelTurn.parts;
+              if (parts) {
+                for (const part of parts) {
+                  if (part.inlineData?.data) {
+                    addLog(`Audio chunk received: ${part.inlineData.data.length} bytes`);
+                    audioQueue.current.push(part.inlineData.data);
+                    processAudioQueue();
+                  }
+                  if (part.text) {
+                    addLog(`David said (text): ${part.text}`);
                   }
                 }
               }
+            }
+            
+            if (message.serverContent?.interrupted) {
+              addLog("David was interrupted");
               setIsDavidSpeaking(false);
+              setIsDavidThinking(false);
+              audioQueue.current = [];
             }
           },
           onclose: () => {
+            addLog("Session closed");
             setIsConnected(false);
             stopAudioCapture();
           },
           onerror: (err: any) => {
+            addLog(`Error: ${err?.message || JSON.stringify(err)}`);
             console.error("Live API Error:", err);
             setIsConnecting(false);
             if (err?.message?.includes("Requested entity was not found")) {
               setHasKey(false);
-              alert("API Key error. Please select a valid paid API key.");
+              setError("API Key error. Please select a valid paid API key.");
             } else {
-              alert("Connection error. Please try again.");
+              setError(`Connection error: ${err?.message || "Unknown error"}`);
             }
           }
         }
       });
       sessionRef.current = session;
-    } catch (error) {
+    } catch (error: any) {
+      addLog(`Setup error: ${error?.message}`);
       console.error(error);
       setIsConnecting(false);
+      setError(`Failed to connect: ${error?.message}`);
     }
   };
 
@@ -141,37 +180,47 @@ export default function VoiceScreen({ navigation }: any) {
   };
 
   const startAudioCapture = async () => {
+    addLog("Requesting microphone access...");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-      }
-      const audioContext = audioContextRef.current;
+      addLog("Microphone access granted");
       
+      const audioContext = getAudioContext(16000);
       if (audioContext.state === 'suspended') {
         await audioContext.resume();
       }
 
       const source = audioContext.createMediaStreamSource(stream);
-      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      // Use 16000 for input as required by the API
+      // Reduced buffer size to 1024 for more frequent updates
+      const processor = audioContext.createScriptProcessor(1024, 1, 1);
       processorRef.current = processor;
+
+      let silenceFrames = 0;
+      const SILENCE_THRESHOLD = 0.001; // Very sensitive to ensure audio is sent
+      const SILENCE_LIMIT = 30; 
+      let lastSendTime = 0;
 
       processor.onaudioprocess = (e) => {
         if (sessionRef.current && isConnected && !isDavidSpeaking) {
           const inputData = e.inputBuffer.getChannelData(0);
-          // Simple silence detection to avoid sending noise
+          
+          // Simple silence detection
           let sum = 0;
           for (let i = 0; i < inputData.length; i++) sum += Math.abs(inputData[i]);
           const average = sum / inputData.length;
           
-          if (average > 0.005) { // Only send if there's actual sound
+          if (average > SILENCE_THRESHOLD) { 
+            silenceFrames = 0;
+            setIsDavidThinking(false);
+            
             const pcmData = new Int16Array(inputData.length);
             for (let i = 0; i < inputData.length; i++) {
               pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
             }
             
-            let binary = '';
             const bytes = new Uint8Array(pcmData.buffer);
+            let binary = '';
             for (let i = 0; i < bytes.byteLength; i++) {
               binary += String.fromCharCode(bytes[i]);
             }
@@ -180,6 +229,17 @@ export default function VoiceScreen({ navigation }: any) {
             sessionRef.current.sendRealtimeInput({
               media: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
             });
+
+            const now = Date.now();
+            if (now - lastSendTime > 1000) {
+              addLog("Sending audio...");
+              lastSendTime = now;
+            }
+          } else {
+            silenceFrames++;
+            if (silenceFrames > SILENCE_LIMIT && !isDavidThinking && !isDavidSpeaking) {
+              setIsDavidThinking(true);
+            }
           }
         }
       };
@@ -187,9 +247,11 @@ export default function VoiceScreen({ navigation }: any) {
       source.connect(processor);
       processor.connect(audioContext.destination);
       setIsListening(true);
-    } catch (err) {
+      addLog("Audio capture started");
+    } catch (err: any) {
+      addLog(`Mic error: ${err?.message}`);
       console.error("Microphone access denied:", err);
-      alert("Microphone access is required for voice chat.");
+      setError("Microphone access is required for voice chat.");
     }
   };
 
@@ -205,12 +267,25 @@ export default function VoiceScreen({ navigation }: any) {
     setIsListening(false);
   };
 
-  const playAudio = async (base64Data: string): Promise<void> => {
-    if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+  const processAudioQueue = async () => {
+    if (isPlaying.current || audioQueue.current.length === 0) return;
+    
+    isPlaying.current = true;
+    setIsDavidSpeaking(true);
+    
+    while (audioQueue.current.length > 0) {
+      const chunk = audioQueue.current.shift();
+      if (chunk) {
+        await playAudio(chunk);
+      }
     }
     
-    const context = audioContextRef.current;
+    isPlaying.current = false;
+    setIsDavidSpeaking(false);
+  };
+
+  const playAudio = async (base64Data: string): Promise<void> => {
+    const context = getAudioContext(16000);
     
     return new Promise((resolve) => {
       try {
@@ -222,12 +297,17 @@ export default function VoiceScreen({ navigation }: any) {
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
         
-        const pcmData = new Int16Array(bytes.buffer);
+        // Ensure the buffer length is even for Int16Array
+        const pcmData = new Int16Array(bytes.buffer.slice(0, bytes.buffer.byteLength - (bytes.buffer.byteLength % 2)));
         const float32Data = new Float32Array(pcmData.length);
         for (let i = 0; i < pcmData.length; i++) {
           float32Data[i] = pcmData[i] / 32768.0;
         }
         
+        // The model output is usually 24kHz, but if we set context to 16kHz, 
+        // we should try to match it or let the context handle it.
+        // Actually, let's check the actual rate of the received audio.
+        // Most Gemini models return 24kHz audio.
         const audioBuffer = context.createBuffer(1, float32Data.length, 24000);
         audioBuffer.getChannelData(0).set(float32Data);
         
@@ -237,10 +317,33 @@ export default function VoiceScreen({ navigation }: any) {
         source.onended = () => resolve();
         source.start();
       } catch (err) {
+        addLog(`Playback error: ${err}`);
         console.error("Error playing audio chunk:", err);
-        resolve(); // Resolve anyway to continue the loop
+        resolve();
       }
     });
+  };
+
+  const testAudio = async () => {
+    // Play a simple beep or a short silent-ish buffer to wake up the context
+    const context = getAudioContext(16000);
+    await context.resume();
+    
+    const oscillator = context.createOscillator();
+    const gainNode = context.createGain();
+    
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(440, context.currentTime); // A4
+    gainNode.gain.setValueAtTime(0.1, context.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.5);
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(context.destination);
+    
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.5);
+    
+    alert("Test sound played. If you didn't hear a beep, please check your device volume and browser permissions.");
   };
 
   if (!hasProAccess(profile)) {
@@ -318,9 +421,15 @@ export default function VoiceScreen({ navigation }: any) {
 
       <View style={styles.statusContainer}>
         <Text style={styles.statusText}>
-          {isConnecting ? "Connecting..." : isDavidSpeaking ? "David is speaking..." : isConnected ? "David is listening..." : "Tap to start conversation"}
+          {isConnecting ? "Connecting..." : isDavidSpeaking ? "David is speaking..." : isDavidThinking ? "David is thinking..." : isConnected ? "David is listening..." : "Tap to start conversation"}
         </Text>
       </View>
+
+      {error && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      )}
 
       {!hasKey && (
         <TouchableOpacity style={styles.keyWarning} onPress={handleOpenKeySelector}>
@@ -339,6 +448,29 @@ export default function VoiceScreen({ navigation }: any) {
           <Text style={styles.actionButtonText}>{isConnected ? "End Session" : "Start Conversation"}</Text>
         )}
       </TouchableOpacity>
+
+      <View style={styles.debugToggleContainer}>
+        <TouchableOpacity onPress={() => setShowDebug(!showDebug)}>
+          <Text style={styles.debugToggleText}>{showDebug ? "Hide Debug" : "Show Debug"}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {showDebug && (
+        <View style={styles.debugPanel}>
+          <Text style={styles.debugTitle}>Debug Logs</Text>
+          <ScrollView style={styles.debugScroll}>
+            {debugLogs.map((log, i) => (
+              <Text key={i} style={styles.debugLog}>{`> ${log}`}</Text>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {!isConnected && !isConnecting && (
+        <TouchableOpacity style={styles.testButton} onPress={testAudio}>
+          <Text style={styles.testButtonText}>Test Audio Output</Text>
+        </TouchableOpacity>
+      )}
       
       <Text style={styles.disclaimer}>
         David is an AI spiritual companion. For professional guidance or pastoral care, please consult your local church or a qualified advisor.
@@ -463,13 +595,74 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   disclaimer: {
-    marginTop: 40,
+    marginTop: 20,
     fontSize: 10,
     color: 'rgba(212, 175, 55, 0.5)',
     textAlign: 'center',
     lineHeight: 16,
     textTransform: 'uppercase',
     letterSpacing: 1,
+  },
+  testButton: {
+    marginTop: 15,
+    padding: 10,
+  },
+  testButtonText: {
+    color: '#f5d77a',
+    fontSize: 10,
+    textDecorationLine: 'underline',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  errorBanner: {
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 20,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#ef4444',
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 12,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  debugToggleContainer: {
+    marginTop: 20,
+  },
+  debugToggleText: {
+    color: 'rgba(212, 175, 55, 0.4)',
+    fontSize: 10,
+    textDecorationLine: 'underline',
+    textTransform: 'uppercase',
+  },
+  debugPanel: {
+    width: '100%',
+    height: 150,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    borderRadius: 12,
+    marginTop: 15,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+  },
+  debugTitle: {
+    color: '#d4af37',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginBottom: 5,
+    textTransform: 'uppercase',
+  },
+  debugScroll: {
+    flex: 1,
+  },
+  debugLog: {
+    color: '#00ff00',
+    fontSize: 9,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginBottom: 2,
   },
   lockedContainer: {
     flex: 1,

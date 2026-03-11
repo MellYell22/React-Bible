@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, TextInput } from 'react-native';
 import { motion } from 'motion/react';
-import { getMoodScriptures } from '../services/gemini';
+import { getMoodScriptures, generateSpeech } from '../services/gemini';
 import { MoodResponse } from '../types';
-import { Sparkles, Search } from 'lucide-react';
+import { Sparkles, Search, Volume2 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Profile } from '../types';
 
@@ -48,15 +48,25 @@ const FONT_SIZES = {
 
 const MOODS = ['SAD', 'ANXIOUS', 'LONELY', 'GRATEFUL', 'ANGRY', 'HOPEFUL'];
 
+const NT_BOOKS = [
+  'Matthew', 'Mark', 'Luke', 'John', 'Acts', 'Romans', '1 Corinthians', '2 Corinthians', 
+  'Galatians', 'Ephesians', 'Philippians', 'Colossians', '1 Thessalonians', '2 Thessalonians', 
+  '1 Timothy', '2 Timothy', 'Titus', 'Philemon', 'Hebrews', 'James', '1 Peter', '2 Peter', 
+  '1 John', '2 John', '3 John', 'Jude', 'Revelation'
+];
+
 export default function MoodScreen({ route, navigation }: any) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [mood, setMood] = useState(route?.params?.mood || '');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<MoodResponse | null>(null);
+  const [testamentFilter, setTestamentFilter] = useState<'all' | 'old' | 'new'>('all');
   
   const [readingMode, setReadingMode] = useState<ReadingMode>('sanctuary');
   const [fontSize, setFontSize] = useState<FontSize>('medium');
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const audioContextRef = React.useRef<AudioContext | null>(null);
 
   const theme = THEMES[readingMode];
   const fonts = FONT_SIZES[fontSize];
@@ -108,6 +118,7 @@ export default function MoodScreen({ route, navigation }: any) {
     if (!query) return;
     setLoading(true);
     setMood(query);
+    setTestamentFilter('all');
     try {
       const data = await getMoodScriptures(query, profile?.preferred_translation || 'KJV');
       setResult(data);
@@ -115,6 +126,57 @@ export default function MoodScreen({ route, navigation }: any) {
       alert('Failed to fetch scriptures. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const filteredScriptures = result?.scriptures.filter(item => {
+    if (testamentFilter === 'all') return true;
+    const bookName = item.reference.split(' ')[0];
+    // Handle cases like "1 Samuel" or "Song of Solomon"
+    const fullBookName = item.reference.match(/^[1-3]?\s?[a-zA-Z\s]+(?=\s\d)/)?.[0] || bookName;
+    const isNT = NT_BOOKS.includes(fullBookName.trim());
+    return testamentFilter === 'new' ? isNT : !isNT;
+  }) || [];
+
+  const speakEncouragement = async () => {
+    if (!result || isSpeaking) return;
+    
+    setIsSpeaking(true);
+    try {
+      const base64Audio = await generateSpeech(result.encouragement);
+      if (base64Audio) {
+        if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        }
+        const context = audioContextRef.current;
+        if (context.state === 'suspended') {
+          await context.resume();
+        }
+
+        const binary = atob(base64Audio);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        
+        const pcmData = new Int16Array(bytes.buffer.slice(0, bytes.buffer.byteLength - (bytes.buffer.byteLength % 2)));
+        const float32Data = new Float32Array(pcmData.length);
+        for (let i = 0; i < pcmData.length; i++) {
+          float32Data[i] = pcmData[i] / 32768.0;
+        }
+        
+        const audioBuffer = context.createBuffer(1, float32Data.length, 24000);
+        audioBuffer.getChannelData(0).set(float32Data);
+        
+        const source = context.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(context.destination);
+        source.onended = () => setIsSpeaking(false);
+        source.start();
+      } else {
+        setIsSpeaking(false);
+      }
+    } catch (error) {
+      console.error("Speech error:", error);
+      setIsSpeaking(false);
     }
   };
 
@@ -186,36 +248,78 @@ export default function MoodScreen({ route, navigation }: any) {
         {result && !loading && (
           <View style={styles.resultContainer}>
             <View style={[styles.encouragementCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <Sparkles color={theme.accent} size={20} style={{ marginBottom: 10 }} />
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <Sparkles color={theme.accent} size={20} />
+                <TouchableOpacity onPress={speakEncouragement} disabled={isSpeaking}>
+                  {isSpeaking ? (
+                    <ActivityIndicator size="small" color={theme.accent} />
+                  ) : (
+                    <Volume2 color={theme.accent} size={20} />
+                  )}
+                </TouchableOpacity>
+              </View>
               <Text style={[styles.encouragementText, { color: theme.text, fontSize: fonts.verse - 2, fontFamily: 'Playfair Display' }]}>
                 {result.encouragement}
               </Text>
             </View>
 
-            <Text style={[styles.sectionTitle, { color: theme.muted }]}>Relevant Scriptures</Text>
-            {result.scriptures.map((item, index) => (
-              <View key={index} style={[styles.scriptureCard, { backgroundColor: theme.scripture, borderColor: theme.border }]}>
-                <View style={styles.verseHeader}>
-                  <View style={[styles.verseNumber, { backgroundColor: theme.accent }]}>
-                    <Text style={styles.verseNumberText}>{index + 1}</Text>
-                  </View>
-                  <Text style={[styles.referenceText, { color: theme.accent, fontSize: fonts.ref - 2, marginTop: 0 }]}>{item.reference}</Text>
-                </View>
-                
-                <Text style={[styles.verseText, { color: theme.text, fontSize: fonts.verse - 2, textAlign: 'left', fontFamily: 'Playfair Display' }]}>
-                  "{item.verse}"
+            <View style={styles.filterContainer}>
+              <TouchableOpacity 
+                style={[styles.filterPill, testamentFilter === 'all' && { backgroundColor: theme.accent }]}
+                onPress={() => setTestamentFilter('all')}
+              >
+                <Text style={[styles.filterText, testamentFilter === 'all' && { color: '#fff' }]}>ALL</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.filterPill, testamentFilter === 'old' && { backgroundColor: theme.accent }]}
+                onPress={() => setTestamentFilter('old')}
+              >
+                <Text style={[styles.filterText, testamentFilter === 'old' && { color: '#fff' }]}>OLD TESTAMENT</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.filterPill, testamentFilter === 'new' && { backgroundColor: theme.accent }]}
+                onPress={() => setTestamentFilter('new')}
+              >
+                <Text style={[styles.filterText, testamentFilter === 'new' && { color: '#fff' }]}>NEW TESTAMENT</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.sectionTitle, { color: theme.muted }]}>
+              {testamentFilter === 'all' ? 'Relevant Scriptures' : 
+               testamentFilter === 'old' ? 'Old Testament Wisdom' : 'New Testament Hope'}
+            </Text>
+            
+            {filteredScriptures.length === 0 ? (
+              <View style={styles.noResults}>
+                <Text style={[styles.noResultsText, { color: theme.muted }]}>
+                  No scriptures found in this testament for your search.
                 </Text>
-                
-                <View style={[styles.divider, { backgroundColor: theme.border }]} />
-                
-                <View style={styles.explanationContainer}>
-                  <Text style={[styles.explanationLabel, { color: theme.accent }]}>Reflection</Text>
-                  <Text style={[styles.explanationText, { color: theme.muted, fontSize: fonts.exp - 2, textAlign: 'left' }]}>
-                    {item.explanation}
-                  </Text>
-                </View>
               </View>
-            ))}
+            ) : (
+              filteredScriptures.map((item, index) => (
+                <View key={index} style={[styles.scriptureCard, { backgroundColor: theme.scripture, borderColor: theme.border }]}>
+                  <View style={styles.verseHeader}>
+                    <View style={[styles.verseNumber, { backgroundColor: theme.accent }]}>
+                      <Text style={styles.verseNumberText}>{index + 1}</Text>
+                    </View>
+                    <Text style={[styles.referenceText, { color: theme.accent, fontSize: fonts.ref - 2, marginTop: 0 }]}>{item.reference}</Text>
+                  </View>
+                  
+                  <Text style={[styles.verseText, { color: theme.text, fontSize: fonts.verse - 2, textAlign: 'left', fontFamily: 'Playfair Display' }]}>
+                    "{item.verse}"
+                  </Text>
+                  
+                  <View style={[styles.divider, { backgroundColor: theme.border }]} />
+                  
+                  <View style={styles.explanationContainer}>
+                    <Text style={[styles.explanationLabel, { color: theme.accent }]}>Reflection</Text>
+                    <Text style={[styles.explanationText, { color: theme.muted, fontSize: fonts.exp - 2, textAlign: 'left' }]}>
+                      {item.explanation}
+                    </Text>
+                  </View>
+                </View>
+              ))
+            )}
           </View>
         )}
       </ScrollView>
@@ -405,5 +509,34 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 4,
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 20,
+    gap: 8,
+  },
+  filterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+    backgroundColor: 'rgba(212, 175, 55, 0.05)',
+  },
+  filterText: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#d4af37',
+    letterSpacing: 1,
+  },
+  noResults: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  noResultsText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    textAlign: 'center',
   }
 });
