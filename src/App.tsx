@@ -4,6 +4,7 @@ import { Home, Search, MessageCircle, Mic, User } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from './services/supabase';
 import { Profile } from './types';
 import { AlertTriangle } from 'lucide-react';
+import { Analytics } from '@vercel/analytics/react';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
@@ -136,6 +137,7 @@ export default function App() {
         <TabButton name="Voice" icon={Mic} />
         <TabButton name="Profile" icon={User} />
       </View>
+      <Analytics />
     </View>
   );
 }
