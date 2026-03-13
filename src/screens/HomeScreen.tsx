@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   },
   heroHeader: {
     alignItems: 'center',
-    marginBottom: 25,
+    marginBottom: 15,
     width: '100%',
   },
   titleUnderline: {
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingTop: 40,
+    paddingTop: 10,
     paddingBottom: 20,
   },
   searchSection: {

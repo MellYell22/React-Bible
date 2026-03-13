@@ -14,6 +14,7 @@ import ProfileScreen from './screens/ProfileScreen';
 import AuthScreen from './screens/AuthScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
 
+import { Navbar } from './components/Navbar';
 import { FullScreenBackground } from './components/FullScreenBackground';
 import { Analytics } from "@vercel/analytics/react";
 
@@ -138,6 +139,7 @@ export default function App() {
   return (
     <View style={styles.container}>
       <Analytics />
+      <Navbar onProfile={() => navigate('Profile')} />
       <FullScreenBackground>
         <View style={styles.screenContainer}>
           {renderScreen()}
@@ -162,6 +164,7 @@ const styles = StyleSheet.create({
   },
   screenContainer: {
     flex: 1,
+    paddingTop: 60,
   },
   tabBar: {
     flexDirection: 'row',
