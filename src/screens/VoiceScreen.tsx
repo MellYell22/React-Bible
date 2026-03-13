@@ -155,9 +155,12 @@ export default function VoiceScreen({ navigation }: any) {
             }
           },
           onclose: (event: any) => {
-            addLog(`WebSocket closed: ${event?.reason || 'No reason'}`);
+            const reason = event?.reason || 'No reason';
+            addLog(`WebSocket closed: ${reason}`);
             setIsConnected(false);
             setIsConnecting(false);
+            setIsDavidThinking(false);
+            setIsDavidSpeaking(false);
             stopAudioCapture();
           },
           onerror: (err: any) => {
@@ -166,6 +169,8 @@ export default function VoiceScreen({ navigation }: any) {
             console.error("Live API Error:", err);
             setIsConnecting(false);
             setIsConnected(false);
+            setIsDavidThinking(false);
+            setIsDavidSpeaking(false);
             setError(`Connection error: ${errorMsg}`);
             stopAudioCapture();
           }
@@ -176,7 +181,11 @@ export default function VoiceScreen({ navigation }: any) {
       addLog(`Setup error: ${error?.message}`);
       console.error(error);
       setIsConnecting(false);
+      setIsConnected(false);
+      setIsDavidThinking(false);
+      setIsDavidSpeaking(false);
       setError(`Failed to connect: ${error?.message}`);
+      stopAudioCapture();
     }
   };
 
