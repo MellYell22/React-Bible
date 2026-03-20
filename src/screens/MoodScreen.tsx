@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator
 import { motion } from 'motion/react';
 import { getMoodScriptures, generateSpeech } from '../services/gemini';
 import { MoodResponse } from '../types';
-import { Sparkles, Search, Volume2, Music, Play } from 'lucide-react';
+import { Sparkles, Search, Volume2, Music, Play, Frown, Wind, User, Heart, Flame, Sun, HelpCircle, Layers, Cloud, X } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Profile } from '../types';
 import { WORSHIP_SONGS, Song } from '../constants/songs';
@@ -48,7 +48,17 @@ const FONT_SIZES = {
   large: { verse: 22, ref: 16, exp: 16 },
 };
 
-const MOODS = ['SAD', 'ANXIOUS', 'LONELY', 'GRATEFUL', 'ANGRY', 'HOPEFUL'];
+const MOOD_CONFIG = [
+  { key: 'SAD', label: 'Sad', icon: Frown },
+  { key: 'ANXIOUS', label: 'Anxious', icon: Wind },
+  { key: 'LONELY', label: 'Lonely', icon: User },
+  { key: 'GRATEFUL', label: 'Grateful', icon: Heart },
+  { key: 'ANGRY', label: 'Angry', icon: Flame },
+  { key: 'HOPEFUL', label: 'Hopeful', icon: Sun },
+  { key: 'CONFUSED', label: 'Confused', icon: HelpCircle },
+  { key: 'OVERWHELMED', label: 'Overwhelmed', icon: Layers },
+  { key: 'PEACEFUL', label: 'Peaceful', icon: Cloud },
+];
 
 const NT_BOOKS = [
   'Matthew', 'Mark', 'Luke', 'John', 'Acts', 'Romans', '1 Corinthians', '2 Corinthians', 
@@ -208,25 +218,39 @@ export default function MoodScreen({ route, navigation }: any) {
               onChangeText={setSearchQuery}
               onSubmitEditing={handleSearch}
             />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                <X size={14} color={theme.muted} />
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={styles.moodPills}>
-            {MOODS.map((m) => (
+            {MOOD_CONFIG.map((m) => (
               <motion.div
-                key={m}
-                whileHover={{ scale: 1.05, backgroundColor: 'rgba(212, 175, 55, 0.1)' }}
-                whileTap={{ scale: 0.95 }}
-                style={{ width: '48%', marginBottom: 8 }}
+                key={m.key}
+                whileHover={{ scale: 1.02, backgroundColor: 'rgba(212, 175, 55, 0.05)' }}
+                whileTap={{ scale: 0.98 }}
+                style={{ width: '31%', marginBottom: 10 }}
               >
                 <TouchableOpacity 
-                  style={[styles.moodPill, { borderColor: theme.border, width: '100%', marginBottom: 0 }]}
+                  style={[
+                    styles.moodPill, 
+                    { 
+                      borderColor: mood === m.key ? theme.accent : theme.border, 
+                      width: '100%', 
+                      marginBottom: 0,
+                      backgroundColor: mood === m.key ? 'rgba(212, 175, 55, 0.1)' : 'transparent'
+                    }
+                  ]}
                   onPress={() => {
                     setSearchQuery('');
-                    setMood(m);
-                    handleInitialSearch(m);
+                    setMood(m.key);
+                    handleInitialSearch(m.key);
                   }}
                 >
-                  <Text style={[styles.moodPillText, { color: theme.text }]}>{m}</Text>
+                  <m.icon size={18} color={mood === m.key ? theme.accent : theme.muted} style={{ marginBottom: 6 }} />
+                  <Text style={[styles.moodPillText, { color: mood === m.key ? theme.accent : theme.text }]}>{m.label}</Text>
                 </TouchableOpacity>
               </motion.div>
             ))}
@@ -435,6 +459,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  clearButton: {
+    padding: 8,
+  },
   searchIcon: {
     padding: 6,
   },
@@ -445,20 +472,20 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   moodPill: {
-    backgroundColor: '#0b1e3d',
-    width: '48%',
-    paddingVertical: 8,
-    borderRadius: 12,
-    marginBottom: 8,
+    width: '31%',
+    paddingVertical: 12,
+    borderRadius: 16,
+    marginBottom: 10,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(212, 175, 55, 0.15)',
+    justifyContent: 'center',
   },
   moodPillText: {
     color: '#ffffff',
-    fontSize: 9,
-    fontWeight: 'bold',
-    letterSpacing: 1,
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
   loadingContainer: {
     marginTop: 50,

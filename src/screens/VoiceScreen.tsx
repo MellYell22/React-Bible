@@ -4,7 +4,7 @@ import { Mic, MicOff, Lock, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from "motion/react";
 import { supabase } from '../services/supabase';
 import { Profile } from '../types';
-import { GoogleGenAI, Modality } from "@google/genai";
+import { GoogleGenAI, Modality, StartSensitivity, EndSensitivity } from "@google/genai";
 import { hasProAccess } from '../utils/tier';
 
 export default function VoiceScreen({ navigation }: any) {
@@ -19,6 +19,7 @@ export default function VoiceScreen({ navigation }: any) {
   const [error, setError] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [lastResponseText, setLastResponseText] = useState<string | null>(null);
+  const [isDavidProcessing, setIsDavidProcessing] = useState(false);
   
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -74,6 +75,13 @@ export default function VoiceScreen({ navigation }: any) {
   };
 
   const startSession = async () => {
+    // CRITICAL: Initialize and resume AudioContext immediately on user gesture
+    const context = getAudioContext(16000);
+    if (context.state === 'suspended') {
+      await context.resume();
+      addLog("AudioContext resumed on user gesture");
+    }
+
     if (!hasProAccess(profile)) {
       alert('Voice chat is a Pro feature. Please upgrade to access.');
       return;
@@ -87,12 +95,6 @@ export default function VoiceScreen({ navigation }: any) {
     setError(null);
     addLog("Starting session...");
     try {
-      const context = getAudioContext(16000);
-      if (context.state === 'suspended') {
-        await context.resume();
-        addLog("AudioContext resumed");
-      }
-
       const apiKey = 
         process.env.GEMINI_API_KEY || 
         (process.env as any).API_KEY || 
@@ -112,21 +114,26 @@ export default function VoiceScreen({ navigation }: any) {
 
       const ai = new GoogleGenAI({ apiKey });
       
-      addLog("Starting Live connection (12-2025)...");
+      const VOICE_MODEL = "gemini-2.5-flash-native-audio-preview-09-2025";
+      const DAVID_VOICE = "Zephyr";
+
+      addLog(`Starting Live connection (${VOICE_MODEL})...`);
       const session = await ai.live.connect({
-        model: "gemini-2.5-flash-native-audio-preview-12-2025",
+        model: VOICE_MODEL,
         config: {
-          responseModalities: [audioModality as any],
+          responseModalities: [Modality.AUDIO],
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: DAVID_VOICE,
+              },
+            },
           },
           systemInstruction: "You are David, a warm, compassionate AI Bible companion. This is a real-time voice conversation. Respond naturally and warmly. Keep responses concise (1-2 sentences).",
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
-        },
+        } as any,
         callbacks: {
           onopen: () => {
-            addLog("WebSocket opened successfully");
+            addLog("live session connected (WebSocket opened)");
             setIsConnected(true);
             setIsConnecting(false);
             startAudioCapture();
@@ -137,19 +144,20 @@ export default function VoiceScreen({ navigation }: any) {
             }
             
             if (message.serverContent?.modelTurn) {
-              addLog("Model response received (modelTurn)");
+              addLog("model response received (modelTurn)");
               setIsDavidThinking(false);
+              setIsDavidProcessing(false);
               const parts = message.serverContent.modelTurn.parts;
               if (parts) {
                 addLog(`Response has ${parts.length} parts`);
                 for (const part of parts) {
                   if (part.inlineData?.data) {
-                    addLog(`Audio chunk received: ${part.inlineData.data.length} base64 chars`);
+                    addLog(`audio response received: ${part.inlineData.data.length} base64 chars`);
                     audioQueue.current.push(part.inlineData.data);
                     processAudioQueue();
                   }
                   if (part.text) {
-                    addLog(`Model text response: "${part.text}"`);
+                    addLog(`text response received: "${part.text}"`);
                     setLastResponseText(part.text);
                   }
                 }
@@ -161,7 +169,8 @@ export default function VoiceScreen({ navigation }: any) {
             if (message.serverContent?.userTurn) {
               const userText = message.serverContent.userTurn.parts?.[0]?.text;
               if (userText) {
-                addLog(`User transcription: "${userText}"`);
+                addLog(`transcript received: "${userText}"`);
+                setIsDavidProcessing(true);
               }
             }
             
@@ -169,16 +178,25 @@ export default function VoiceScreen({ navigation }: any) {
               addLog("Model interrupted by user speech");
               setIsDavidSpeaking(false);
               setIsDavidThinking(false);
+              setIsDavidProcessing(false);
               audioQueue.current = [];
+              // Stop current audio if playing
+              if (currentAudioRef.current) {
+                try {
+                  currentAudioRef.current.pause();
+                  currentAudioRef.current = null;
+                } catch (e) {}
+              }
             }
           },
           onclose: (event: any) => {
             const reason = event?.reason || 'No reason';
-            addLog(`WebSocket closed: ${reason}`);
+            addLog(`websocket/session closed: ${reason}`);
             setIsConnected(false);
             setIsConnecting(false);
             setIsDavidThinking(false);
             setIsDavidSpeaking(false);
+            setIsDavidProcessing(false);
             stopAudioCapture();
           },
           onerror: (err: any) => {
@@ -189,6 +207,7 @@ export default function VoiceScreen({ navigation }: any) {
             setIsConnected(false);
             setIsDavidThinking(false);
             setIsDavidSpeaking(false);
+            setIsDavidProcessing(false);
             setError(`Connection error: ${errorMsg}`);
             stopAudioCapture();
           }
@@ -351,67 +370,39 @@ export default function VoiceScreen({ navigation }: any) {
     }
   };
 
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+
   const playAudio = async (base64Data: string): Promise<void> => {
     if (!base64Data) return;
     
-    addLog(`playAudio called with ${base64Data.length} chars`);
-    const context = getAudioContext(16000);
-    
-    if (context.state === 'suspended') {
-      addLog("Resuming suspended AudioContext...");
-      await context.resume();
-    }
-
-    return new Promise((resolve) => {
-      try {
-        addLog("Decoding base64 audio...");
-        const binary = atob(base64Data);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        
-        if (bytes.length < 2) {
-          addLog("Chunk too small, skipping");
-          resolve();
-          return;
-        }
-
-        addLog(`Decoded ${bytes.length} bytes. Converting to Float32...`);
-        // Ensure the buffer length is even for Int16Array
-        const pcmData = new Int16Array(bytes.buffer.slice(0, bytes.buffer.byteLength - (bytes.buffer.byteLength % 2)));
-        const float32Data = new Float32Array(pcmData.length);
-        for (let i = 0; i < pcmData.length; i++) {
-          float32Data[i] = pcmData[i] / 32768.0;
-        }
-        
-        // Gemini Live returns 24kHz PCM
-        addLog(`Creating AudioBuffer: 1 channel, ${float32Data.length} samples, 24000Hz`);
-        const audioBuffer = context.createBuffer(1, float32Data.length, 24000);
-        audioBuffer.getChannelData(0).set(float32Data);
-        
-        const source = context.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(context.destination);
-        
-        // Gapless scheduling
-        const currentTime = context.currentTime;
-        if (nextStartTimeRef.current < currentTime) {
-          nextStartTimeRef.current = currentTime + 0.05;
-        }
-        
-        source.onended = () => {
-          addLog("Chunk playback ended");
+    addLog(`audio playback started (base64 length: ${base64Data.length})`);
+    try {
+      // On web, we use the native Audio object with a data URI
+      const uri = `data:audio/wav;base64,${base64Data}`;
+      const audio = new Audio(uri);
+      currentAudioRef.current = audio;
+      
+      return new Promise((resolve) => {
+        audio.onended = () => {
+          addLog("audio playback finished");
+          currentAudioRef.current = null;
           resolve();
         };
-        
-        addLog(`Scheduling source playback at ${nextStartTimeRef.current.toFixed(3)} (current: ${currentTime.toFixed(3)})`);
-        source.start(nextStartTimeRef.current);
-        nextStartTimeRef.current += audioBuffer.duration;
-      } catch (err) {
-        addLog(`Playback error: ${err}`);
-        console.error("Error playing audio chunk:", err);
-        resolve();
-      }
-    });
+        audio.onerror = (e) => {
+          addLog(`audio playback error: ${e}`);
+          currentAudioRef.current = null;
+          resolve(); // Resolve anyway to continue queue
+        };
+        audio.play().catch(err => {
+          addLog(`audio.play() failed: ${err}`);
+          currentAudioRef.current = null;
+          resolve();
+        });
+      });
+    } catch (err) {
+      addLog(`audio playback failed: ${err}`);
+      console.error("Error playing audio chunk:", err);
+    }
   };
 
   const testAudio = async () => {
@@ -519,7 +510,7 @@ export default function VoiceScreen({ navigation }: any) {
 
       <View style={styles.statusContainer}>
         <Text style={styles.statusText}>
-          {isConnecting ? "Connecting..." : isDavidSpeaking ? "David is speaking..." : isDavidThinking ? "David is thinking..." : isConnected ? "David is listening..." : "Tap to start conversation"}
+          {isConnecting ? "Connecting..." : isDavidSpeaking ? "David is speaking..." : isDavidProcessing ? "David is processing..." : isDavidThinking ? "David is thinking..." : isConnected ? "David is listening..." : "Tap to start conversation"}
         </Text>
       </View>
 

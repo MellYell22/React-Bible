@@ -3,11 +3,21 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, T
 import { motion } from 'motion/react';
 import { supabase } from '../services/supabase';
 import { Profile } from '../types';
-import { Search, Globe, Sparkles } from 'lucide-react';
+import { Search, Globe, Sparkles, Frown, Wind, User, Heart, Flame, Sun, HelpCircle, Layers, Cloud } from 'lucide-react';
 import { OWNER_EMAIL } from '../utils/tier';
 import { getVerseReflection } from '../services/gemini';
 
-const MOODS = ['SAD', 'ANXIOUS', 'LONELY', 'GRATEFUL', 'ANGRY', 'HOPEFUL'];
+const MOOD_CONFIG = [
+  { key: 'SAD', label: 'Sad', icon: Frown },
+  { key: 'ANXIOUS', label: 'Anxious', icon: Wind },
+  { key: 'LONELY', label: 'Lonely', icon: User },
+  { key: 'GRATEFUL', label: 'Grateful', icon: Heart },
+  { key: 'ANGRY', label: 'Angry', icon: Flame },
+  { key: 'HOPEFUL', label: 'Hopeful', icon: Sun },
+  { key: 'CONFUSED', label: 'Confused', icon: HelpCircle },
+  { key: 'OVERWHELMED', label: 'Overwhelmed', icon: Layers },
+  { key: 'PEACEFUL', label: 'Peaceful', icon: Cloud },
+];
 const TRANSLATIONS = ['NIV', 'KJV', 'NLT', 'ESV', 'NKJV', 'CSB'];
 
 export default function HomeScreen({ navigation }: any) {
@@ -132,18 +142,19 @@ export default function HomeScreen({ navigation }: any) {
           </View>
 
           <View style={styles.moodPills}>
-            {MOODS.map((mood) => (
+            {MOOD_CONFIG.map((m) => (
               <motion.div
-                key={mood}
-                whileHover={{ scale: 1.05, backgroundColor: 'rgba(212, 175, 55, 0.1)' }}
-                whileTap={{ scale: 0.95 }}
-                style={{ width: '48.5%', marginBottom: 12 }}
+                key={m.key}
+                whileHover={{ scale: 1.02, backgroundColor: 'rgba(212, 175, 55, 0.05)' }}
+                whileTap={{ scale: 0.98 }}
+                style={{ width: '31.5%', marginBottom: 12 }}
               >
                 <TouchableOpacity 
                   style={[styles.moodPill, { width: '100%', marginBottom: 0 }]}
-                  onPress={() => navigation.navigate('Mood', { mood })}
+                  onPress={() => navigation.navigate('Mood', { mood: m.key })}
                 >
-                  <Text style={styles.moodPillText}>{mood}</Text>
+                  <m.icon size={16} color="#d4af37" style={{ marginBottom: 4 }} />
+                  <Text style={styles.moodPillText}>{m.label}</Text>
                 </TouchableOpacity>
               </motion.div>
             ))}
@@ -346,8 +357,8 @@ const styles = StyleSheet.create({
   },
   moodPill: {
     backgroundColor: '#0b1e3d',
-    height: 42,
-    borderRadius: 12,
+    paddingVertical: 12,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
@@ -355,9 +366,9 @@ const styles = StyleSheet.create({
   },
   moodPillText: {
     color: '#ffffff',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: 'bold',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   verseCard: {

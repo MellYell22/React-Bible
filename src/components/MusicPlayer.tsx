@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import { Play, Pause, SkipBack, SkipForward, Volume2 } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, Download, CheckCircle2 } from 'lucide-react';
 import { Song } from '../constants/songs';
+import { isSongDownloaded, toggleDownload } from '../services/storage';
 
 interface MusicPlayerProps {
   song: Song;
@@ -14,7 +15,19 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ song, onNext, onPrev }
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [volume, setVolume] = useState(0.8);
+  const [isDownloaded, setIsDownloaded] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    setIsDownloaded(isSongDownloaded(song.id));
+  }, [song.id]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+    }
+  }, [volume]);
 
   useEffect(() => {
     if (!audioRef.current) {
@@ -64,6 +77,11 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ song, onNext, onPrev }
     setIsPlaying(!isPlaying);
   };
 
+  const handleDownload = () => {
+    const status = toggleDownload(song.id);
+    setIsDownloaded(status);
+  };
+
   const formatTime = (time: number) => {
     const mins = Math.floor(time / 60);
     const secs = Math.floor(time % 60);
@@ -72,9 +90,18 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ song, onNext, onPrev }
 
   return (
     <View style={styles.container}>
-      <View style={styles.songInfo}>
-        <Text style={styles.title}>{song.title}</Text>
-        <Text style={styles.artist}>{song.artist}</Text>
+      <View style={styles.headerRow}>
+        <View style={styles.songInfo}>
+          <Text style={styles.title}>{song.title}</Text>
+          <Text style={styles.artist}>{song.artist}</Text>
+        </View>
+        <TouchableOpacity onPress={handleDownload} style={styles.downloadButton}>
+          {isDownloaded ? (
+            <CheckCircle2 size={20} color="#d4af37" />
+          ) : (
+            <Download size={20} color="rgba(212, 175, 55, 0.4)" />
+          )}
+        </TouchableOpacity>
       </View>
 
       <View style={styles.progressContainer}>
@@ -106,6 +133,27 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ song, onNext, onPrev }
           <SkipForward size={24} color="#d4af37" />
         </TouchableOpacity>
       </View>
+
+      <View style={styles.volumeContainer}>
+        <Volume2 size={18} color="#d4af37" />
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value={volume}
+          onChange={(e) => setVolume(parseFloat(e.target.value))}
+          style={{
+            flex: 1,
+            height: 4,
+            appearance: 'none',
+            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+            borderRadius: 2,
+            outline: 'none',
+            cursor: 'pointer',
+          }}
+        />
+      </View>
     </View>
   );
 };
@@ -119,9 +167,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(212, 175, 55, 0.2)',
   },
-  songInfo: {
+  headerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 20,
+  },
+  songInfo: {
+    flex: 1,
+    alignItems: 'center',
+    marginLeft: 20, // Offset for the download button on the right
+  },
+  downloadButton: {
+    padding: 4,
   },
   title: {
     color: '#ffffff',
@@ -183,4 +241,12 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
+  volumeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 25,
+    gap: 12,
+    paddingHorizontal: 10,
+  },
 });
+

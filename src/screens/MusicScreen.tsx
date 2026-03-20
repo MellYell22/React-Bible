@@ -1,27 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform } from 'react-native';
-import { Music, Play, Heart, ChevronRight } from 'lucide-react';
+import { Music, Play, Heart, ChevronRight, Download, CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { WORSHIP_SONGS, Song } from '../constants/songs';
 import { MusicPlayer } from '../components/MusicPlayer';
+import { getDownloadedSongs, toggleDownload, isSongDownloaded } from '../services/storage';
 
 const MOODS = ['SAD', 'ANXIOUS', 'LONELY', 'GRATEFUL', 'ANGRY', 'HOPEFUL'];
+const GENRES = ['Pop Gospel', 'R&B Gospel', 'Country Gospel', 'Worship / Praise'];
 
 export default function MusicScreen() {
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
+  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+  const [showDownloadsOnly, setShowDownloadsOnly] = useState(false);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [filteredSongs, setFilteredSongs] = useState<Song[]>(WORSHIP_SONGS);
+  const [downloadedIds, setDownloadedIds] = useState<string[]>([]);
 
   useEffect(() => {
-    if (selectedMood) {
-      setFilteredSongs(WORSHIP_SONGS.filter(s => s.moods.includes(selectedMood)));
-    } else {
-      setFilteredSongs(WORSHIP_SONGS);
+    setDownloadedIds(getDownloadedSongs());
+  }, []);
+
+  useEffect(() => {
+    let filtered = WORSHIP_SONGS;
+    if (showDownloadsOnly) {
+      filtered = filtered.filter(s => downloadedIds.includes(s.id));
     }
-  }, [selectedMood]);
+    if (selectedMood) {
+      filtered = filtered.filter(s => s.moods.includes(selectedMood));
+    }
+    if (selectedGenre) {
+      filtered = filtered.filter(s => s.genre === selectedGenre);
+    }
+    setFilteredSongs(filtered);
+  }, [selectedMood, selectedGenre, showDownloadsOnly, downloadedIds]);
 
   const handlePlaySong = (song: Song) => {
     setCurrentSong(song);
+  };
+
+  const handleDownload = (songId: string) => {
+    toggleDownload(songId);
+    setDownloadedIds(getDownloadedSongs());
   };
 
   const handleNext = () => {
@@ -43,8 +63,29 @@ export default function MusicScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <Music color="#d4af37" size={32} />
-          <Text style={styles.title}>Worship Music</Text>
-          <Text style={styles.subtitle}>Find peace in His presence</Text>
+          <Text style={styles.title}>Gospel Music</Text>
+          <Text style={styles.subtitle}>Modern sounds for the soul</Text>
+        </View>
+
+        <View style={styles.moodSection}>
+          <Text style={styles.sectionLabel}>BROWSE BY GENRE</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.moodScroll}>
+            <TouchableOpacity 
+              style={[styles.moodChip, !selectedGenre && styles.moodChipActive]}
+              onPress={() => setSelectedGenre(null)}
+            >
+              <Text style={[styles.moodChipText, !selectedGenre && styles.moodChipTextActive]}>ALL GENRES</Text>
+            </TouchableOpacity>
+            {GENRES.map(genre => (
+              <TouchableOpacity 
+                key={genre}
+                style={[styles.moodChip, selectedGenre === genre && styles.moodChipActive]}
+                onPress={() => setSelectedGenre(genre)}
+              >
+                <Text style={[styles.moodChipText, selectedGenre === genre && styles.moodChipTextActive]}>{genre.toUpperCase()}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
 
         <View style={styles.moodSection}>
@@ -68,32 +109,69 @@ export default function MusicScreen() {
           </ScrollView>
         </View>
 
+        <View style={styles.moodSection}>
+          <Text style={styles.sectionLabel}>LIBRARY</Text>
+          <TouchableOpacity 
+            style={[styles.moodChip, showDownloadsOnly && styles.moodChipActive]}
+            onPress={() => setShowDownloadsOnly(!showDownloadsOnly)}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Download size={12} color={showDownloadsOnly ? '#0b1e3d' : '#d4af37'} />
+              <Text style={[styles.moodChipText, showDownloadsOnly && styles.moodChipTextActive]}>DOWNLOADS ({downloadedIds.length})</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.songList}>
           <Text style={styles.sectionLabel}>
-            {selectedMood ? `${selectedMood} WORSHIP` : 'RECOMMENDED FOR YOU'}
+            {showDownloadsOnly 
+              ? 'MY DOWNLOADED SONGS' 
+              : (selectedMood || selectedGenre 
+                ? `${selectedGenre || ''} ${selectedMood || ''} GOSPEL`.trim() 
+                : 'RECOMMENDED FOR YOU')}
           </Text>
-          {filteredSongs.map((song, index) => (
-            <motion.div
-              key={song.id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.1 }}
-            >
-              <TouchableOpacity 
-                style={[styles.songItem, currentSong?.id === song.id && styles.songItemActive]}
-                onPress={() => handlePlaySong(song)}
+          {filteredSongs.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No songs found in this category.</Text>
+            </View>
+          ) : (
+            filteredSongs.map((song, index) => (
+              <motion.div
+                key={song.id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.1 }}
               >
-                <Image source={{ uri: song.coverUrl }} style={styles.songCover} />
-                <View style={styles.songDetails}>
-                  <Text style={styles.songTitle}>{song.title}</Text>
-                  <Text style={styles.songArtist}>{song.artist}</Text>
-                </View>
-                <TouchableOpacity style={styles.playIconButton}>
-                  <Play size={16} color={currentSong?.id === song.id ? '#0b1e3d' : '#d4af37'} fill={currentSong?.id === song.id ? '#0b1e3d' : 'transparent'} />
+                <TouchableOpacity 
+                  style={[styles.songItem, currentSong?.id === song.id && styles.songItemActive]}
+                  onPress={() => handlePlaySong(song)}
+                >
+                  <Image source={{ uri: song.coverUrl }} style={styles.songCover} />
+                  <View style={styles.songDetails}>
+                    <Text style={styles.songTitle}>{song.title}</Text>
+                    <Text style={styles.songArtist}>{song.artist}</Text>
+                  </View>
+                  
+                  <View style={styles.songActions}>
+                    <TouchableOpacity 
+                      style={styles.downloadButton}
+                      onPress={() => handleDownload(song.id)}
+                    >
+                      {downloadedIds.includes(song.id) ? (
+                        <CheckCircle2 size={18} color="#d4af37" />
+                      ) : (
+                        <Download size={18} color="rgba(212, 175, 55, 0.4)" />
+                      )}
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity style={styles.playIconButton}>
+                      <Play size={16} color={currentSong?.id === song.id ? '#0b1e3d' : '#d4af37'} fill={currentSong?.id === song.id ? '#0b1e3d' : 'transparent'} />
+                    </TouchableOpacity>
+                  </View>
                 </TouchableOpacity>
-              </TouchableOpacity>
-            </motion.div>
-          ))}
+              </motion.div>
+            ))
+          )}
         </View>
       </ScrollView>
 
@@ -147,7 +225,7 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   moodSection: {
-    marginBottom: 30,
+    marginBottom: 20,
     paddingHorizontal: 20,
   },
   sectionLabel: {
@@ -169,6 +247,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(212, 175, 55, 0.2)',
     marginRight: 10,
+    alignSelf: 'flex-start',
   },
   moodChipActive: {
     backgroundColor: '#d4af37',
@@ -185,6 +264,7 @@ const styles = StyleSheet.create({
   },
   songList: {
     paddingHorizontal: 20,
+    marginTop: 10,
   },
   songItem: {
     flexDirection: 'row',
@@ -220,6 +300,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  songActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  downloadButton: {
+    padding: 4,
+  },
   playIconButton: {
     width: 32,
     height: 32,
@@ -234,5 +322,16 @@ const styles = StyleSheet.create({
     left: 20,
     right: 20,
     zIndex: 100,
+  },
+  emptyContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 14,
+    fontFamily: 'Playfair Display',
+    fontStyle: 'italic',
   }
 });
+

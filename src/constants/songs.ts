@@ -4,56 +4,99 @@ export interface Song {
   artist: string;
   url: string;
   moods: string[];
+  genre: 'Pop Gospel' | 'R&B Gospel' | 'Country Gospel' | 'Worship / Praise';
   coverUrl: string;
 }
 
 export const WORSHIP_SONGS: Song[] = [
   {
     id: '1',
-    title: 'Way Maker',
-    artist: 'Leeland',
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', // Placeholder audio
-    moods: ['HOPEFUL', 'GRATEFUL', 'LONELY'],
-    coverUrl: 'https://picsum.photos/seed/waymaker/300/300'
+    title: 'Jireh',
+    artist: 'Maverick City Music',
+    // Modern Worship - Atmospheric, powerful
+    url: 'https://cdn.pixabay.com/audio/2022/01/18/audio_d0a13f69d2.mp3', 
+    moods: ['HOPEFUL', 'GRATEFUL'],
+    genre: 'Worship / Praise',
+    coverUrl: 'https://picsum.photos/seed/jireh/300/300'
   },
   {
     id: '2',
-    title: 'Goodness of God',
-    artist: 'Bethel Music',
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
+    title: 'Love Theory',
+    artist: 'Kirk Franklin',
+    // R&B Gospel - Upbeat, rhythmic
+    url: 'https://cdn.pixabay.com/audio/2022/10/14/audio_9939716c1d.mp3',
     moods: ['GRATEFUL', 'HOPEFUL'],
-    coverUrl: 'https://picsum.photos/seed/goodness/300/300'
+    genre: 'R&B Gospel',
+    coverUrl: 'https://picsum.photos/seed/lovetheory/300/300'
   },
   {
     id: '3',
-    title: 'It Is Well',
-    artist: 'Kristene DiMarco',
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
-    moods: ['ANXIOUS', 'SAD', 'HOPEFUL'],
-    coverUrl: 'https://picsum.photos/seed/itiswell/300/300'
+    title: 'Cycles',
+    artist: 'Jonathan McReynolds',
+    // R&B Gospel - Soulful, reflective
+    url: 'https://cdn.pixabay.com/audio/2022/03/10/audio_c8c8a73084.mp3',
+    moods: ['ANXIOUS', 'SAD'],
+    genre: 'R&B Gospel',
+    coverUrl: 'https://picsum.photos/seed/cycles/300/300'
   },
   {
     id: '4',
-    title: 'Rescue',
-    artist: 'Lauren Daigle',
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
-    moods: ['LONELY', 'SAD', 'ANXIOUS'],
-    coverUrl: 'https://picsum.photos/seed/rescue/300/300'
+    title: 'Old Church Choir',
+    artist: 'Zach Williams',
+    // Country Gospel - Upbeat, folk/country
+    url: 'https://cdn.pixabay.com/audio/2022/08/04/audio_2d6108473c.mp3',
+    moods: ['GRATEFUL', 'HOPEFUL'],
+    genre: 'Country Gospel',
+    coverUrl: 'https://picsum.photos/seed/choir/300/300'
   },
   {
     id: '5',
-    title: 'Graves Into Gardens',
-    artist: 'Elevation Worship',
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3',
-    moods: ['GRATEFUL', 'HOPEFUL', 'ANGRY'],
-    coverUrl: 'https://picsum.photos/seed/graves/300/300'
+    title: 'Something in the Water',
+    artist: 'Carrie Underwood',
+    // Country Gospel - Inspiring, acoustic
+    url: 'https://cdn.pixabay.com/audio/2021/11/25/audio_91b32e02f9.mp3',
+    moods: ['HOPEFUL', 'GRATEFUL'],
+    genre: 'Country Gospel',
+    coverUrl: 'https://picsum.photos/seed/water/300/300'
   },
   {
     id: '6',
-    title: 'Peace Be Still',
-    artist: 'The Belonging Co',
-    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3',
-    moods: ['ANXIOUS', 'ANGRY'],
-    coverUrl: 'https://picsum.photos/seed/peace/300/300'
+    title: 'You Know My Name',
+    artist: 'Tasha Cobbs Leonard',
+    // Modern Worship - Deep, emotional
+    url: 'https://cdn.pixabay.com/audio/2022/01/26/audio_d0c6b1330d.mp3',
+    moods: ['LONELY', 'ANXIOUS'],
+    genre: 'Worship / Praise',
+    coverUrl: 'https://picsum.photos/seed/name/300/300'
+  },
+  {
+    id: '7',
+    title: 'Believe For It',
+    artist: 'CeCe Winans',
+    // Modern Worship - Grand, cinematic
+    url: 'https://cdn.pixabay.com/audio/2022/03/15/audio_783ed5a0f0.mp3',
+    moods: ['HOPEFUL', 'ANXIOUS'],
+    genre: 'Worship / Praise',
+    coverUrl: 'https://picsum.photos/seed/believe/300/300'
+  },
+  {
+    id: '8',
+    title: 'Keep Me In The Moment',
+    artist: 'Jeremy Camp',
+    // Pop Gospel - Contemporary, driving
+    url: 'https://cdn.pixabay.com/audio/2022/05/17/audio_1997aed91f.mp3',
+    moods: ['ANXIOUS', 'GRATEFUL'],
+    genre: 'Pop Gospel',
+    coverUrl: 'https://picsum.photos/seed/moment/300/300'
+  },
+  {
+    id: '9',
+    title: 'Hold On To Me',
+    artist: 'Lauren Daigle',
+    // Pop Gospel - Soft, piano-led
+    url: 'https://cdn.pixabay.com/audio/2021/08/09/audio_8816222b4d.mp3',
+    moods: ['LONELY', 'SAD'],
+    genre: 'Pop Gospel',
+    coverUrl: 'https://picsum.photos/seed/holdon/300/300'
   }
 ];

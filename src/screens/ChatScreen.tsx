@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
-import { Send, Mic, ThumbsUp, ThumbsDown, Volume2 } from 'lucide-react';
+import { Send, Mic, ThumbsUp, ThumbsDown, Volume2, Square, VolumeX } from 'lucide-react';
 import { getChatResponse, generateSpeech } from '../services/gemini';
 import { ChatMessage, Profile } from '../types';
 import { supabase } from '../services/supabase';
@@ -15,6 +15,7 @@ export default function ChatScreen({ navigation }: any) {
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   useEffect(() => {
     fetchProfile();
@@ -76,8 +77,26 @@ export default function ChatScreen({ navigation }: any) {
     ));
   };
 
+  const stopSpeaking = () => {
+    if (currentSourceRef.current) {
+      try {
+        currentSourceRef.current.stop();
+      } catch (e) {
+        // Already stopped
+      }
+      currentSourceRef.current = null;
+    }
+    setSpeakingIndex(null);
+  };
+
   const speakMessage = async (index: number, text: string) => {
-    if (speakingIndex !== null) return;
+    if (speakingIndex === index) {
+      stopSpeaking();
+      return;
+    }
+    
+    // Stop any current playback
+    stopSpeaking();
     
     setSpeakingIndex(index);
     try {
@@ -107,7 +126,12 @@ export default function ChatScreen({ navigation }: any) {
         const source = context.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(context.destination);
-        source.onended = () => setSpeakingIndex(null);
+        source.onended = () => {
+          if (speakingIndex === index) {
+            setSpeakingIndex(null);
+          }
+        };
+        currentSourceRef.current = source;
         source.start();
       } else {
         setSpeakingIndex(null);
@@ -167,10 +191,13 @@ export default function ChatScreen({ navigation }: any) {
                 <TouchableOpacity 
                   onPress={() => speakMessage(index, msg.content)}
                   style={styles.feedbackButton}
-                  disabled={speakingIndex !== null}
                 >
                   {speakingIndex === index ? (
-                    <ActivityIndicator size="small" color="#d4af37" />
+                    <Square 
+                      size={14} 
+                      color="#d4af37" 
+                      fill="#d4af37"
+                    />
                   ) : (
                     <Volume2 
                       size={14} 
@@ -217,6 +244,15 @@ export default function ChatScreen({ navigation }: any) {
           value={input}
           onChangeText={setInput}
           multiline
+          blurOnSubmit={false}
+          onKeyPress={(e: any) => {
+            if (Platform.OS === 'web' || Platform.OS === 'ios' || Platform.OS === 'android') {
+              if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }
+          }}
         />
         <TouchableOpacity style={styles.sendButton} onPress={handleSend} disabled={loading}>
           <Send color="#fff" size={20} />
