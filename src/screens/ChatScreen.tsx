@@ -1,11 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { Send, Mic, ThumbsUp, ThumbsDown, Volume2, Square, VolumeX } from 'lucide-react';
-import { getChatResponse, generateSpeech } from '../services/gemini';
+import { getChatResponse, getChatResponseStream, generateSpeech } from '../services/gemini';
 import { ChatMessage, Profile } from '../types';
 import { supabase } from '../services/supabase';
+import { useMusic } from '../MusicContext';
+import { findSong, extractSongTitle, openYouTubeSearch } from '../utils/music';
 
 export default function ChatScreen({ navigation }: any) {
+  const { playSong } = useMusic();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: 'model', content: "Hello, I'm David. How can I encourage you today?" }
@@ -47,14 +50,47 @@ export default function ChatScreen({ navigation }: any) {
     setLoading(true);
 
     try {
+      const songTitle = extractSongTitle(userMessage.content);
+      if (songTitle) {
+        const song = findSong(songTitle);
+        if (song && song.isAvailable !== false) {
+          playSong(song);
+          setMessages(prev => [...prev, { role: 'model', content: `Playing '${song.title}' now...` }]);
+          setLoading(false);
+          return;
+        } else {
+          openYouTubeSearch(songTitle);
+          setMessages(prev => [...prev, { role: 'model', content: `I couldn't find '${songTitle}' in our library, so I'm opening it on YouTube for you now...` }]);
+          setLoading(false);
+          return;
+        }
+      }
+
       const history = messages.map(msg => ({
         role: msg.role as 'user' | 'model',
         parts: [{ text: msg.content }]
       }));
       history.push({ role: 'user', parts: [{ text: userMessage.content }] });
 
-      const response = await getChatResponse(history);
-      setMessages(prev => [...prev, { role: 'model', content: response || "I'm sorry, I couldn't process that." }]);
+      // Add an empty model message to start streaming into
+      const modelMessageIndex = messages.length + 1;
+      setMessages(prev => [...prev, { role: 'model', content: "" }]);
+
+      const response = await getChatResponseStream(history, (fullText) => {
+        setMessages(prev => {
+          const newMessages = [...prev];
+          newMessages[modelMessageIndex] = { role: 'model', content: fullText };
+          return newMessages;
+        });
+      });
+      
+      if (!response) {
+        setMessages(prev => {
+          const newMessages = [...prev];
+          newMessages[modelMessageIndex] = { role: 'model', content: "I'm sorry, I couldn't process that." };
+          return newMessages;
+        });
+      }
     } catch (error: any) {
       console.error("Chat Error:", error);
       let errorMessage = "I'm having a bit of trouble connecting right now. Let's try again in a moment.";
@@ -65,7 +101,15 @@ export default function ChatScreen({ navigation }: any) {
         errorMessage = "I've reached my daily limit for conversations. Please try again later.";
       }
       
-      setMessages(prev => [...prev, { role: 'model', content: errorMessage }]);
+      setMessages(prev => {
+        const newMessages = [...prev];
+        // If we added an empty message for streaming, replace it. Otherwise append.
+        if (newMessages.length > messages.length + 1) {
+          newMessages[messages.length + 1] = { role: 'model', content: errorMessage };
+          return newMessages;
+        }
+        return [...prev, { role: 'model', content: errorMessage }];
+      });
     } finally {
       setLoading(false);
     }

@@ -98,14 +98,14 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ song, onNext, onPrev, 
         audio.src = song.url;
         audio.load();
 
-        if (isPlaying) {
-          audio.play().catch(e => {
-            console.error("Playback failed", e);
-            setIsPlaying(false);
-            setHasError(true);
-            if (onErrorProp) onErrorProp("Playback failed");
-          });
-        }
+        // Always attempt to play when a new song is loaded
+        setIsPlaying(true);
+        audio.play().catch(e => {
+          console.error("Playback failed", e);
+          setIsPlaying(false);
+          setHasError(true);
+          if (onErrorProp) onErrorProp("Playback failed");
+        });
       } catch (err) {
         console.error("Error setting audio source:", err);
         setHasError(true);

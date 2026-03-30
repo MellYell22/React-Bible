@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
-import { Home, Search, MessageCircle, Mic, User, Music } from 'lucide-react';
+import { Home, Search, MessageCircle, Mic, User, Music, X } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from './services/supabase';
 import { Profile } from './types';
 import { AlertTriangle } from 'lucide-react';
@@ -18,12 +18,15 @@ import OnboardingScreen from './screens/OnboardingScreen';
 import { Navbar } from './components/Navbar';
 import { FullScreenBackground } from './components/FullScreenBackground';
 import { Analytics } from "@vercel/analytics/react";
+import { MusicProvider, useMusic } from './MusicContext';
+import { MusicPlayer } from './components/MusicPlayer';
 
-export default function App() {
+function AppContent() {
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [currentRoute, setCurrentRoute] = useState('Home');
   const [routeParams, setRouteParams] = useState<any>(null);
+  const { currentSong, stopSong, nextSong, prevSong } = useMusic();
 
   useEffect(() => {
     // Handle initial route based on URL path
@@ -159,6 +162,21 @@ export default function App() {
           {renderScreen()}
         </View>
       </FullScreenBackground>
+
+      {currentSong && (
+        <View style={styles.globalPlayerWrapper}>
+          <TouchableOpacity style={styles.closePlayerButton} onPress={stopSong}>
+            <X size={20} color="#ff4444" />
+          </TouchableOpacity>
+          <MusicPlayer 
+            song={currentSong} 
+            onNext={nextSong}
+            onPrev={prevSong}
+            onReady={() => {}}
+            onError={() => {}}
+          />
+        </View>
+      )}
       
       <View style={styles.tabBar}>
         <TabButton name="Home" icon={Home} />
@@ -169,6 +187,14 @@ export default function App() {
         <TabButton name="Profile" icon={User} />
       </View>
     </View>
+  );
+}
+
+export default function App() {
+  return (
+    <MusicProvider>
+      <AppContent />
+    </MusicProvider>
   );
 }
 
@@ -215,6 +241,24 @@ const styles = StyleSheet.create({
     height: 3,
     backgroundColor: '#d4af37',
     borderRadius: 2,
+  },
+  globalPlayerWrapper: {
+    position: 'absolute',
+    bottom: Platform.OS === 'ios' ? 100 : 80,
+    left: 10,
+    right: 10,
+    zIndex: 1000,
+  },
+  closePlayerButton: {
+    position: 'absolute',
+    top: -10,
+    right: -10,
+    zIndex: 1001,
+    backgroundColor: '#0b1e3d',
+    borderRadius: 15,
+    padding: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
   },
   configErrorContainer: {
     flex: 1,

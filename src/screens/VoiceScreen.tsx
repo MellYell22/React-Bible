@@ -8,11 +8,14 @@ const MotionView = motion(View);
 import { Profile } from '../types';
 import { GoogleGenAI, Modality, StartSensitivity, EndSensitivity } from "@google/genai";
 import { hasProAccess } from '../utils/tier';
+import { useMusic } from '../MusicContext';
+import { findSong, extractSongTitle, openYouTubeSearch } from '../utils/music';
 
 import { MOODS_DATA } from '../constants/moods';
 import { WORSHIP_SONGS } from '../constants/songs';
 
 export default function VoiceScreen({ route, navigation }: any) {
+  const { playSong } = useMusic();
   const [profile, setProfile] = useState<Profile | null>(null);
   const moodParam = route?.params?.mood;
   const [isConnecting, setIsConnecting] = useState(false);
@@ -175,12 +178,13 @@ IDENTITY:
 - Speak TO the user, not AT them.
 - When the user expresses sadness, anxiety, loneliness, or pain, acknowledge it with deep warmth and high emotional intelligence.
 
-RESPONSE STYLE:
-- Give 1-3 meaningful, compassionate sentences.
-- Acknowledge the user's feeling naturally before offering support.
-- Sometimes include a relevant, comforting Bible verse if it fits the moment.
-- Sometimes ask a single, gentle follow-up question to show you are listening.
-- NEVER give generic, short replies like "I'm sorry you feel that way" or "That must be hard" on their own.
+RESPONSE STYLE (STRICT RULES):
+- ALWAYS respond with exactly 3–4 sentences. This is critical for both depth and speed.
+- When the user expresses a feeling (sad, anxious, lonely, etc.):
+  - Acknowledge the feeling naturally (don't just say "I'm sorry").
+  - Provide a relevant Bible verse.
+  - Briefly explain the verse in a conversational way.
+  - Ask a thoughtful follow-up question.
 - Your goal is to make the user feel seen, heard, and supported by God's word.
 
 MUSIC RECOMMENDATIONS:
@@ -190,17 +194,10 @@ MUSIC RECOMMENDATIONS:
 - Do NOT force recommendations. Only suggest if it feels helpful and natural.
 - Do NOT list songs like a robot.
 
-CONCISENESS (STRICT RULE):
-- Keep your responses SHORT (1-3 sentences maximum).
-- Do NOT provide long explanations or multiple scriptures unless explicitly asked.
+CONCISENESS & SPEED:
 - Prioritize speed and natural conversation flow.
-
-NO META-TALK (STRICT RULE):
-- NEVER describe what you are doing (e.g., "I am thinking", "Formulating response", "Crafting a message").
-- NEVER use internal labels, planning steps, or reasoning in your output.
-- ONLY output the final words you want to speak.
-
-If a mood context is provided above, use it to inform your initial greeting warmly and briefly.`,
+- NEVER describe what you are doing (e.g., "I am thinking", "Formulating response").
+- ONLY output the final words you want to speak.`,
             } as any,
           callbacks: {
             onopen: () => {
@@ -274,6 +271,18 @@ If a mood context is provided above, use it to inform your initial greeting warm
 
                 if (textData) {
                   addLog(`text response received: "${textData}"`);
+                  
+                  // Check for music playback intent in David's response
+                  const songTitle = extractSongTitle(textData);
+                  if (songTitle) {
+                    const song = findSong(songTitle);
+                    if (song && song.isAvailable !== false) {
+                      playSong(song);
+                    } else {
+                      openYouTubeSearch(songTitle);
+                    }
+                  }
+
                   davidResponseRef.current += textData;
                   setCurrentDavidResponse(davidResponseRef.current);
                 }

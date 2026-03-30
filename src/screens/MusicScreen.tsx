@@ -7,6 +7,7 @@ import { WORSHIP_SONGS, Song } from '../constants/songs';
 const MotionView = motion(View);
 import { MusicPlayer } from '../components/MusicPlayer';
 import { getDownloadedSongs, toggleDownload, isSongDownloaded } from '../services/storage';
+import { useMusic } from '../MusicContext';
 
 const MOODS = ['ANXIOUS', 'SAD', 'LONELY', 'STRESSED', 'OVERWHELMED', 'HOPEFUL', 'GRATEFUL', 'ANGRY', 'CONFUSED', 'JOYFUL', 'PEACEFUL'];
 const GENRES = [
@@ -21,13 +22,11 @@ const GENRES = [
 ];
 
 export default function MusicScreen() {
+  const { currentSong, playSong, stopSong } = useMusic();
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [showDownloadsOnly, setShowDownloadsOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [currentSong, setCurrentSong] = useState<Song | null>(null);
-  const [isPlayerReady, setIsPlayerReady] = useState(false);
-  const [playerError, setPlayerError] = useState<string | null>(null);
   const [filteredSongs, setFilteredSongs] = useState<Song[]>(WORSHIP_SONGS);
   const [downloadedIds, setDownloadedIds] = useState<string[]>([]);
 
@@ -62,11 +61,8 @@ export default function MusicScreen() {
   }, [selectedMood, selectedGenres, showDownloadsOnly, downloadedIds, searchQuery]);
 
   const handlePlaySong = (song: Song) => {
-    if (currentSong?.id === song.id && isPlayerReady) return;
-    
-    setIsPlayerReady(false);
-    setPlayerError(null);
-    setCurrentSong(song);
+    if (currentSong?.id === song.id) return;
+    playSong(song);
   };
 
   const handleGenreToggle = (genre: string) => {
@@ -86,14 +82,14 @@ export default function MusicScreen() {
     if (!currentSong) return;
     const currentIndex = filteredSongs.findIndex(s => s.id === currentSong.id);
     const nextIndex = (currentIndex + 1) % filteredSongs.length;
-    setCurrentSong(filteredSongs[nextIndex]);
+    playSong(filteredSongs[nextIndex]);
   };
 
   const handlePrev = () => {
     if (!currentSong) return;
     const currentIndex = filteredSongs.findIndex(s => s.id === currentSong.id);
     const prevIndex = (currentIndex - 1 + filteredSongs.length) % filteredSongs.length;
-    setCurrentSong(filteredSongs[prevIndex]);
+    playSong(filteredSongs[prevIndex]);
   };
 
   return (
@@ -322,37 +318,7 @@ export default function MusicScreen() {
 
       {currentSong && (
         <View style={styles.playerWrapper}>
-          {!isPlayerReady && !playerError && (
-            <View style={styles.validatingContainer}>
-              <ActivityIndicator color="#d4af37" size="small" />
-              <Text style={styles.validatingText}>Validating audio source...</Text>
-            </View>
-          )}
-          
-          {playerError && (
-            <View style={styles.playerErrorContainer}>
-              <View style={styles.playerErrorInfo}>
-                <Text style={styles.playerErrorTitle}>{currentSong.title}</Text>
-                <Text style={styles.playerErrorText}>{playerError}</Text>
-              </View>
-              <TouchableOpacity onPress={() => setCurrentSong(null)} style={styles.closeErrorButton}>
-                <X size={20} color="#ff4444" />
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <View style={{ display: isPlayerReady ? 'flex' : 'none' }}>
-            <MusicPlayer 
-              song={currentSong} 
-              onNext={handleNext}
-              onPrev={handlePrev}
-              onReady={() => setIsPlayerReady(true)}
-              onError={(err) => {
-                setPlayerError(err);
-                setIsPlayerReady(false);
-              }}
-            />
-          </View>
+          {/* Global player in App.tsx handles the actual playback */}
         </View>
       )}
     </View>
