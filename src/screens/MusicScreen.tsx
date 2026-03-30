@@ -23,7 +23,7 @@ const GENRES = [
 
 export default function MusicScreen() {
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
-  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [showDownloadsOnly, setShowDownloadsOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
@@ -54,14 +54,22 @@ export default function MusicScreen() {
     if (selectedMood) {
       filtered = filtered.filter(s => s.moods.includes(selectedMood));
     }
-    if (selectedGenre) {
-      filtered = filtered.filter(s => s.genre === selectedGenre);
+    if (selectedGenres.length > 0) {
+      filtered = filtered.filter(s => selectedGenres.includes(s.genre));
     }
     setFilteredSongs(filtered);
-  }, [selectedMood, selectedGenre, showDownloadsOnly, downloadedIds, searchQuery]);
+  }, [selectedMood, selectedGenres, showDownloadsOnly, downloadedIds, searchQuery]);
 
   const handlePlaySong = (song: Song) => {
     setCurrentSong(song);
+  };
+
+  const handleGenreToggle = (genre: string) => {
+    setSelectedGenres(prev => 
+      prev.includes(genre) 
+        ? prev.filter(g => g !== genre) 
+        : [...prev, genre]
+    );
   };
 
   const handleDownload = (songId: string) => {
@@ -110,7 +118,7 @@ export default function MusicScreen() {
           </View>
         </View>
 
-        {(selectedMood || selectedGenre || searchQuery || showDownloadsOnly) && (
+        {(selectedMood || selectedGenres.length > 0 || searchQuery || showDownloadsOnly) && (
           <View style={styles.activeFiltersContainer}>
             <Text style={styles.activeFiltersLabel}>ACTIVE FILTERS:</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.activeFiltersScroll}>
@@ -129,20 +137,21 @@ export default function MusicScreen() {
                     </TouchableOpacity>
                   </MotionView>
                 )}
-                {selectedGenre && (
+                {selectedGenres.map(genre => (
                   <MotionView 
+                    key={`filter-${genre}`}
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.8 }}
                     style={styles.filterTag}
                   >
                     <Filter size={10} color="#0b1e3d" />
-                    <Text style={styles.filterTagText}>{selectedGenre}</Text>
-                    <TouchableOpacity onPress={() => setSelectedGenre(null)}>
+                    <Text style={styles.filterTagText}>{genre}</Text>
+                    <TouchableOpacity onPress={() => handleGenreToggle(genre)}>
                       <X size={10} color="#0b1e3d" />
                     </TouchableOpacity>
                   </MotionView>
-                )}
+                ))}
                 {selectedMood && (
                   <MotionView 
                     initial={{ opacity: 0, scale: 0.8 }}
@@ -180,18 +189,18 @@ export default function MusicScreen() {
           <Text style={styles.sectionLabel}>BROWSE BY GENRE</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.moodScroll}>
             <TouchableOpacity 
-              style={[styles.moodChip, !selectedGenre && styles.moodChipActive]}
-              onPress={() => setSelectedGenre(null)}
+              style={[styles.moodChip, selectedGenres.length === 0 && styles.moodChipActive]}
+              onPress={() => setSelectedGenres([])}
             >
-              <Text style={[styles.moodChipText, !selectedGenre && styles.moodChipTextActive]}>ALL GENRES</Text>
+              <Text style={[styles.moodChipText, selectedGenres.length === 0 && styles.moodChipTextActive]}>ALL GENRES</Text>
             </TouchableOpacity>
             {GENRES.map(genre => (
               <TouchableOpacity 
                 key={genre}
-                style={[styles.moodChip, selectedGenre === genre && styles.moodChipActive]}
-                onPress={() => setSelectedGenre(genre)}
+                style={[styles.moodChip, selectedGenres.includes(genre) && styles.moodChipActive]}
+                onPress={() => handleGenreToggle(genre)}
               >
-                <Text style={[styles.moodChipText, selectedGenre === genre && styles.moodChipTextActive]}>{genre.toUpperCase()}</Text>
+                <Text style={[styles.moodChipText, selectedGenres.includes(genre) && styles.moodChipTextActive]}>{genre.toUpperCase()}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -235,8 +244,8 @@ export default function MusicScreen() {
           <Text style={styles.sectionLabel}>
             {showDownloadsOnly 
               ? 'MY DOWNLOADED SONGS' 
-              : (selectedMood || selectedGenre 
-                ? `${selectedGenre || ''} ${selectedMood || ''} GOSPEL`.trim() 
+              : (selectedMood || selectedGenres.length > 0 
+                ? `${selectedGenres.join(', ') || ''} ${selectedMood || ''} GOSPEL`.trim() 
                 : 'RECOMMENDED FOR YOU')}
           </Text>
           {filteredSongs.length === 0 ? (

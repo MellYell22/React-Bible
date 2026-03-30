@@ -31,15 +31,24 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ song, onNext, onPrev }
 
   useEffect(() => {
     if (!audioRef.current) {
-      audioRef.current = new Audio(song.url);
-    } else {
-      audioRef.current.src = song.url;
+      audioRef.current = new Audio();
+      audioRef.current.crossOrigin = "anonymous";
+      audioRef.current.preload = "auto";
     }
-
+    
     const audio = audioRef.current;
+    
+    // Reset state for new song
+    setIsLoading(true);
+    setProgress(0);
+    setDuration(0);
 
     const onLoadedMetadata = () => {
       setDuration(audio.duration);
+      setIsLoading(false);
+    };
+
+    const onCanPlay = () => {
       setIsLoading(false);
     };
 
@@ -52,18 +61,43 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ song, onNext, onPrev }
       if (onNext) onNext();
     };
 
+    const onError = (e: any) => {
+      console.error("Audio playback error:", e);
+      setIsLoading(false);
+      setIsPlaying(false);
+      // The error "The element has no supported sources" often happens if the URL is invalid or blocked
+    };
+
     audio.addEventListener('loadedmetadata', onLoadedMetadata);
+    audio.addEventListener('canplay', onCanPlay);
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('ended', onEnded);
+    audio.addEventListener('error', onError);
 
-    if (isPlaying) {
-      audio.play().catch(e => console.error("Playback failed", e));
+    // Set source and load
+    if (song.url) {
+      // Clear previous source to avoid "no supported sources" error on source change
+      audio.pause();
+      audio.src = "";
+      
+      audio.src = song.url;
+      audio.load();
+
+      if (isPlaying) {
+        audio.play().catch(e => {
+          console.error("Playback failed", e);
+          setIsPlaying(false);
+        });
+      }
     }
 
     return () => {
+      audio.pause();
       audio.removeEventListener('loadedmetadata', onLoadedMetadata);
+      audio.removeEventListener('canplay', onCanPlay);
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('error', onError);
     };
   }, [song]);
 

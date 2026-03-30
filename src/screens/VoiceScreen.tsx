@@ -164,7 +164,7 @@ When you start the conversation, acknowledge this feeling warmly. Reference one 
                   },
                 },
               },
-              systemInstruction: `You are David, a warm, compassionate male AI Bible companion. You MUST speak in ENGLISH only. This is a real-time voice conversation. 
+              systemInstruction: `You are David, a warm, thoughtful, and spiritually supportive male AI Bible companion. You MUST speak in ENGLISH only. This is a real-time voice conversation. 
 
 ${moodContext}
 
@@ -173,6 +173,15 @@ IDENTITY:
 - You sound like a real person having a conversation, not a robot.
 - Use natural phrasing, empathy, and gentle pauses.
 - Speak TO the user, not AT them.
+- When the user expresses sadness, anxiety, loneliness, or pain, acknowledge it with deep warmth and high emotional intelligence.
+
+RESPONSE STYLE:
+- Give 1-3 meaningful, compassionate sentences.
+- Acknowledge the user's feeling naturally before offering support.
+- Sometimes include a relevant, comforting Bible verse if it fits the moment.
+- Sometimes ask a single, gentle follow-up question to show you are listening.
+- NEVER give generic, short replies like "I'm sorry you feel that way" or "That must be hard" on their own.
+- Your goal is to make the user feel seen, heard, and supported by God's word.
 
 MUSIC RECOMMENDATIONS:
 - You have access to a library of Gospel music across multiple genres (R&B, Contemporary, Traditional, Worship, Country, Pop, Urban, Choir).
@@ -182,7 +191,7 @@ MUSIC RECOMMENDATIONS:
 - Do NOT list songs like a robot.
 
 CONCISENESS (STRICT RULE):
-- Keep your responses VERY SHORT (1-2 sentences maximum).
+- Keep your responses SHORT (1-3 sentences maximum).
 - Do NOT provide long explanations or multiple scriptures unless explicitly asked.
 - Prioritize speed and natural conversation flow.
 
@@ -642,11 +651,23 @@ If a mood context is provided above, use it to inform your initial greeting warm
     
     const blob = new Blob([buffer], { type: 'audio/wav' });
     const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
+    const audio = new Audio();
+    audio.src = url;
+    
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+    };
+    
+    audio.onerror = (e) => {
+      addLog(`WAV fallback audio element error: ${e}`);
+      URL.revokeObjectURL(url);
+    };
+
     audio.play().then(() => {
       addLog("WAV fallback playback started");
     }).catch(e => {
       addLog(`WAV fallback play error: ${e}`);
+      URL.revokeObjectURL(url);
     });
   };
 
@@ -771,7 +792,7 @@ If a mood context is provided above, use it to inform your initial greeting warm
         </Text>
       </View>
 
-      {isConnected && (
+      {isConnected && (messages.length > 0 || (currentDavidResponse && currentDavidResponse.trim().length > 0)) && (
         <View style={styles.chatContainer}>
           <ScrollView 
             style={styles.chatScroll} 
@@ -789,7 +810,7 @@ If a mood context is provided above, use it to inform your initial greeting warm
                 <Text style={styles.messageText}>{msg.text}</Text>
               </View>
             ))}
-            {currentDavidResponse && (
+            {currentDavidResponse && currentDavidResponse.trim().length > 0 && (
               <View style={[styles.messageBubble, styles.davidBubble]}>
                 <Text style={styles.messageLabel}>David:</Text>
                 <Text style={styles.messageText}>{currentDavidResponse}</Text>
@@ -799,7 +820,7 @@ If a mood context is provided above, use it to inform your initial greeting warm
         </View>
       )}
 
-      {lastResponseText && isConnected && !messages.length && !currentDavidResponse && (
+      {lastResponseText && lastResponseText.trim().length > 0 && isConnected && !messages.length && (!currentDavidResponse || currentDavidResponse.trim().length === 0) && (
         <MotionView 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -834,34 +855,6 @@ If a mood context is provided above, use it to inform your initial greeting warm
         )}
       </TouchableOpacity>
 
-      <View style={styles.debugToggleContainer}>
-        <TouchableOpacity onPress={() => setShowDebug(!showDebug)}>
-          <Text style={styles.debugToggleText}>{showDebug ? "Hide Debug" : "Show Debug"}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {showDebug && (
-        <View style={styles.debugPanel}>
-          <View style={styles.debugHeader}>
-            <Text style={styles.debugTitle}>Debug Logs</Text>
-            <TouchableOpacity onPress={() => setDebugLogs([])}>
-              <Text style={styles.debugClear}>Clear</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView style={styles.debugScroll} contentContainerStyle={{ paddingBottom: 20 }}>
-            {debugLogs.map((log, i) => (
-              <Text key={i} style={styles.debugLog}>{`> ${log}`}</Text>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {!isConnected && !isConnecting && (
-        <TouchableOpacity style={styles.testButton} onPress={testAudio}>
-          <Text style={styles.testButtonText}>Test Audio Output</Text>
-        </TouchableOpacity>
-      )}
-      
       <Text style={styles.disclaimer}>
         David is an AI spiritual companion. For professional guidance or pastoral care, please consult your local church or a qualified advisor.
       </Text>
@@ -883,7 +876,7 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 60,
+    marginBottom: 40,
   },
   title: {
     fontSize: 24,
@@ -954,7 +947,7 @@ const styles = StyleSheet.create({
     height: 200,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 30,
   },
   mainCircle: {
     width: 120,
@@ -985,7 +978,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   statusContainer: {
-    marginBottom: 40,
+    marginBottom: 20,
   },
   statusText: {
     fontSize: 14,
