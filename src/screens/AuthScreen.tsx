@@ -119,12 +119,9 @@ export default function AuthScreen() {
           )}
         </View>
       </View>
-
-      {/* No card/container background. This is PURE layout only. */}
       <View style={styles.screen}>
         <Text style={styles.title}>Bible Mood Search</Text>
         <Text style={styles.subtitle}>AI Scripture Companion</Text>
-
         <View style={styles.form}>
           {error && (
             <View style={styles.errorContainer}>
@@ -152,7 +149,6 @@ export default function AuthScreen() {
               onSubmitEditing={handleAuth}
             />
           )}
-
           <TouchableOpacity style={styles.button} onPress={handleAuth} disabled={loading}>
             {loading ? (
               <ActivityIndicator color="#d4af37" />
@@ -162,7 +158,6 @@ export default function AuthScreen() {
               </Text>
             )}
           </TouchableOpacity>
-
           {!isResettingPassword && !isSignUp && (
             <TouchableOpacity 
               style={styles.forgotPasswordWrap} 
@@ -171,7 +166,6 @@ export default function AuthScreen() {
               <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
             </TouchableOpacity>
           )}
-
           <TouchableOpacity 
             style={styles.toggleWrap} 
             onPress={() => {
@@ -191,7 +185,6 @@ export default function AuthScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-
         <View style={styles.footer}>
           <Text style={styles.footerText}>CREATED BY AA DESIGNS</Text>
         </View>

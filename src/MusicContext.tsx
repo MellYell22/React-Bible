@@ -3,23 +3,40 @@ import { Song, WORSHIP_SONGS } from './constants/songs';
 
 interface MusicContextType {
   currentSong: Song | null;
+  isPlaying: boolean;
   playSong: (song: Song) => void;
+  pauseSong: () => void;
+  resumeSong: () => void;
   stopSong: () => void;
   nextSong: () => void;
   prevSong: () => void;
+  setIsPlaying: (playing: boolean) => void;
 }
 
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
 
 export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const playSong = (song: Song) => {
     setCurrentSong(song);
+    setIsPlaying(true);
+  };
+
+  const pauseSong = () => {
+    setIsPlaying(false);
+  };
+
+  const resumeSong = () => {
+    if (currentSong) {
+      setIsPlaying(true);
+    }
   };
 
   const stopSong = () => {
     setCurrentSong(null);
+    setIsPlaying(false);
   };
 
   const nextSong = () => {
@@ -27,6 +44,7 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const currentIndex = WORSHIP_SONGS.findIndex(s => s.id === currentSong.id);
     const nextIndex = (currentIndex + 1) % WORSHIP_SONGS.length;
     setCurrentSong(WORSHIP_SONGS[nextIndex]);
+    setIsPlaying(true);
   };
 
   const prevSong = () => {
@@ -34,10 +52,21 @@ export const MusicProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const currentIndex = WORSHIP_SONGS.findIndex(s => s.id === currentSong.id);
     const prevIndex = (currentIndex - 1 + WORSHIP_SONGS.length) % WORSHIP_SONGS.length;
     setCurrentSong(WORSHIP_SONGS[prevIndex]);
+    setIsPlaying(true);
   };
 
   return (
-    <MusicContext.Provider value={{ currentSong, playSong, stopSong, nextSong, prevSong }}>
+    <MusicContext.Provider value={{ 
+      currentSong, 
+      isPlaying, 
+      playSong, 
+      pauseSong, 
+      resumeSong, 
+      stopSong, 
+      nextSong, 
+      prevSong,
+      setIsPlaying 
+    }}>
       {children}
     </MusicContext.Provider>
   );

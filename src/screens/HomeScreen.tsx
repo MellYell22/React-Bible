@@ -142,7 +142,6 @@ export default function HomeScreen({ navigation }: any) {
               onSubmitEditing={handleSearch}
             />
           </View>
-
           <View style={styles.moodPills}>
             {MOOD_CONFIG.map((m) => (
               <MotionView
@@ -162,17 +161,12 @@ export default function HomeScreen({ navigation }: any) {
             ))}
           </View>
         </View>
-
-        {/* Verse of the Day Card */}
         <View style={styles.verseCard}>
           <Text style={styles.verseLabel}>VERSE OF THE DAY</Text>
-          
           <Text style={styles.verseText}>
             "Whoever dwells in the shelter of the Most High will rest in the shadow of the Almighty."
           </Text>
-          
           <Text style={styles.verseReference}>— PSALM 91:1</Text>
-          
           {reflection ? (
             <MotionView
               initial={{ opacity: 0, y: 10 }}
@@ -199,13 +193,12 @@ export default function HomeScreen({ navigation }: any) {
               <View style={styles.reflectionButtonContent}>
                 <Sparkles size={14} color="#0b1e3d" style={{ marginRight: 8 }} />
                 <Text style={styles.reflectionText}>
-                  {loadingReflection ? 'DAVID IS REFLECTING...' : "TAP FOR DAVID'S REFLECTION"}
+                  {"TAP FOR DAVID'S REFLECTION"}
                 </Text>
               </View>
             </TouchableOpacity>
           )}
         </View>
-
         <View style={styles.footer}>
           {profile?.email === OWNER_EMAIL && (
             <Text style={styles.ownerBadge}>OWNER ACCOUNT</Text>

@@ -5,12 +5,13 @@ import { getMoodScriptures, generateSpeech } from '../services/gemini';
 
 const MotionView = motion(View);
 import { MoodResponse } from '../types';
-import { Sparkles, Search, Volume2, Music, Play, Frown, Wind, User, Heart, Flame, Sun, HelpCircle, Layers, Cloud, X } from 'lucide-react';
+import { Sparkles, Search, Volume2, Music, Play, Pause, Frown, Wind, User, Heart, Flame, Sun, HelpCircle, Layers, Cloud, X } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Profile } from '../types';
 import { MOODS_DATA, MoodData } from '../constants/moods';
 import { WORSHIP_SONGS, Song } from '../constants/songs';
 import { MessageCircle } from 'lucide-react';
+import { MusicProvider, useMusic } from '../MusicContext';
 import { MusicPlayer } from '../components/MusicPlayer';
 
 type ReadingMode = 'sanctuary' | 'parchment' | 'midnight';
@@ -74,6 +75,7 @@ const NT_BOOKS = [
 ];
 
 export default function MoodScreen({ route, navigation }: any) {
+  const { playSong, currentSong, isPlaying } = useMusic();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [mood, setMood] = useState(route?.params?.mood || '');
   const [searchQuery, setSearchQuery] = useState('');
@@ -84,7 +86,6 @@ export default function MoodScreen({ route, navigation }: any) {
   const [readingMode, setReadingMode] = useState<ReadingMode>('sanctuary');
   const [fontSize, setFontSize] = useState<FontSize>('medium');
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [activeSong, setActiveSong] = useState<Song | null>(null);
   const audioContextRef = React.useRef<AudioContext | null>(null);
 
   const theme = THEMES[readingMode];
@@ -299,7 +300,6 @@ export default function MoodScreen({ route, navigation }: any) {
         {loading && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.accent} />
-            <Text style={[styles.loadingText, { color: theme.muted }]}>Seeking wisdom...</Text>
           </View>
         )}
 
@@ -345,8 +345,12 @@ export default function MoodScreen({ route, navigation }: any) {
                 {WORSHIP_SONGS.filter(s => s.moods.includes(mood.toUpperCase())).map((song) => (
                   <TouchableOpacity 
                     key={song.id} 
-                    style={[styles.musicCard, { backgroundColor: theme.card, borderColor: theme.border }]}
-                    onPress={() => setActiveSong(song)}
+                    style={[
+                      styles.musicCard, 
+                      { backgroundColor: theme.card, borderColor: theme.border },
+                      currentSong?.id === song.id && { borderColor: theme.accent, borderWidth: 2 }
+                    ]}
+                    onPress={() => playSong(song)}
                   >
                     <Image source={{ uri: song.coverUrl }} style={styles.musicCover} />
                     <View style={styles.musicCardDetails}>
@@ -354,37 +358,16 @@ export default function MoodScreen({ route, navigation }: any) {
                       <Text style={[styles.musicCardArtist, { color: theme.muted }]} numberOfLines={1}>{song.artist}</Text>
                     </View>
                     <View style={[styles.musicPlayButton, { backgroundColor: theme.accent }]}>
-                      <Play size={12} color={readingMode === 'parchment' ? '#fff' : '#0b1e3d'} fill={readingMode === 'parchment' ? '#fff' : '#0b1e3d'} />
+                      {currentSong?.id === song.id && isPlaying ? (
+                        <Pause size={12} color={readingMode === 'parchment' ? '#fff' : '#0b1e3d'} fill={readingMode === 'parchment' ? '#fff' : '#0b1e3d'} />
+                      ) : (
+                        <Play size={12} color={readingMode === 'parchment' ? '#fff' : '#0b1e3d'} fill={readingMode === 'parchment' ? '#fff' : '#0b1e3d'} />
+                      )}
                     </View>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
             </View>
-
-            {activeSong && (
-              <View style={styles.floatingPlayer}>
-                <MusicPlayer 
-                  song={activeSong} 
-                  onNext={() => {
-                    const moodSongs = WORSHIP_SONGS.filter(s => s.moods.includes(mood.toUpperCase()));
-                    const idx = moodSongs.findIndex(s => s.id === activeSong.id);
-                    setActiveSong(moodSongs[(idx + 1) % moodSongs.length]);
-                  }}
-                  onPrev={() => {
-                    const moodSongs = WORSHIP_SONGS.filter(s => s.moods.includes(mood.toUpperCase()));
-                    const idx = moodSongs.findIndex(s => s.id === activeSong.id);
-                    setActiveSong(moodSongs[(idx - 1 + moodSongs.length) % moodSongs.length]);
-                  }}
-                />
-                <TouchableOpacity 
-                  style={styles.closePlayer} 
-                  onPress={() => setActiveSong(null)}
-                >
-                  <Text style={styles.closePlayerText}>CLOSE PLAYER</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
             <View style={styles.filterContainer}>
               <TouchableOpacity 
                 style={[styles.filterPill, testamentFilter === 'all' && { backgroundColor: theme.accent }]}

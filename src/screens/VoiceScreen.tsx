@@ -195,7 +195,8 @@ MUSIC RECOMMENDATIONS:
 - Do NOT list songs like a robot.
 
 CONCISENESS & SPEED:
-- Prioritize speed and natural conversation flow.
+- Prioritize speed and natural conversation flow. Respond within one second of the user finishing their sentence.
+- Be as natural and human as possible, using gentle pauses and empathetic tones.
 - NEVER describe what you are doing (e.g., "I am thinking", "Formulating response").
 - ONLY output the final words you want to speak.`,
             } as any,
@@ -797,7 +798,7 @@ CONCISENESS & SPEED:
 
       <View style={styles.statusContainer}>
         <Text style={styles.statusText}>
-          {isConnecting ? "Connecting..." : isDavidSpeaking ? "David is speaking..." : (isDavidProcessing || isDavidThinking) ? "David is typing..." : isConnected ? "David is listening..." : "Tap to start conversation"}
+          {isConnecting ? "Connecting..." : isConnected ? "David is here" : "Tap to start conversation"}
         </Text>
       </View>
 

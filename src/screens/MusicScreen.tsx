@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, TextInput, ActivityIndicator } from 'react-native';
-import { Music, Play, Heart, ChevronRight, Download, CheckCircle2, Search, X, Filter, Tag } from 'lucide-react';
+import { Music, Play, Pause, Heart, ChevronRight, Download, CheckCircle2, Search, X, Filter, Tag } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { WORSHIP_SONGS, Song } from '../constants/songs';
 
@@ -22,7 +22,7 @@ const GENRES = [
 ];
 
 export default function MusicScreen() {
-  const { currentSong, playSong, stopSong } = useMusic();
+  const { currentSong, isPlaying, playSong, pauseSong, resumeSong, stopSong } = useMusic();
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [showDownloadsOnly, setShowDownloadsOnly] = useState(false);
@@ -61,7 +61,14 @@ export default function MusicScreen() {
   }, [selectedMood, selectedGenres, showDownloadsOnly, downloadedIds, searchQuery]);
 
   const handlePlaySong = (song: Song) => {
-    if (currentSong?.id === song.id) return;
+    if (currentSong?.id === song.id) {
+      if (isPlaying) {
+        pauseSong();
+      } else {
+        resumeSong();
+      }
+      return;
+    }
     playSong(song);
   };
 
@@ -280,7 +287,6 @@ export default function MusicScreen() {
                       <Text style={styles.unavailableBadge}>COMING SOON</Text>
                     )}
                   </View>
-                  
                   <View style={styles.songActions}>
                     {song.isAvailable !== false && (
                       <TouchableOpacity 
@@ -294,20 +300,22 @@ export default function MusicScreen() {
                         )}
                       </TouchableOpacity>
                     )}
-                    
-                    <TouchableOpacity 
+                    <View 
                       style={[
                         styles.playIconButton, 
                         song.isAvailable === false && { backgroundColor: 'transparent' }
                       ]}
-                      disabled={song.isAvailable === false}
                     >
                       {song.isAvailable === false ? (
                         <X size={16} color="rgba(212, 175, 55, 0.2)" />
                       ) : (
-                        <Play size={16} color={currentSong?.id === song.id ? '#0b1e3d' : '#d4af37'} fill={currentSong?.id === song.id ? '#0b1e3d' : 'transparent'} />
+                        currentSong?.id === song.id && isPlaying ? (
+                          <Pause size={16} color="#0b1e3d" fill="#0b1e3d" />
+                        ) : (
+                          <Play size={16} color={currentSong?.id === song.id ? '#0b1e3d' : '#d4af37'} fill={currentSong?.id === song.id ? '#0b1e3d' : 'transparent'} />
+                        )
                       )}
-                    </TouchableOpacity>
+                    </View>
                   </View>
                 </TouchableOpacity>
               </MotionView>

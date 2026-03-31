@@ -177,7 +177,6 @@ function AppContent() {
           />
         </View>
       )}
-      
       <View style={styles.tabBar}>
         <TabButton name="Home" icon={Home} />
         <TabButton name="Mood" icon={Search} />

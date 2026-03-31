@@ -13,11 +13,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onProfile }) => {
       <TouchableOpacity style={styles.iconButton}>
         <Menu size={20} color="#d4af37" />
       </TouchableOpacity>
-      
       <View style={styles.center}>
         <Text style={styles.logoText}>BMS</Text>
       </View>
-
       <TouchableOpacity style={styles.iconButton} onPress={onProfile}>
         <User size={20} color="#d4af37" />
       </TouchableOpacity>

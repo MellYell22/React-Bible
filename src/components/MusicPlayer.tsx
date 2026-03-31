@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'rea
 import { Play, Pause, SkipBack, SkipForward, Volume2, Download, CheckCircle2, X } from 'lucide-react';
 import { Song } from '../constants/songs';
 import { isSongDownloaded, toggleDownload } from '../services/storage';
+import { useMusic } from '../MusicContext';
 
 interface MusicPlayerProps {
   song: Song;
@@ -13,7 +14,7 @@ interface MusicPlayerProps {
 }
 
 export const MusicPlayer: React.FC<MusicPlayerProps> = ({ song, onNext, onPrev, onReady, onError: onErrorProp }) => {
-  const [isPlaying, setIsPlaying] = useState(false);
+  const { isPlaying, setIsPlaying } = useMusic();
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -32,6 +33,21 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ song, onNext, onPrev, 
       audioRef.current.volume = volume;
     }
   }, [volume]);
+
+  // Sync audio playback with isPlaying state from context
+  useEffect(() => {
+    if (!audioRef.current || !isReady) return;
+    
+    if (isPlaying) {
+      audioRef.current.play().catch(e => {
+        console.error("Playback failed", e);
+        // Don't set hasError(true) here, as it might just be autoplay policy
+        setIsPlaying(false);
+      });
+    } else {
+      audioRef.current.pause();
+    }
+  }, [isPlaying, isReady]);
 
   useEffect(() => {
     if (!audioRef.current) {
@@ -98,14 +114,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ song, onNext, onPrev, 
         audio.src = song.url;
         audio.load();
 
-        // Always attempt to play when a new song is loaded
-        setIsPlaying(true);
-        audio.play().catch(e => {
-          console.error("Playback failed", e);
-          setIsPlaying(false);
-          setHasError(true);
-          if (onErrorProp) onErrorProp("Playback failed");
-        });
+        // The play() call is now handled by the isPlaying sync useEffect
       } catch (err) {
         console.error("Error setting audio source:", err);
         setHasError(true);
@@ -129,14 +138,6 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ song, onNext, onPrev, 
 
   const togglePlay = () => {
     if (!audioRef.current || hasError || song.isAvailable === false) return;
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play().catch(() => {
-        setHasError(true);
-        setIsPlaying(false);
-      });
-    }
     setIsPlaying(!isPlaying);
   };
 
@@ -166,7 +167,6 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ song, onNext, onPrev, 
           )}
         </TouchableOpacity>
       </View>
-
       <View style={styles.progressContainer}>
         <View style={styles.progressBar}>
           <View style={[styles.progressFill, { width: `${(progress / duration) * 100}%` }]} />
@@ -176,7 +176,6 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ song, onNext, onPrev, 
           <Text style={styles.timeText}>{formatTime(duration)}</Text>
         </View>
       </View>
-
       <View style={styles.controls}>
         <TouchableOpacity onPress={onPrev} style={styles.controlButton}>
           <SkipBack size={24} color="#d4af37" />
@@ -202,7 +201,6 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ song, onNext, onPrev, 
           <SkipForward size={24} color="#d4af37" />
         </TouchableOpacity>
       </View>
-
       {(hasError || song.isAvailable === false) && (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>
@@ -210,7 +208,6 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ song, onNext, onPrev, 
           </Text>
         </View>
       )}
-
       <View style={styles.volumeContainer}>
         <Volume2 size={18} color="#d4af37" />
         <input
