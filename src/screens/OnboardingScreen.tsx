@@ -43,7 +43,19 @@ const STEPS = [
   },
 ];
 
-const TRANSLATIONS: BibleTranslation[] = ['KJV', 'NIV', 'ESV', 'NKJV', 'NASB'];
+const TRANSLATIONS: BibleTranslation[] = ['KJV', 'NIV', 'ESV', 'NKJV', 'NASB', 'NLT', 'CSB', 'AMP', 'MSG'];
+
+const TRANSLATION_DETAILS: Record<BibleTranslation, string> = {
+  'KJV': 'King James Version - Classic and poetic.',
+  'NIV': 'New International Version - Modern and readable.',
+  'ESV': 'English Standard Version - Word-for-word accuracy.',
+  'NKJV': 'New King James Version - Modernized classic.',
+  'NASB': 'New American Standard Bible - Highly literal.',
+  'NLT': 'New Living Translation - Easy to understand.',
+  'CSB': 'Christian Standard Bible - Optimal blend of accuracy and readability.',
+  'AMP': 'Amplified Bible - Expanded meanings for deeper study.',
+  'MSG': 'The Message - Contemporary paraphrase.'
+};
 
 export default function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const [currentStep, setCurrentStep] = useState(0);
@@ -106,24 +118,29 @@ export default function OnboardingScreen({ onComplete }: { onComplete: () => voi
         <Text style={styles.description}>{step.description}</Text>
 
         {step.id === 'setup' && (
-          <View style={styles.translationContainer}>
-            {TRANSLATIONS.map((t) => (
-              <TouchableOpacity
-                key={t}
-                style={[
-                  styles.translationButton,
-                  selectedTranslation === t && styles.translationButtonActive
-                ]}
-                onPress={() => setSelectedTranslation(t)}
-              >
-                <Text style={[
-                  styles.translationText,
-                  selectedTranslation === t && styles.translationTextActive
-                ]}>
-                  {t}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.setupWrapper}>
+            <View style={styles.translationContainer}>
+              {TRANSLATIONS.map((t) => (
+                <TouchableOpacity
+                  key={t}
+                  style={[
+                    styles.translationButton,
+                    selectedTranslation === t && styles.translationButtonActive
+                  ]}
+                  onPress={() => setSelectedTranslation(t)}
+                >
+                  <Text style={[
+                    styles.translationText,
+                    selectedTranslation === t && styles.translationTextActive
+                  ]}>
+                    {t}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.detailCard}>
+              <Text style={styles.detailText}>{TRANSLATION_DETAILS[selectedTranslation]}</Text>
+            </View>
           </View>
         )}
 
@@ -242,6 +259,27 @@ const styles = StyleSheet.create({
   },
   translationTextActive: {
     color: '#0b1e3d',
+  },
+  setupWrapper: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  detailCard: {
+    backgroundColor: 'rgba(212, 175, 55, 0.05)',
+    padding: 15,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.1)',
+    width: '100%',
+    marginTop: 10,
+  },
+  detailText: {
+    color: '#f5d77a',
+    fontSize: 13,
+    textAlign: 'center',
+    fontStyle: 'italic',
+    fontFamily: 'Playfair Display',
   },
   footer: {
     width: '100%',

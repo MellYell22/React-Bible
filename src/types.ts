@@ -1,6 +1,6 @@
 export type SubscriptionTier = 'free' | 'plus' | 'pro' | 'owner';
 
-export type BibleTranslation = 'KJV' | 'NIV' | 'ESV' | 'NKJV' | 'NASB';
+export type BibleTranslation = 'KJV' | 'NIV' | 'ESV' | 'NKJV' | 'NASB' | 'NLT' | 'CSB' | 'AMP' | 'MSG';
 
 export interface Profile {
   id: string;
