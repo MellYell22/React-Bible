@@ -20,12 +20,17 @@ import { FullScreenBackground } from './components/FullScreenBackground';
 import { Analytics } from "@vercel/analytics/react";
 import { MusicProvider, useMusic } from './MusicContext';
 import { MusicPlayer } from './components/MusicPlayer';
+import { VerseOfTheDayModal } from './components/VerseOfTheDayModal';
+import { getVerseOfTheDay } from './services/verseOfTheDay';
+import { Scripture } from './types';
 
 function AppContent() {
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [currentRoute, setCurrentRoute] = useState('Home');
   const [routeParams, setRouteParams] = useState<any>(null);
+  const [showVerseModal, setShowVerseModal] = useState(false);
+  const [dailyVerse, setDailyVerse] = useState<Scripture | null>(null);
   const { currentSong, stopSong, nextSong, prevSong, setPlaybackError } = useMusic();
 
   useEffect(() => {
@@ -63,6 +68,37 @@ function AppContent() {
       setProfile(null);
     }
   }, [session]);
+
+  useEffect(() => {
+    if (profile?.verse_of_the_day_enabled) {
+      checkDailyVerse();
+    }
+  }, [profile]);
+
+  const checkDailyVerse = async () => {
+    if (!profile) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    const lastShown = localStorage.getItem('last_verse_shown_date');
+    
+    if (lastShown === today) return;
+
+    const now = new Date();
+    const [hours, minutes] = (profile.verse_of_the_day_time || '08:00').split(':').map(Number);
+    const scheduledTime = new Date();
+    scheduledTime.setHours(hours, minutes, 0, 0);
+
+    if (now >= scheduledTime) {
+      try {
+        const verse = await getVerseOfTheDay(profile.preferred_translation);
+        setDailyVerse(verse);
+        setShowVerseModal(true);
+        localStorage.setItem('last_verse_shown_date', today);
+      } catch (error) {
+        console.error('Error fetching daily verse:', error);
+      }
+    }
+  };
 
   const fetchProfile = async () => {
     if (!supabase) return;
@@ -162,6 +198,12 @@ function AppContent() {
           {renderScreen()}
         </View>
       </FullScreenBackground>
+
+      <VerseOfTheDayModal 
+        visible={showVerseModal} 
+        onClose={() => setShowVerseModal(false)} 
+        verse={dailyVerse} 
+      />
 
       {currentSong && (
         <View style={styles.globalPlayerWrapper}>

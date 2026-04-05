@@ -5,7 +5,7 @@ import { supabase } from '../services/supabase';
 
 const MotionView = motion(View);
 import { Profile } from '../types';
-import { Search, Globe, Sparkles, Frown, Wind, User, Heart, Flame, Sun, HelpCircle, Layers, Zap, Video } from 'lucide-react';
+import { Search, Globe, Sparkles, Frown, Wind, User, Heart, Flame, Sun, HelpCircle, Layers, Zap, Video, Mic } from 'lucide-react';
 import { OWNER_EMAIL } from '../utils/tier';
 import { getVerseReflection } from '../services/gemini';
 import { VideoGenerator } from '../components/VideoGenerator';
@@ -218,6 +218,30 @@ export default function HomeScreen({ navigation }: any) {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Proactive Voice Card */}
+        <MotionView
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.2 }}
+          style={styles.voiceProactiveCard}
+        >
+          <View style={styles.voiceCardContent}>
+            <View style={styles.voiceIconContainer}>
+              <Mic size={24} color="#d4af37" />
+            </View>
+            <View style={styles.voiceTextContainer}>
+              <Text style={styles.voiceCardTitle}>Want to talk?</Text>
+              <Text style={styles.voiceCardSubtitle}>David is ready to listen and encourage you in real-time.</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.voiceStartButton}
+              onPress={() => navigation.navigate('Voice')}
+            >
+              <Text style={styles.voiceStartButtonText}>START VOICE</Text>
+            </TouchableOpacity>
+          </View>
+        </MotionView>
         <View style={styles.footer}>
           {profile?.email === OWNER_EMAIL && (
             <Text style={styles.ownerBadge}>OWNER ACCOUNT</Text>
@@ -505,5 +529,59 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textTransform: 'uppercase',
     opacity: 0.4,
+  },
+  voiceProactiveCard: {
+    marginHorizontal: 20,
+    marginTop: 20,
+    backgroundColor: '#0f2a52',
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  voiceCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  voiceIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  voiceTextContainer: {
+    flex: 1,
+  },
+  voiceCardTitle: {
+    color: '#d4af37',
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: 'Playfair Display',
+  },
+  voiceCardSubtitle: {
+    color: '#f5d77a',
+    fontSize: 11,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  voiceStartButton: {
+    backgroundColor: '#d4af37',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 15,
+  },
+  voiceStartButtonText: {
+    color: '#0b1e3d',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 1,
   },
 });

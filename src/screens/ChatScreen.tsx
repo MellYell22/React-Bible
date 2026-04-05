@@ -60,6 +60,24 @@ export default function ChatScreen({ navigation }: any) {
     }
   };
 
+  const detectAndPlaySong = (text: string) => {
+    const songTitle = extractSongTitle(text);
+    if (!songTitle) return null;
+
+    const song = findSong(songTitle);
+    if (song && song.isAvailable !== false) {
+      try {
+        playSong(song);
+        return { type: 'library' as const, song };
+      } catch (e) {
+        return { type: 'error' as const, song };
+      }
+    } else {
+      openYouTubeSearch(songTitle);
+      return { type: 'youtube' as const, title: songTitle };
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
@@ -69,20 +87,17 @@ export default function ChatScreen({ navigation }: any) {
     setLoading(true);
 
     try {
-      const songTitle = extractSongTitle(userMessage.content);
-      if (songTitle) {
-        const song = findSong(songTitle);
-        if (song && song.isAvailable !== false) {
-          playSong(song);
-          setMessages(prev => [...prev, { role: 'model', content: `Playing '${song.title}' now...` }]);
-          setLoading(false);
-          return;
-        } else {
-          openYouTubeSearch(songTitle);
-          setMessages(prev => [...prev, { role: 'model', content: `I couldn't find '${songTitle}' in our library, so I'm opening it on YouTube for you now...` }]);
-          setLoading(false);
-          return;
-        }
+      const songResult = detectAndPlaySong(userMessage.content);
+      if (songResult) {
+        const content = songResult.type === 'library' 
+          ? `Playing '${songResult.song.title}' now...`
+          : songResult.type === 'error'
+          ? `I found '${songResult.song.title}', but I'm having trouble starting the playback. Let me try another way...`
+          : `I couldn't find '${songResult.title}' in our library, so I'm opening it on YouTube for you now...`;
+        
+        setMessages(prev => [...prev, { role: 'model', content }]);
+        setLoading(false);
+        return;
       }
 
       const history = messages.map(msg => ({
@@ -104,27 +119,16 @@ export default function ChatScreen({ navigation }: any) {
       }, profile?.preferred_response_length || 'short');
       
       if (response) {
-        // Check David's response for song triggers
-        const songTitle = extractSongTitle(response);
-        if (songTitle) {
-          const song = findSong(songTitle);
-          if (song && song.isAvailable !== false) {
-            try {
-              playSong(song);
-            } catch (e) {
-              setMessages(prev => {
-                const newMessages = [...prev];
-                newMessages[modelMessageIndex] = { 
-                  role: 'model', 
-                  content: response + "\n\nI found the song, but playback did not start. Let me try another way." 
-                };
-                return newMessages;
-              });
-            }
-          } else {
-            // If not in library, try YouTube
-            openYouTubeSearch(songTitle);
-          }
+        const responseSongResult = detectAndPlaySong(response);
+        if (responseSongResult?.type === 'error') {
+          setMessages(prev => {
+            const newMessages = [...prev];
+            newMessages[modelMessageIndex] = { 
+              role: 'model', 
+              content: response + "\n\nI found the song, but playback did not start. Let me try another way." 
+            };
+            return newMessages;
+          });
         }
       } else {
         setMessages(prev => {

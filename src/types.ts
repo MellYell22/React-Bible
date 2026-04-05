@@ -12,6 +12,8 @@ export interface Profile {
   has_completed_onboarding: boolean;
   preferred_translation: BibleTranslation;
   preferred_response_length: ResponseLength;
+  verse_of_the_day_enabled: boolean;
+  verse_of_the_day_time: string; // ISO time string or HH:mm
 }
 
 export interface Scripture {

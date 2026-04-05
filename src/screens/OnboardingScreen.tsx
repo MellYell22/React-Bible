@@ -78,7 +78,9 @@ export default function OnboardingScreen({ onComplete }: { onComplete: () => voi
             .update({ 
               has_completed_onboarding: true,
               preferred_translation: selectedTranslation,
-              preferred_response_length: 'short'
+              preferred_response_length: 'short',
+              verse_of_the_day_enabled: true,
+              verse_of_the_day_time: '08:00'
             })
             .eq('id', user.id);
           

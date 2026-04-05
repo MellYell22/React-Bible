@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, TextInput, ActivityIndicator, Alert } from 'react-native';
-import { Music, Play, Pause, Heart, ChevronRight, Download, CheckCircle2, Search, X, Filter, Tag } from 'lucide-react';
+import { Music, Play, Pause, Heart, ChevronRight, Download, CheckCircle2, Search, X, Filter, Tag, Check, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { WORSHIP_SONGS, Song } from '../constants/songs';
 
@@ -23,8 +23,9 @@ const GENRES = [
 
 export default function MusicScreen() {
   const { currentSong, isPlaying, playSong, pauseSong, resumeSong, stopSong, playbackError, setPlaybackError } = useMusic();
-  const [selectedMood, setSelectedMood] = useState<string | null>(null);
-  
+  const [selectedMoods, setSelectedMoods] = useState<string[]>([]);
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+
   useEffect(() => {
     if (playbackError) {
       Alert.alert(
@@ -34,11 +35,11 @@ export default function MusicScreen() {
       );
     }
   }, [playbackError]);
-  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [showDownloadsOnly, setShowDownloadsOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredSongs, setFilteredSongs] = useState<Song[]>(WORSHIP_SONGS);
   const [downloadedIds, setDownloadedIds] = useState<string[]>([]);
+  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
 
   useEffect(() => {
     setDownloadedIds(getDownloadedSongs());
@@ -61,14 +62,14 @@ export default function MusicScreen() {
     if (showDownloadsOnly) {
       filtered = filtered.filter(s => downloadedIds.includes(s.id));
     }
-    if (selectedMood) {
-      filtered = filtered.filter(s => s.moods.includes(selectedMood));
+    if (selectedMoods.length > 0) {
+      filtered = filtered.filter(s => s.moods.some(m => selectedMoods.includes(m)));
     }
     if (selectedGenres.length > 0) {
       filtered = filtered.filter(s => selectedGenres.includes(s.genre));
     }
     setFilteredSongs(filtered);
-  }, [selectedMood, selectedGenres, showDownloadsOnly, downloadedIds, searchQuery]);
+  }, [selectedMoods, selectedGenres, showDownloadsOnly, downloadedIds, searchQuery]);
 
   const handlePlaySong = (song: Song) => {
     if (currentSong?.id === song.id) {
@@ -80,6 +81,14 @@ export default function MusicScreen() {
       return;
     }
     playSong(song);
+  };
+
+  const handleMoodToggle = (mood: string) => {
+    setSelectedMoods(prev => 
+      prev.includes(mood) 
+        ? prev.filter(m => m !== mood) 
+        : [...prev, mood]
+    );
   };
 
   const handleGenreToggle = (genre: string) => {
@@ -109,6 +118,13 @@ export default function MusicScreen() {
     playSong(filteredSongs[prevIndex]);
   };
 
+  const clearAllFilters = () => {
+    setSelectedMoods([]);
+    setSelectedGenres([]);
+    setShowDownloadsOnly(false);
+    setSearchQuery('');
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
@@ -119,24 +135,107 @@ export default function MusicScreen() {
         </View>
 
         <View style={styles.searchSection}>
-          <View style={styles.searchBar}>
-            <Search size={18} color="rgba(212, 175, 55, 0.6)" />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search by title, artist, genre, or mood..."
-              placeholderTextColor="rgba(212, 175, 55, 0.4)"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <X size={18} color="rgba(212, 175, 55, 0.6)" />
-              </TouchableOpacity>
-            )}
+          <View style={styles.searchRow}>
+            <View style={styles.searchBar}>
+              <Search size={18} color="rgba(212, 175, 55, 0.6)" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search songs..."
+                placeholderTextColor="rgba(212, 175, 55, 0.4)"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                  <X size={18} color="rgba(212, 175, 55, 0.6)" />
+                </TouchableOpacity>
+              )}
+            </View>
+            <TouchableOpacity 
+              style={[styles.filterToggleButton, isFilterPanelOpen && styles.filterToggleButtonActive]}
+              onPress={() => setIsFilterPanelOpen(!isFilterPanelOpen)}
+            >
+              <Filter size={20} color={isFilterPanelOpen ? '#0b1e3d' : '#d4af37'} />
+              {(selectedMoods.length > 0 || selectedGenres.length > 0 || showDownloadsOnly) && (
+                <View style={styles.filterBadge}>
+                  <Text style={styles.filterBadgeText}>
+                    {selectedMoods.length + selectedGenres.length + (showDownloadsOnly ? 1 : 0)}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
 
-        {(selectedMood || selectedGenres.length > 0 || searchQuery || showDownloadsOnly) && (
+        <AnimatePresence>
+          {isFilterPanelOpen && (
+            <MotionView
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              style={styles.filterPanel}
+            >
+              <View style={styles.filterPanelHeader}>
+                <Text style={styles.filterPanelTitle}>Refine Music</Text>
+                <TouchableOpacity onPress={clearAllFilters} style={styles.clearAllButton}>
+                  <Trash2 size={14} color="#ff4444" />
+                  <Text style={styles.clearAllText}>Clear All</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.filterSection}>
+                <Text style={styles.filterLabel}>GENRES</Text>
+                <View style={styles.chipGrid}>
+                  {GENRES.map(genre => (
+                    <TouchableOpacity 
+                      key={genre}
+                      style={[styles.selectableChip, selectedGenres.includes(genre) && styles.selectableChipActive]}
+                      onPress={() => handleGenreToggle(genre)}
+                    >
+                      {selectedGenres.includes(genre) && <Check size={12} color="#0b1e3d" style={{ marginRight: 4 }} />}
+                      <Text style={[styles.selectableChipText, selectedGenres.includes(genre) && styles.selectableChipTextActive]}>
+                        {genre}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.filterSection}>
+                <Text style={styles.filterLabel}>MOODS</Text>
+                <View style={styles.chipGrid}>
+                  {MOODS.map(mood => (
+                    <TouchableOpacity 
+                      key={mood}
+                      style={[styles.selectableChip, selectedMoods.includes(mood) && styles.selectableChipActive]}
+                      onPress={() => handleMoodToggle(mood)}
+                    >
+                      {selectedMoods.includes(mood) && <Check size={12} color="#0b1e3d" style={{ marginRight: 4 }} />}
+                      <Text style={[styles.selectableChipText, selectedMoods.includes(mood) && styles.selectableChipTextActive]}>
+                        {mood}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.filterSection}>
+                <Text style={styles.filterLabel}>LIBRARY</Text>
+                <TouchableOpacity 
+                  style={[styles.selectableChip, showDownloadsOnly && styles.selectableChipActive]}
+                  onPress={() => setShowDownloadsOnly(!showDownloadsOnly)}
+                >
+                  <Download size={12} color={showDownloadsOnly ? '#0b1e3d' : '#d4af37'} style={{ marginRight: 4 }} />
+                  <Text style={[styles.selectableChipText, showDownloadsOnly && styles.selectableChipTextActive]}>
+                    DOWNLOADS ONLY ({downloadedIds.length})
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </MotionView>
+          )}
+        </AnimatePresence>
+
+        {(selectedMoods.length > 0 || selectedGenres.length > 0 || searchQuery || showDownloadsOnly) && (
           <View style={styles.activeFiltersContainer}>
             <Text style={styles.activeFiltersLabel}>ACTIVE FILTERS:</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.activeFiltersScroll}>
@@ -157,7 +256,7 @@ export default function MusicScreen() {
                 )}
                 {selectedGenres.map(genre => (
                   <MotionView 
-                    key={`filter-${genre}`}
+                    key={`filter-genre-${genre}`}
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.8 }}
@@ -170,20 +269,21 @@ export default function MusicScreen() {
                     </TouchableOpacity>
                   </MotionView>
                 ))}
-                {selectedMood && (
+                {selectedMoods.map(mood => (
                   <MotionView 
+                    key={`filter-mood-${mood}`}
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.8 }}
                     style={styles.filterTag}
                   >
                     <Tag size={10} color="#0b1e3d" />
-                    <Text style={styles.filterTagText}>{selectedMood}</Text>
-                    <TouchableOpacity onPress={() => setSelectedMood(null)}>
+                    <Text style={styles.filterTagText}>{mood}</Text>
+                    <TouchableOpacity onPress={() => handleMoodToggle(mood)}>
                       <X size={10} color="#0b1e3d" />
                     </TouchableOpacity>
                   </MotionView>
-                )}
+                ))}
                 {showDownloadsOnly && (
                   <MotionView 
                     initial={{ opacity: 0, scale: 0.8 }}
@@ -203,67 +303,12 @@ export default function MusicScreen() {
           </View>
         )}
 
-        <View style={styles.moodSection}>
-          <Text style={styles.sectionLabel}>BROWSE BY GENRE</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.moodScroll}>
-            <TouchableOpacity 
-              style={[styles.moodChip, selectedGenres.length === 0 && styles.moodChipActive]}
-              onPress={() => setSelectedGenres([])}
-            >
-              <Text style={[styles.moodChipText, selectedGenres.length === 0 && styles.moodChipTextActive]}>ALL GENRES</Text>
-            </TouchableOpacity>
-            {GENRES.map(genre => (
-              <TouchableOpacity 
-                key={genre}
-                style={[styles.moodChip, selectedGenres.includes(genre) && styles.moodChipActive]}
-                onPress={() => handleGenreToggle(genre)}
-              >
-                <Text style={[styles.moodChipText, selectedGenres.includes(genre) && styles.moodChipTextActive]}>{genre.toUpperCase()}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        <View style={styles.moodSection}>
-          <Text style={styles.sectionLabel}>BROWSE BY MOOD</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.moodScroll}>
-            <TouchableOpacity 
-              style={[styles.moodChip, !selectedMood && styles.moodChipActive]}
-              onPress={() => setSelectedMood(null)}
-            >
-              <Text style={[styles.moodChipText, !selectedMood && styles.moodChipTextActive]}>ALL</Text>
-            </TouchableOpacity>
-            {MOODS.map(mood => (
-              <TouchableOpacity 
-                key={mood}
-                style={[styles.moodChip, selectedMood === mood && styles.moodChipActive]}
-                onPress={() => setSelectedMood(mood)}
-              >
-                <Text style={[styles.moodChipText, selectedMood === mood && styles.moodChipTextActive]}>{mood}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        <View style={styles.moodSection}>
-          <Text style={styles.sectionLabel}>LIBRARY</Text>
-          <TouchableOpacity 
-            style={[styles.moodChip, showDownloadsOnly && styles.moodChipActive]}
-            onPress={() => setShowDownloadsOnly(!showDownloadsOnly)}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Download size={12} color={showDownloadsOnly ? '#0b1e3d' : '#d4af37'} />
-              <Text style={[styles.moodChipText, showDownloadsOnly && styles.moodChipTextActive]}>DOWNLOADS ({downloadedIds.length})</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
         <View style={styles.songList}>
           <Text style={styles.sectionLabel}>
             {showDownloadsOnly 
               ? 'MY DOWNLOADED SONGS' 
-              : (selectedMood || selectedGenres.length > 0 
-                ? `${selectedGenres.join(', ') || ''} ${selectedMood || ''} GOSPEL`.trim() 
+              : (selectedMoods.length > 0 || selectedGenres.length > 0 
+                ? `${selectedGenres.join(', ') || ''} ${selectedMoods.join(', ') || ''} GOSPEL`.trim() 
                 : 'RECOMMENDED FOR YOU')}
           </Text>
           {filteredSongs.length === 0 ? (
@@ -364,9 +409,15 @@ const styles = StyleSheet.create({
   },
   searchSection: {
     paddingHorizontal: 20,
-    marginBottom: 25,
+    marginBottom: 15,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   searchBar: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(15, 42, 82, 0.4)',
@@ -383,9 +434,110 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Playfair Display',
   },
+  filterToggleButton: {
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
+    backgroundColor: 'rgba(15, 42, 82, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+  },
+  filterToggleButtonActive: {
+    backgroundColor: '#d4af37',
+    borderColor: '#d4af37',
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#ff4444',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#0b1e3d',
+  },
+  filterBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  filterPanel: {
+    marginHorizontal: 20,
+    backgroundColor: 'rgba(15, 42, 82, 0.6)',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+    overflow: 'hidden',
+  },
+  filterPanelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  filterPanelTitle: {
+    color: '#d4af37',
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: 'Playfair Display',
+  },
+  clearAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  clearAllText: {
+    color: '#ff4444',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  filterSection: {
+    marginBottom: 20,
+  },
+  filterLabel: {
+    color: 'rgba(212, 175, 55, 0.6)',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 1.5,
+    marginBottom: 12,
+  },
+  chipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  selectableChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    backgroundColor: 'rgba(212, 175, 55, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+  },
+  selectableChipActive: {
+    backgroundColor: '#d4af37',
+    borderColor: '#d4af37',
+  },
+  selectableChipText: {
+    color: '#d4af37',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  selectableChipTextActive: {
+    color: '#0b1e3d',
+  },
   activeFiltersContainer: {
     paddingHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 15,
   },
   activeFiltersLabel: {
     color: '#d4af37',

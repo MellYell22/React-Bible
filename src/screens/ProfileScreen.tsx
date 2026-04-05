@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { supabase } from '../services/supabase';
 import { Profile } from '../types';
 import { LogOut, CreditCard, Shield, CheckCircle2, AlertCircle } from 'lucide-react';
@@ -139,6 +139,37 @@ export default function ProfileScreen() {
         </View>
         {!hasProAccess(profile) && (
           <Text style={styles.settingsHint}>Upgrade to Plus or Pro to unlock medium and long responses.</Text>
+        )}
+
+        <View style={[styles.divider, { marginVertical: 20 }]} />
+
+        <Text style={styles.settingsLabel}>Verse of the Day</Text>
+        <View style={styles.toggleRow}>
+          <Text style={styles.toggleLabel}>Daily Notifications</Text>
+          <TouchableOpacity
+            style={[styles.toggleSwitch, profile?.verse_of_the_day_enabled && styles.toggleSwitchActive]}
+            onPress={() => updatePreference('verse_of_the_day_enabled', !profile?.verse_of_the_day_enabled)}
+            disabled={loading}
+          >
+            <View style={[styles.toggleDot, profile?.verse_of_the_day_enabled && styles.toggleDotActive]} />
+          </TouchableOpacity>
+        </View>
+
+        {profile?.verse_of_the_day_enabled && (
+          <View style={styles.timePickerContainer}>
+            <Text style={styles.timeLabel}>Notification Time</Text>
+            <View style={styles.timeInputRow}>
+              <TextInput
+                style={styles.timeInput}
+                value={profile?.verse_of_the_day_time || '08:00'}
+                onChangeText={(text) => updatePreference('verse_of_the_day_time', text)}
+                placeholder="HH:mm"
+                placeholderTextColor="rgba(212, 175, 55, 0.3)"
+                maxLength={5}
+              />
+              <Text style={styles.timeHint}>(24h format, e.g., 08:00)</Text>
+            </View>
+          </View>
         )}
       </View>
 
@@ -360,6 +391,82 @@ const styles = StyleSheet.create({
     marginTop: 15,
     fontStyle: 'italic',
     fontFamily: 'Playfair Display',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  toggleLabel: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontFamily: 'Playfair Display',
+  },
+  toggleSwitch: {
+    width: 44,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    padding: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+  },
+  toggleSwitchActive: {
+    backgroundColor: 'rgba(212, 175, 55, 0.3)',
+    borderColor: '#d4af37',
+  },
+  toggleDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(212, 175, 55, 0.4)',
+  },
+  toggleDotActive: {
+    backgroundColor: '#d4af37',
+    transform: [{ translateX: 20 }],
+  },
+  timePickerContainer: {
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(212, 175, 55, 0.1)',
+  },
+  timeLabel: {
+    fontSize: 12,
+    color: '#f5d77a',
+    marginBottom: 10,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  timeInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  timeInput: {
+    backgroundColor: 'rgba(212, 175, 55, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    color: '#d4af37',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    width: 80,
+  },
+  timeHint: {
+    fontSize: 10,
+    color: 'rgba(212, 175, 55, 0.4)',
+    fontStyle: 'italic',
   },
   planCard: {
     backgroundColor: '#0f2a52',
