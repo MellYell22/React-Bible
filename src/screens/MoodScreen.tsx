@@ -121,7 +121,7 @@ export default function MoodScreen({ route, navigation }: any) {
       const data = await getMoodScriptures(
         initialMood, 
         profile?.preferred_translation || 'KJV',
-        profile?.preferred_response_length || 'short'
+        profile?.preferred_response_length || 'medium'
       );
       setResult(data);
       setFeedback(null);
@@ -156,7 +156,7 @@ export default function MoodScreen({ route, navigation }: any) {
       const data = await getMoodScriptures(
         query, 
         profile?.preferred_translation || 'KJV',
-        profile?.preferred_response_length || 'short'
+        profile?.preferred_response_length || 'medium'
       );
       setResult(data);
     } catch (error) {

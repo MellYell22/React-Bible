@@ -170,7 +170,7 @@ Acknowledge this feeling warmly and immediately.`;
           short: "BE CONCISE: Exactly 2–3 sentences. Never more.",
           medium: "BE MODERATE: Exactly 4–5 sentences.",
           long: "BE THOROUGH: Exactly 6–8 sentences."
-        }[(profile?.preferred_response_length as ResponseLength) || 'short'];
+        }[(profile?.preferred_response_length as ResponseLength) || 'medium'];
 
         return await ai.live.connect({
           model: modelName,

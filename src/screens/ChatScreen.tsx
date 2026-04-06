@@ -106,7 +106,7 @@ export default function ChatScreen({ navigation }: any) {
           newMessages[modelMessageIndex] = { role: 'model', content: fullText };
           return newMessages;
         });
-      }, profile?.preferred_response_length || 'short');
+      }, profile?.preferred_response_length || 'medium');
       
       if (response) {
         const responseSongResult = detectAndPlaySong(response);

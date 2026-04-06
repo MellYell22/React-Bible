@@ -4,10 +4,11 @@ import { motion } from 'motion/react';
 import { supabase } from '../services/supabase';
 
 const MotionView = motion(View);
-import { Profile } from '../types';
+import { Profile, Scripture } from '../types';
 import { Search, Globe, Sparkles, Frown, Wind, User, Heart, Flame, Sun, HelpCircle, Layers, Zap, Video, Mic } from 'lucide-react';
 import { OWNER_EMAIL } from '../utils/tier';
 import { getVerseReflection } from '../services/gemini';
+import { getVerseOfTheDay } from '../services/verseOfTheDay';
 import { VideoGenerator } from '../components/VideoGenerator';
 
 const MOOD_CONFIG = [
@@ -33,12 +34,26 @@ export default function HomeScreen({ navigation }: any) {
   const [reflection, setReflection] = useState<string | null>(null);
   const [loadingReflection, setLoadingReflection] = useState(false);
   const [showVideoGenerator, setShowVideoGenerator] = useState(false);
+  const [dailyVerse, setDailyVerse] = useState<Scripture | null>(null);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // Real-time listener handles the update, but we can manually refresh if needed
+    await fetchDailyVerse();
     setRefreshing(false);
   };
+
+  const fetchDailyVerse = async () => {
+    try {
+      const verse = await getVerseOfTheDay(profile?.preferred_translation || 'KJV');
+      setDailyVerse(verse);
+    } catch (error) {
+      console.error('Error fetching daily verse:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchDailyVerse();
+  }, [profile?.preferred_translation]);
 
   const handleTranslationSelect = async (t: string) => {
     if (!profile) return;
@@ -54,8 +69,8 @@ export default function HomeScreen({ navigation }: any) {
   const handleReflect = async () => {
     setLoadingReflection(true);
     try {
-      const verse = "Whoever dwells in the shelter of the Most High will rest in the shadow of the Almighty.";
-      const ref = "Psalm 91:1";
+      const verse = dailyVerse?.verse || "Whoever dwells in the shelter of the Most High will rest in the shadow of the Almighty.";
+      const ref = dailyVerse?.reference || "Psalm 91:1";
       const text = await getVerseReflection(verse, ref);
       setReflection(text);
     } catch (error) {
@@ -147,14 +162,14 @@ export default function HomeScreen({ navigation }: any) {
         <View style={styles.verseCard}>
           <Text style={styles.verseLabel}>VERSE OF THE DAY</Text>
           <Text style={styles.verseText}>
-            "Whoever dwells in the shelter of the Most High will rest in the shadow of the Almighty."
+            {dailyVerse?.verse || "Whoever dwells in the shelter of the Most High will rest in the shadow of the Almighty."}
           </Text>
-          <Text style={styles.verseReference}>— PSALM 91:1</Text>
+          <Text style={styles.verseReference}>— {dailyVerse?.reference || "PSALM 91:1"}</Text>
           
           {showVideoGenerator ? (
             <VideoGenerator 
-              title="Psalm 91:1"
-              prompt="A cinematic, inspiring, and spiritually grounded visual accompaniment for the Bible verse: 'Whoever dwells in the shelter of the Most High will rest in the shadow of the Almighty.' (Psalm 91:1). High quality, peaceful, and reverent."
+              title={dailyVerse?.reference || "Psalm 91:1"}
+              prompt={`A cinematic, inspiring, and spiritually grounded visual accompaniment for the Bible verse: '${dailyVerse?.verse || "Whoever dwells in the shelter of the Most High will rest in the shadow of the Almighty."}' (${dailyVerse?.reference || "Psalm 91:1"}). High quality, peaceful, and reverent.`}
               onClose={() => setShowVideoGenerator(false)}
             />
           ) : (

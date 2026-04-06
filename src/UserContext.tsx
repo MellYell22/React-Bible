@@ -65,7 +65,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
         },
         (payload) => {
           console.log('[UserContext] Profile changed in real-time:', payload.new);
-          setProfile(payload.new as Profile);
+          const updatedProfile = payload.new as Profile;
+          if (updatedProfile && !updatedProfile.preferred_response_length) {
+            updatedProfile.preferred_response_length = 'medium';
+          }
+          setProfile(updatedProfile);
         }
       )
       .subscribe();
@@ -84,7 +88,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (error) throw error;
-      setProfile(data);
+      
+      const profileData = data as Profile;
+      if (profileData && !profileData.preferred_response_length) {
+        profileData.preferred_response_length = 'medium';
+      }
+      setProfile(profileData);
     } catch (error) {
       console.error('[UserContext] Error fetching profile:', error);
     } finally {
