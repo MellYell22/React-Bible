@@ -1,52 +1,132 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
-import { Send, Mic, ThumbsUp, ThumbsDown } from 'lucide-react';
-import { getChatResponse } from '../services/gemini';
+import { Send, Mic, ThumbsUp, ThumbsDown, Volume2, Square, VolumeX } from 'lucide-react';
+import { getChatResponse, getChatResponseStream, generateSpeech } from '../services/gemini';
 import { ChatMessage, Profile } from '../types';
-import { supabase } from '../services/supabase';
+import { supabase, saveAIFeedback } from '../services/supabase';
+import { useMusic } from '../MusicContext';
+import { findSong, extractSongTitle, openYouTubeSearch } from '../utils/music';
+
+import { useUser } from '../UserContext';
 
 export default function ChatScreen({ navigation }: any) {
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const { playSong, playbackError } = useMusic();
+  const { profile } = useUser();
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: 'model', content: "Hello, I'm David. How can I encourage you today?" }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   useEffect(() => {
-    fetchProfile();
+    return () => {
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
   }, []);
 
-  const fetchProfile = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      if (data) setProfile(data);
+  useEffect(() => {
+    if (playbackError && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.role === 'model' && (lastMessage.content.includes("Playing") || lastMessage.content.includes("putting on"))) {
+        setMessages(prev => {
+          const newMessages = [...prev];
+          const lastIdx = newMessages.length - 1;
+          if (!newMessages[lastIdx].content.includes("playback did not start")) {
+            newMessages[lastIdx] = { 
+              ...newMessages[lastIdx], 
+              content: newMessages[lastIdx].content + "\n\nI found the song, but playback did not start. Let me try another way." 
+            };
+          }
+          return newMessages;
+        });
+      }
+    }
+  }, [playbackError]);
+
+  const detectAndPlaySong = (text: string) => {
+    const songTitle = extractSongTitle(text);
+    if (!songTitle) return null;
+
+    const song = findSong(songTitle);
+    if (song && song.isAvailable !== false) {
+      try {
+        playSong(song);
+        return { type: 'library' as const, song };
+      } catch (e) {
+        return { type: 'error' as const, song };
+      }
+    } else {
+      openYouTubeSearch(songTitle);
+      return { type: 'youtube' as const, title: songTitle };
     }
   };
 
   const handleSend = async () => {
-    if (!input.trim() || loading) return;
+    const trimmedInput = input.trim();
+    if (!trimmedInput || loading) return;
 
-    const userMessage: ChatMessage = { role: 'user', content: input.trim() };
+    const userMessage: ChatMessage = { role: 'user', content: trimmedInput };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setLoading(true);
 
     try {
+      const songResult = detectAndPlaySong(userMessage.content);
+      if (songResult) {
+        const content = songResult.type === 'library' 
+          ? `Playing '${songResult.song.title}' now...`
+          : songResult.type === 'error'
+          ? `I found '${songResult.song.title}', but I'm having trouble starting the playback. Let me try another way...`
+          : `I couldn't find '${songResult.title}' in our library, so I'm opening it on YouTube for you now...`;
+        
+        setMessages(prev => [...prev, { role: 'model', content }]);
+        setLoading(false);
+        return;
+      }
+
       const history = messages.map(msg => ({
         role: msg.role as 'user' | 'model',
         parts: [{ text: msg.content }]
       }));
       history.push({ role: 'user', parts: [{ text: userMessage.content }] });
 
-      const response = await getChatResponse(history);
-      setMessages(prev => [...prev, { role: 'model', content: response || "I'm sorry, I couldn't process that." }]);
+      // Add an empty model message to start streaming into
+      const modelMessageIndex = messages.length + 1;
+      setMessages(prev => [...prev, { role: 'model', content: "" }]);
+
+      const response = await getChatResponseStream(history, (fullText) => {
+        setMessages(prev => {
+          const newMessages = [...prev];
+          newMessages[modelMessageIndex] = { role: 'model', content: fullText };
+          return newMessages;
+        });
+      }, profile?.preferred_response_length || 'medium');
+      
+      if (response) {
+        const responseSongResult = detectAndPlaySong(response);
+        if (responseSongResult?.type === 'error') {
+          setMessages(prev => {
+            const newMessages = [...prev];
+            newMessages[modelMessageIndex] = { 
+              role: 'model', 
+              content: response + "\n\nI found the song, but playback did not start. Let me try another way." 
+            };
+            return newMessages;
+          });
+        }
+      } else {
+        setMessages(prev => {
+          const newMessages = [...prev];
+          newMessages[modelMessageIndex] = { role: 'model', content: "I'm sorry, I couldn't process that." };
+          return newMessages;
+        });
+      }
     } catch (error: any) {
       console.error("Chat Error:", error);
       let errorMessage = "I'm having a bit of trouble connecting right now. Let's try again in a moment.";
@@ -57,16 +137,96 @@ export default function ChatScreen({ navigation }: any) {
         errorMessage = "I've reached my daily limit for conversations. Please try again later.";
       }
       
-      setMessages(prev => [...prev, { role: 'model', content: errorMessage }]);
+      setMessages(prev => {
+        const newMessages = [...prev];
+        // If we added an empty message for streaming, replace it. Otherwise append.
+        if (newMessages.length > messages.length + 1) {
+          newMessages[messages.length + 1] = { role: 'model', content: errorMessage };
+          return newMessages;
+        }
+        return [...prev, { role: 'model', content: errorMessage }];
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleFeedback = (index: number, type: 'up' | 'down') => {
+  const handleFeedback = async (index: number, type: 'up' | 'down') => {
+    const message = messages[index];
+    if (!message || message.role !== 'model' || !profile) return;
+
+    const isHelpful = type === 'up';
+    
     setMessages(prev => prev.map((msg, i) => 
       i === index ? { ...msg, feedback: msg.feedback === type ? undefined : type } : msg
     ));
+
+    await saveAIFeedback(profile.id, 'chat', message.content, isHelpful);
+  };
+
+  const stopSpeaking = () => {
+    if (currentSourceRef.current) {
+      try {
+        currentSourceRef.current.stop();
+      } catch (e) {
+        // Already stopped
+      }
+      currentSourceRef.current = null;
+    }
+    setSpeakingIndex(null);
+  };
+
+  const speakMessage = async (index: number, text: string) => {
+    if (speakingIndex === index) {
+      stopSpeaking();
+      return;
+    }
+    
+    // Stop any current playback
+    stopSpeaking();
+    
+    setSpeakingIndex(index);
+    try {
+      const base64Audio = await generateSpeech(text);
+      if (base64Audio) {
+        if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        }
+        const context = audioContextRef.current;
+        if (context.state === 'suspended') {
+          await context.resume();
+        }
+
+        const binary = atob(base64Audio);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        
+        const pcmData = new Int16Array(bytes.buffer.slice(0, bytes.buffer.byteLength - (bytes.buffer.byteLength % 2)));
+        const float32Data = new Float32Array(pcmData.length);
+        for (let i = 0; i < pcmData.length; i++) {
+          float32Data[i] = pcmData[i] / 32768.0;
+        }
+        
+        const audioBuffer = context.createBuffer(1, float32Data.length, 24000);
+        audioBuffer.getChannelData(0).set(float32Data);
+        
+        const source = context.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(context.destination);
+        source.onended = () => {
+          if (speakingIndex === index) {
+            setSpeakingIndex(null);
+          }
+        };
+        currentSourceRef.current = source;
+        source.start();
+      } else {
+        setSpeakingIndex(null);
+      }
+    } catch (error) {
+      console.error("Speech error:", error);
+      setSpeakingIndex(null);
+    }
   };
 
   useEffect(() => {
@@ -116,6 +276,24 @@ export default function ChatScreen({ navigation }: any) {
             {msg.role === 'model' && (
               <View style={styles.feedbackContainer}>
                 <TouchableOpacity 
+                  onPress={() => speakMessage(index, msg.content)}
+                  style={styles.feedbackButton}
+                >
+                  {speakingIndex === index ? (
+                    <Square 
+                      size={14} 
+                      color="#d4af37" 
+                      fill="#d4af37"
+                    />
+                  ) : (
+                    <Volume2 
+                      size={14} 
+                      color="rgba(212, 175, 55, 0.6)" 
+                    />
+                  )}
+                </TouchableOpacity>
+                <View style={{ flex: 1 }} />
+                <TouchableOpacity 
                   onPress={() => handleFeedback(index, 'up')}
                   style={styles.feedbackButton}
                 >
@@ -153,9 +331,25 @@ export default function ChatScreen({ navigation }: any) {
           value={input}
           onChangeText={setInput}
           multiline
+          blurOnSubmit={false}
+          onKeyPress={(e: any) => {
+            if (Platform.OS === 'web' || Platform.OS === 'ios' || Platform.OS === 'android') {
+              if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }
+          }}
         />
-        <TouchableOpacity style={styles.sendButton} onPress={handleSend} disabled={loading}>
-          <Send color="#fff" size={20} />
+        <TouchableOpacity 
+          style={[
+            styles.sendButton, 
+            (!input.trim() || loading) && styles.sendButtonDisabled
+          ]} 
+          onPress={handleSend} 
+          disabled={loading || !input.trim()}
+        >
+          <Send color="#fff" size={20} opacity={(!input.trim() || loading) ? 0.5 : 1} />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -299,5 +493,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 5,
+  },
+  sendButtonDisabled: {
+    backgroundColor: 'rgba(212, 175, 55, 0.3)',
+    shadowOpacity: 0,
+    elevation: 0,
   },
 });

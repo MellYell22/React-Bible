@@ -22,11 +22,13 @@ export default function AuthScreen() {
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [preferredTranslation, setPreferredTranslation] = useState('KJV');
   const [showTranslations, setShowTranslations] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleAuth = async () => {
+    setError(null);
     if (isResettingPassword) {
       if (!email) {
-        alert('Please enter your email');
+        setError('Please enter your email');
         return;
       }
       setLoading(true);
@@ -38,7 +40,7 @@ export default function AuthScreen() {
         alert('Password reset link sent to your email!');
         setIsResettingPassword(false);
       } catch (error: any) {
-        alert(error.message);
+        setError(error.message);
       } finally {
         setLoading(false);
       }
@@ -46,7 +48,7 @@ export default function AuthScreen() {
     }
 
     if (!email || !password) {
-      alert('Please enter both email and password');
+      setError('Please enter both email and password');
       return;
     }
 
@@ -74,7 +76,7 @@ export default function AuthScreen() {
         if (error) throw error;
       }
     } catch (error: any) {
-      alert(error.message);
+      setError(error.message);
     } finally {
       setLoading(false);
     }
@@ -117,13 +119,15 @@ export default function AuthScreen() {
           )}
         </View>
       </View>
-
-      {/* No card/container background. This is PURE layout only. */}
       <View style={styles.screen}>
         <Text style={styles.title}>Bible Mood Search</Text>
         <Text style={styles.subtitle}>AI Scripture Companion</Text>
-
         <View style={styles.form}>
+          {error && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
           <TextInput
             style={styles.input}
             placeholder="Email"
@@ -132,6 +136,7 @@ export default function AuthScreen() {
             onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
+            onSubmitEditing={handleAuth}
           />
           {!isResettingPassword && (
             <TextInput
@@ -141,9 +146,9 @@ export default function AuthScreen() {
               value={password}
               onChangeText={setPassword}
               secureTextEntry
+              onSubmitEditing={handleAuth}
             />
           )}
-
           <TouchableOpacity style={styles.button} onPress={handleAuth} disabled={loading}>
             {loading ? (
               <ActivityIndicator color="#d4af37" />
@@ -153,7 +158,6 @@ export default function AuthScreen() {
               </Text>
             )}
           </TouchableOpacity>
-
           {!isResettingPassword && !isSignUp && (
             <TouchableOpacity 
               style={styles.forgotPasswordWrap} 
@@ -162,7 +166,6 @@ export default function AuthScreen() {
               <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
             </TouchableOpacity>
           )}
-
           <TouchableOpacity 
             style={styles.toggleWrap} 
             onPress={() => {
@@ -182,7 +185,6 @@ export default function AuthScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-
         <View style={styles.footer}>
           <Text style={styles.footerText}>CREATED BY AA DESIGNS</Text>
         </View>
@@ -306,7 +308,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'transparent',
   },
-
+  errorContainer: {
+    width: '100%',
+    padding: 10,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    marginBottom: 20,
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 12,
+    textAlign: 'center',
+    fontWeight: '600',
+    fontFamily: 'Playfair Display',
+  },
   input: {
     width: '100%',
     backgroundColor: 'transparent',

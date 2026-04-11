@@ -2,43 +2,58 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, TextInput } from 'react-native';
 import { motion } from 'motion/react';
 import { supabase } from '../services/supabase';
-import { Profile } from '../types';
-import { Search, Globe, Sparkles } from 'lucide-react';
+
+const MotionView = motion(View);
+import { Profile, Scripture } from '../types';
+import { Search, Globe, Sparkles, Frown, Wind, User, Heart, Flame, Sun, HelpCircle, Layers, Zap, Video, Mic } from 'lucide-react';
 import { OWNER_EMAIL } from '../utils/tier';
 import { getVerseReflection } from '../services/gemini';
+import { getVerseOfTheDay } from '../services/verseOfTheDay';
+import { VideoGenerator } from '../components/VideoGenerator';
 
-const MOODS = ['SAD', 'ANXIOUS', 'LONELY', 'GRATEFUL', 'ANGRY', 'HOPEFUL'];
+const MOOD_CONFIG = [
+  { key: 'ANXIOUS', label: 'Anxious', icon: Wind },
+  { key: 'SAD', label: 'Sad', icon: Frown },
+  { key: 'LONELY', label: 'Lonely', icon: User },
+  { key: 'STRESSED', label: 'Stressed', icon: Zap },
+  { key: 'OVERWHELMED', label: 'Overwhelmed', icon: Layers },
+  { key: 'HOPEFUL', label: 'Hopeful', icon: Sun },
+  { key: 'GRATEFUL', label: 'Grateful', icon: Heart },
+  { key: 'ANGRY', label: 'Angry', icon: Flame },
+  { key: 'CONFUSED', label: 'Confused', icon: HelpCircle },
+];
 const TRANSLATIONS = ['NIV', 'KJV', 'NLT', 'ESV', 'NKJV', 'CSB'];
 
+import { useUser } from '../UserContext';
+
 export default function HomeScreen({ navigation }: any) {
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const { profile } = useUser();
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showTranslations, setShowTranslations] = useState(false);
   const [reflection, setReflection] = useState<string | null>(null);
   const [loadingReflection, setLoadingReflection] = useState(false);
+  const [showVideoGenerator, setShowVideoGenerator] = useState(false);
+  const [dailyVerse, setDailyVerse] = useState<Scripture | null>(null);
 
-  const fetchProfile = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      if (data) setProfile(data);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchDailyVerse();
+    setRefreshing(false);
+  };
+
+  const fetchDailyVerse = async () => {
+    try {
+      const verse = await getVerseOfTheDay(profile?.preferred_translation || 'KJV');
+      setDailyVerse(verse);
+    } catch (error) {
+      console.error('Error fetching daily verse:', error);
     }
   };
 
   useEffect(() => {
-    fetchProfile();
-  }, []);
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchProfile();
-    setRefreshing(false);
-  };
+    fetchDailyVerse();
+  }, [profile?.preferred_translation]);
 
   const handleTranslationSelect = async (t: string) => {
     if (!profile) return;
@@ -47,7 +62,6 @@ export default function HomeScreen({ navigation }: any) {
       .update({ preferred_translation: t })
       .eq('id', profile.id);
     if (!error) {
-      setProfile({ ...profile, preferred_translation: t as any });
       setShowTranslations(false);
     }
   };
@@ -55,8 +69,8 @@ export default function HomeScreen({ navigation }: any) {
   const handleReflect = async () => {
     setLoadingReflection(true);
     try {
-      const verse = "Whoever dwells in the shelter of the Most High will rest in the shadow of the Almighty.";
-      const ref = "Psalm 91:1";
+      const verse = dailyVerse?.verse || "Whoever dwells in the shelter of the Most High will rest in the shadow of the Almighty.";
+      const ref = dailyVerse?.reference || "Psalm 91:1";
       const text = await getVerseReflection(verse, ref);
       setReflection(text);
     } catch (error) {
@@ -81,23 +95,21 @@ export default function HomeScreen({ navigation }: any) {
       >
         {/* Search Section */}
         <View style={styles.searchSection}>
-          <View style={styles.headerRow}>
-            <View style={styles.titleContainer}>
-              <Text style={styles.mainTitle}>Bible Mood Search</Text>
-            </View>
+          <View style={styles.heroHeader}>
+            <Text style={styles.mainTitle}>Bible Mood Search</Text>
+            <View style={styles.titleUnderline} />
+          </View>
+          
+          <View style={styles.versionRow}>
+            <Text style={styles.headerLabel}>SELECT TRANSLATION</Text>
+            <TouchableOpacity 
+              style={styles.translationSelector}
+              onPress={() => setShowTranslations(!showTranslations)}
+            ><Globe size={12} color="#d4af37" /><Text style={styles.translationText}>{profile?.preferred_translation || 'KJV'}</Text><Text style={styles.dropdownArrow}>▼</Text></TouchableOpacity>
             
-            <View style={styles.versionContainer}>
-              <Text style={styles.headerLabel}>VERSION</Text>
-              <TouchableOpacity 
-                style={styles.translationSelector}
-                onPress={() => setShowTranslations(!showTranslations)}
-              >
-                <Globe size={10} color="#d4af37" />
-                <Text style={styles.translationText}>{profile?.preferred_translation || 'KJV'}</Text>
-              </TouchableOpacity>
-              
-              {showTranslations && (
-                <View style={styles.translationDropdown}>
+            {showTranslations && (
+              <View style={styles.translationDropdown}>
+                <ScrollView style={{ maxHeight: 200 }}>
                   {TRANSLATIONS.map(t => (
                     <TouchableOpacity 
                       key={t} 
@@ -110,9 +122,9 @@ export default function HomeScreen({ navigation }: any) {
                       ]}>{t}</Text>
                     </TouchableOpacity>
                   ))}
-                </View>
-              )}
-            </View>
+                </ScrollView>
+              </View>
+            )}
           </View>
 
           <View style={styles.searchBar}>
@@ -128,54 +140,108 @@ export default function HomeScreen({ navigation }: any) {
               onSubmitEditing={handleSearch}
             />
           </View>
-
           <View style={styles.moodPills}>
-            {MOODS.map((mood) => (
-              <motion.div
-                key={mood}
-                whileHover={{ scale: 1.05, backgroundColor: 'rgba(212, 175, 55, 0.1)' }}
-                whileTap={{ scale: 0.95 }}
-                style={{ width: '48%', marginBottom: 8 }}
+            {MOOD_CONFIG.map((m) => (
+              <MotionView
+                key={m.key}
+                whileHover={{ scale: 1.02, backgroundColor: 'rgba(212, 175, 55, 0.05)' }}
+                whileTap={{ scale: 0.98 }}
+                style={{ width: '31.5%', marginBottom: 12 }}
               >
                 <TouchableOpacity 
                   style={[styles.moodPill, { width: '100%', marginBottom: 0 }]}
-                  onPress={() => navigation.navigate('Mood', { mood })}
+                  onPress={() => navigation.navigate('Mood', { mood: m.key })}
                 >
-                  <Text style={styles.moodPillText}>{mood}</Text>
+                  <m.icon size={16} color="#d4af37" style={{ marginBottom: 4 }} />
+                  <Text style={styles.moodPillText}>{m.label}</Text>
                 </TouchableOpacity>
-              </motion.div>
+              </MotionView>
             ))}
           </View>
         </View>
-
-        {/* Verse of the Day Card */}
         <View style={styles.verseCard}>
           <Text style={styles.verseLabel}>VERSE OF THE DAY</Text>
-          
           <Text style={styles.verseText}>
-            "Whoever dwells in the shelter of the Most High will rest in the shadow of the Almighty."
+            {dailyVerse?.verse || "Whoever dwells in the shelter of the Most High will rest in the shadow of the Almighty."}
           </Text>
+          <Text style={styles.verseReference}>— {dailyVerse?.reference || "PSALM 91:1"}</Text>
           
-          <Text style={styles.verseReference}>— PSALM 91:1</Text>
-          
+          {showVideoGenerator ? (
+            <VideoGenerator 
+              title={dailyVerse?.reference || "Psalm 91:1"}
+              prompt={`A cinematic, inspiring, and spiritually grounded visual accompaniment for the Bible verse: '${dailyVerse?.verse || "Whoever dwells in the shelter of the Most High will rest in the shadow of the Almighty."}' (${dailyVerse?.reference || "Psalm 91:1"}). High quality, peaceful, and reverent.`}
+              onClose={() => setShowVideoGenerator(false)}
+            />
+          ) : (
+            <TouchableOpacity 
+              style={[styles.reflectionButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#d4af37', marginBottom: 12 }]} 
+              onPress={() => setShowVideoGenerator(true)}
+            >
+              <View style={styles.reflectionButtonContent}>
+                <Video size={14} color="#d4af37" style={{ marginRight: 8 }} />
+                <Text style={[styles.reflectionText, { color: '#d4af37' }]}>
+                  GENERATE VISION
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
           {reflection ? (
-            <View style={styles.reflectionContainer}>
-              <Sparkles size={14} color="#d4af37" style={{ marginBottom: 8 }} />
-              <Text style={styles.reflectionBody}>{reflection}</Text>
-            </View>
+            <MotionView
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{ width: '100%' }}
+            >
+              <View style={styles.reflectionContainer}>
+                <View style={styles.reflectionHeader}>
+                  <Sparkles size={16} color="#d4af37" />
+                  <Text style={styles.reflectionTitle}>DAVID'S REFLECTION</Text>
+                </View>
+                <Text style={styles.reflectionBody}>{reflection}</Text>
+                <TouchableOpacity onPress={() => setReflection(null)} style={styles.closeReflection}>
+                  <Text style={styles.closeReflectionText}>CLOSE</Text>
+                </TouchableOpacity>
+              </View>
+            </MotionView>
           ) : (
             <TouchableOpacity 
               style={styles.reflectionButton} 
               onPress={handleReflect}
               disabled={loadingReflection}
             >
-              <Text style={styles.reflectionText}>
-                {loadingReflection ? 'DAVID IS REFLECTING...' : "TAP FOR DAVID'S REFLECTION"}
-              </Text>
+              <View style={styles.reflectionButtonContent}>
+                <Sparkles size={14} color="#0b1e3d" style={{ marginRight: 8 }} />
+                <Text style={styles.reflectionText}>
+                  {"TAP FOR DAVID'S REFLECTION"}
+                </Text>
+              </View>
             </TouchableOpacity>
           )}
         </View>
 
+        {/* Proactive Voice Card */}
+        <MotionView
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.2 }}
+          style={styles.voiceProactiveCard}
+        >
+          <View style={styles.voiceCardContent}>
+            <View style={styles.voiceIconContainer}>
+              <Mic size={24} color="#d4af37" />
+            </View>
+            <View style={styles.voiceTextContainer}>
+              <Text style={styles.voiceCardTitle}>Want to talk?</Text>
+              <Text style={styles.voiceCardSubtitle}>David is ready to listen and encourage you in real-time.</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.voiceStartButton}
+              onPress={() => navigation.navigate('Voice')}
+            >
+              <Text style={styles.voiceStartButtonText}>START VOICE</Text>
+            </TouchableOpacity>
+          </View>
+        </MotionView>
         <View style={styles.footer}>
           {profile?.email === OWNER_EMAIL && (
             <Text style={styles.ownerBadge}>OWNER ACCOUNT</Text>
@@ -191,73 +257,81 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
-  topHeader: {
-    display: 'none',
+  heroHeader: {
+    alignItems: 'center',
+    marginBottom: 8,
+    width: '100%',
   },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    width: '90%',
-    marginBottom: 15,
+  titleUnderline: {
+    width: 40,
+    height: 2,
+    backgroundColor: '#d4af37',
+    marginTop: 6,
+    opacity: 0.5,
   },
-  titleContainer: {
-    flex: 1,
-  },
-  versionContainer: {
-    alignItems: 'flex-end',
+  versionRow: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 16,
     zIndex: 1000,
   },
   headerLabel: {
-    fontSize: 7,
-    color: 'rgba(212, 175, 55, 0.4)',
+    fontSize: 8,
+    color: 'rgba(212, 175, 55, 0.6)',
     fontWeight: 'bold',
-    letterSpacing: 1,
-    marginBottom: 2,
+    letterSpacing: 2,
+    marginBottom: 6,
     textTransform: 'uppercase',
   },
   translationSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(212, 175, 55, 0.05)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
+    borderColor: 'rgba(212, 175, 55, 0.3)',
   },
   translationText: {
     color: '#d4af37',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: 'bold',
-    marginLeft: 4,
+    marginHorizontal: 8,
     letterSpacing: 1,
+  },
+  dropdownArrow: {
+    color: '#d4af37',
+    fontSize: 8,
+    opacity: 0.7,
   },
   translationDropdown: {
     position: 'absolute',
-    top: 32,
-    right: 0,
+    top: 65,
     backgroundColor: '#0f2a52',
-    borderRadius: 10,
-    padding: 6,
+    borderRadius: 15,
+    padding: 8,
     borderWidth: 1,
     borderColor: '#d4af37',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 10,
-    width: 70,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 20,
+    width: 120,
   },
   dropdownItem: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(212, 175, 55, 0.05)',
   },
   dropdownText: {
     color: 'rgba(212, 175, 55, 0.6)',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: 'bold',
     textAlign: 'center',
+    letterSpacing: 1,
   },
   dropdownTextActive: {
     color: '#d4af37',
@@ -266,40 +340,45 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingTop: 60,
+    paddingTop: 10,
     paddingBottom: 20,
+    maxWidth: 1000,
+    alignSelf: 'center',
+    width: '100%',
   },
   searchSection: {
     alignItems: 'center',
     paddingVertical: 10,
-    marginHorizontal: 20,
+    paddingHorizontal: 20,
     marginTop: 0,
   },
   mainTitle: {
-    fontSize: 18,
+    fontSize: 26,
     color: '#d4af37',
     fontFamily: 'Playfair Display',
     fontWeight: '700',
     letterSpacing: 2,
     textTransform: 'uppercase',
+    textAlign: 'center',
   },
   searchBar: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: 20,
-    paddingLeft: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 25,
+    paddingLeft: 14,
     paddingRight: 10,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
-    marginBottom: 15,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+    marginBottom: 20,
+    height: 46,
   },
   searchInput: {
     flex: 1,
-    height: 40,
+    height: 46,
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: 'Playfair Display',
     fontStyle: 'italic',
     paddingLeft: 10,
@@ -307,9 +386,6 @@ const styles = StyleSheet.create({
   searchIconContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  searchIcon: {
-    padding: 6,
   },
   moodPills: {
     flexDirection: 'row',
@@ -319,42 +395,43 @@ const styles = StyleSheet.create({
   },
   moodPill: {
     backgroundColor: '#0b1e3d',
-    width: '48%',
-    paddingVertical: 10,
-    borderRadius: 15,
-    marginBottom: 8,
+    paddingVertical: 12,
+    borderRadius: 16,
+    justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.15)',
+    borderColor: 'rgba(212, 175, 55, 0.2)',
   },
   moodPillText: {
     color: '#ffffff',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: 'bold',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   verseCard: {
     backgroundColor: '#0b1e3d',
     marginHorizontal: 20,
     borderRadius: 20,
-    paddingVertical: 35,
-    paddingHorizontal: 30,
+    paddingVertical: 30,
+    paddingHorizontal: 22,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.1)',
+    borderColor: 'rgba(212, 175, 55, 0.2)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 10,
-    marginTop: 15,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 15,
+    marginTop: 24,
   },
   verseLabel: {
     color: '#d4af37',
     fontSize: 8,
     fontWeight: 'bold',
     letterSpacing: 2,
-    marginBottom: 15,
+    marginBottom: 16,
+    opacity: 0.8,
   },
   verseText: {
     fontSize: 18,
@@ -363,42 +440,75 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     lineHeight: 26,
-    marginBottom: 15,
+    marginBottom: 16,
   },
   verseReference: {
     color: '#d4af37',
     fontSize: 10,
     fontWeight: 'bold',
-    letterSpacing: 1,
-    marginBottom: 20,
+    letterSpacing: 1.5,
+    marginBottom: 24,
   },
   reflectionButton: {
-    padding: 10,
-    marginTop: 10,
+    backgroundColor: '#d4af37',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  reflectionButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   reflectionText: {
+    color: '#0b1e3d',
+    fontSize: 11,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+  },
+  reflectionContainer: {
+    marginTop: 10,
+    padding: 25,
+    backgroundColor: 'rgba(212, 175, 55, 0.08)',
+    borderRadius: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+    width: '100%',
+  },
+  reflectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  reflectionTitle: {
     color: '#d4af37',
     fontSize: 10,
     fontWeight: 'bold',
     letterSpacing: 2,
-    opacity: 0.6,
-  },
-  reflectionContainer: {
-    marginTop: 20,
-    padding: 20,
-    backgroundColor: 'rgba(212, 175, 55, 0.05)',
-    borderRadius: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.1)',
+    marginLeft: 10,
   },
   reflectionBody: {
     color: '#f5d77a',
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 22,
     textAlign: 'center',
     fontFamily: 'Playfair Display',
     fontStyle: 'italic',
+  },
+  closeReflection: {
+    marginTop: 20,
+    padding: 5,
+  },
+  closeReflectionText: {
+    color: 'rgba(212, 175, 55, 0.4)',
+    fontSize: 9,
+    fontWeight: 'bold',
+    letterSpacing: 1,
   },
   footer: {
     marginTop: 40,
@@ -419,5 +529,59 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textTransform: 'uppercase',
     opacity: 0.4,
+  },
+  voiceProactiveCard: {
+    marginHorizontal: 20,
+    marginTop: 20,
+    backgroundColor: '#0f2a52',
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  voiceCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  voiceIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  voiceTextContainer: {
+    flex: 1,
+  },
+  voiceCardTitle: {
+    color: '#d4af37',
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: 'Playfair Display',
+  },
+  voiceCardSubtitle: {
+    color: '#f5d77a',
+    fontSize: 11,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  voiceStartButton: {
+    backgroundColor: '#d4af37',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 15,
+  },
+  voiceStartButtonText: {
+    color: '#0b1e3d',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 1,
   },
 });

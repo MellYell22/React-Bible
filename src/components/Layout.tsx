@@ -59,30 +59,24 @@ const Layout: React.FC<LayoutProps> = ({
             <TouchableOpacity onPress={onHome} style={styles.iconButton}>
               <BookOpen size={18} color="#ffffff" />
             </TouchableOpacity>
-            
             <TouchableOpacity onPress={onBrowse} style={styles.iconButton}>
               <Search size={18} color="#ffffff" />
             </TouchableOpacity>
-            
             <TouchableOpacity onPress={onOpenBookmarks} style={styles.iconButton}>
               <Bookmark size={18} color="#ffffff" />
             </TouchableOpacity>
           </View>
-
           <View style={styles.headerCenter}>
             <Text style={styles.appName}>BIBLE MOOD SEARCH</Text>
             <Text style={styles.tagline}>DISCOVER SCRIPTURE FOR EVERY FEELING.</Text>
           </View>
-
           <View style={styles.headerRight}>
             <View style={styles.translationWrapper}>
               <TranslationPicker value={translation} onChange={onTranslationChange} />
             </View>
-
             <TouchableOpacity onPress={onOpenProfile} style={styles.iconButton}>
               <UserIcon size={18} color="#ffffff" />
             </TouchableOpacity>
-
             {onLogout && (
               <TouchableOpacity 
                 onPress={onLogout}
@@ -93,8 +87,6 @@ const Layout: React.FC<LayoutProps> = ({
             )}
           </View>
         </View>
-
-        {/* Main Content */}
         <ScrollView 
           style={styles.main} 
           contentContainerStyle={styles.mainContent}
@@ -102,8 +94,6 @@ const Layout: React.FC<LayoutProps> = ({
         >
           {children}
         </ScrollView>
-
-        {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>{AUTHOR_CREDIT}</Text>
         </View>
