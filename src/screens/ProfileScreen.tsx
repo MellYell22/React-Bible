@@ -14,10 +14,9 @@ export default function ProfileScreen({ route }: { route?: { params?: any } }) {
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string, type: 'success' | 'error' | 'info' } | null>(null);
 
-  // Extract query params as stable primitives
-  const params = new URLSearchParams(window.location.search);
-  const success = params.get('success');
-  const canceled = params.get('canceled');
+  // Extract params from route prop (passed from App.tsx)
+  const success = route?.params?.success;
+  const canceled = route?.params?.canceled;
 
   useEffect(() => {
     // Only run if success or canceled params are present
@@ -26,7 +25,7 @@ export default function ProfileScreen({ route }: { route?: { params?: any } }) {
     }
 
     // Handle success redirect from Stripe
-    if (success === 'true') {
+    if (success === true) {
       setStatusMessage({ text: 'Subscription updated successfully! Welcome to the family.', type: 'success' });
       // Refresh the global profile to reflect the new tier
       refreshProfile();
@@ -34,7 +33,7 @@ export default function ProfileScreen({ route }: { route?: { params?: any } }) {
       window.history.replaceState({}, document.title, '/profile');
     }
     // Handle canceled redirect from Stripe
-    else if (canceled === 'true') {
+    else if (canceled === true) {
       setStatusMessage({ text: 'Checkout canceled. No changes were made.', type: 'info' });
       window.history.replaceState({}, document.title, '/profile');
     }
