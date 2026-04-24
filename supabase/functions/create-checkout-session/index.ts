@@ -70,6 +70,7 @@ serve(async (req) => {
         client_reference_id: userId,
         metadata: {
           userId,
+          priceId,
         },
       });
 

@@ -51,22 +51,37 @@ serve(async (req) => {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.client_reference_id || session.metadata?.userId;
-        
-        // Get the price ID from the session
-        // Note: For subscriptions, you might want to look at line_items or subscription object
-        // But we passed it in metadata or it's in the first line item
-        const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
-        const priceId = lineItems.data[0]?.price?.id;
+        let priceId = session.metadata?.priceId;
 
-        console.log(`Checkout completed for user ${userId} with price ${priceId}`);
+        console.log(`[Webhook] Checkout completed. User: ${userId}, Price (from metadata): ${priceId}`);
 
-        if (userId) {
+        // If priceId not in metadata, try to get it from line items
+        if (!priceId) {
+          try {
+            const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
+            priceId = lineItems.data[0]?.price?.id;
+            console.log(`[Webhook] Price from line items: ${priceId}`);
+          } catch (err) {
+            console.error(`[Webhook] Failed to fetch line items: ${err}`);
+          }
+        }
+
+        if (userId && priceId) {
           let tier = "free";
           const plusPriceId = Deno.env.get("STRIPE_PRICE_ID_PLUS");
           const proPriceId = Deno.env.get("STRIPE_PRICE_ID_PRO");
 
-          if (priceId === plusPriceId) tier = "plus";
-          else if (priceId === proPriceId) tier = "pro";
+          console.log(`[Webhook] Comparing prices - Input: ${priceId}, Plus: ${plusPriceId}, Pro: ${proPriceId}`);
+
+          if (priceId === plusPriceId) {
+            tier = "plus";
+          } else if (priceId === proPriceId) {
+            tier = "pro";
+          } else {
+            console.warn(`[Webhook] Unknown priceId: ${priceId}. Defaulting to free.`);
+          }
+
+          console.log(`[Webhook] Updating user ${userId} to tier: ${tier}`);
 
           const { error } = await supabase
             .from("profiles")
@@ -77,14 +92,66 @@ serve(async (req) => {
             })
             .eq("id", userId);
 
-          if (error) throw error;
-          console.log(`Successfully updated user ${userId} to ${tier}`);
+          if (error) {
+            console.error(`[Webhook] Supabase Error: ${error.message}`);
+            throw error;
+          }
+          console.log(`[Webhook] ✓ Successfully updated user ${userId} to ${tier}`);
+        } else {
+          console.error(`[Webhook] ERROR - Missing userId (${userId}) or priceId (${priceId})`);
         }
         break;
       }
+
+      case "customer.subscription.updated": {
+        const subscription = event.data.object as Stripe.Subscription;
+        const customerId = subscription.customer as string;
+        const priceId = subscription.items?.data?.[0]?.price?.id;
+
+        console.log(`[Webhook] Subscription updated. Customer: ${customerId}, Price: ${priceId}`);
+
+        if (customerId) {
+          const { data: profile, error: fetchError } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("stripe_customer_id", customerId)
+            .single();
+
+          if (fetchError) {
+            console.error(`[Webhook] Fetch Error: ${fetchError.message}`);
+          } else if (profile && priceId) {
+            let tier = "free";
+            const plusPriceId = Deno.env.get("STRIPE_PRICE_ID_PLUS");
+            const proPriceId = Deno.env.get("STRIPE_PRICE_ID_PRO");
+
+            if (priceId === plusPriceId) tier = "plus";
+            else if (priceId === proPriceId) tier = "pro";
+
+            console.log(`[Webhook] Updating user ${profile.id} to tier: ${tier}`);
+
+            const { error: updateError } = await supabase
+              .from("profiles")
+              .update({
+                subscription_tier: tier,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", profile.id);
+
+            if (updateError) {
+              console.error(`[Webhook] Update Error: ${updateError.message}`);
+            } else {
+              console.log(`[Webhook] ✓ Successfully updated user ${profile.id} to ${tier}`);
+            }
+          }
+        }
+        break;
+      }
+
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
+
+        console.log(`[Webhook] Subscription deleted for customer: ${customerId}`);
 
         const { data: profile, error: fetchError } = await supabase
           .from("profiles")
@@ -93,8 +160,9 @@ serve(async (req) => {
           .single();
 
         if (fetchError) {
-          console.error(`Error fetching profile for customer ${customerId}: ${fetchError.message}`);
+          console.error(`[Webhook] Fetch Error: ${fetchError.message}`);
         } else if (profile) {
+          console.log(`[Webhook] Resetting user ${profile.id} to free tier`);
           const { error: updateError } = await supabase
             .from("profiles")
             .update({
@@ -103,8 +171,72 @@ serve(async (req) => {
             })
             .eq("id", profile.id);
 
-          if (updateError) throw updateError;
-          console.log(`Reset user ${profile.id} to free tier`);
+          if (updateError) {
+            console.error(`[Webhook] Update Error: ${updateError.message}`);
+          } else {
+            console.log(`[Webhook] ✓ Successfully reset user ${profile.id} to free`);
+          }
+        } else {
+          console.warn(`[Webhook] No profile found for customerId: ${customerId}`);
+        }
+        break;
+      }
+
+      case "invoice.paid": {
+        // Handle recurring invoice payments
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId = invoice.customer as string;
+
+        console.log(`[Webhook] Invoice paid for customer: ${customerId}`);
+
+        if (customerId && invoice.paid) {
+          const { data: profile, error: fetchError } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("stripe_customer_id", customerId)
+            .single();
+
+          if (fetchError) {
+            console.error(`[Webhook] Fetch Error: ${fetchError.message}`);
+          } else if (profile) {
+            // Get subscription to find current tier
+            try {
+              const subscriptions = await stripe.subscriptions.list({
+                customer: customerId,
+                limit: 1,
+              });
+
+              const subscription = subscriptions.data[0];
+              const priceId = subscription?.items?.data?.[0]?.price?.id;
+
+              if (priceId) {
+                let tier = "free";
+                const plusPriceId = Deno.env.get("STRIPE_PRICE_ID_PLUS");
+                const proPriceId = Deno.env.get("STRIPE_PRICE_ID_PRO");
+
+                if (priceId === plusPriceId) tier = "plus";
+                else if (priceId === proPriceId) tier = "pro";
+
+                console.log(`[Webhook] Invoice paid - user ${profile.id}, tier: ${tier}`);
+
+                const { error: updateError } = await supabase
+                  .from("profiles")
+                  .update({
+                    subscription_tier: tier,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq("id", profile.id);
+
+                if (updateError) {
+                  console.error(`[Webhook] Update Error: ${updateError.message}`);
+                } else {
+                  console.log(`[Webhook] ✓ Invoice paid - user ${profile.id} tier maintained as ${tier}`);
+                }
+              }
+            } catch (err) {
+              console.error(`[Webhook] Failed to fetch subscription: ${err}`);
+            }
+          }
         }
         break;
       }
@@ -115,7 +247,7 @@ serve(async (req) => {
       headers: { "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error(`Error processing webhook: ${err.message}`);
+    console.error(`[Webhook] Error processing event: ${err.message}`);
     return new Response(JSON.stringify({ error: "Internal Server Error" }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
