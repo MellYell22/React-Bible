@@ -18,7 +18,7 @@ const getStripe = () => {
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const supabase = (supabaseUrl && supabaseServiceKey) 
+const supabase = (supabaseUrl && supabaseServiceKey)
   ? createClient(supabaseUrl, supabaseServiceKey)
   : null;
 
@@ -106,13 +106,13 @@ export default async function handler(req: any, res: any) {
 
           const { error } = await supabase
             .from("profiles")
-            .update({ 
+            .update({
               subscription_tier: tier,
               stripe_customer_id: session.customer as string,
               updated_at: new Date().toISOString()
             })
             .eq("id", userId);
-          
+
           if (error) {
             console.error(`[StripeWebhook] Supabase Update Error: ${error.message}`);
             throw error;
@@ -152,12 +152,12 @@ export default async function handler(req: any, res: any) {
 
             const { error: updateError } = await supabase
               .from("profiles")
-              .update({ 
+              .update({
                 subscription_tier: tier,
                 updated_at: new Date().toISOString()
               })
               .eq("id", profile.id);
-            
+
             if (updateError) {
               console.error(`[StripeWebhook] Update Error: ${updateError.message}`);
             } else {
@@ -187,12 +187,12 @@ export default async function handler(req: any, res: any) {
             console.log(`[StripeWebhook] Resetting user ${profile.id} to free tier.`);
             const { error: updateError } = await supabase
               .from("profiles")
-              .update({ 
+              .update({
                 subscription_tier: "free",
                 updated_at: new Date().toISOString()
               })
               .eq("id", profile.id);
-            
+
             if (updateError) {
               console.error(`[StripeWebhook] Update Error: ${updateError.message}`);
             } else {
@@ -233,10 +233,10 @@ export default async function handler(req: any, res: any) {
                 customer: customerId,
                 limit: 1,
               });
-              
+
               const subscription = subscriptions?.data?.[0];
               const priceId = subscription?.items?.data?.[0]?.price?.id;
-              
+
               if (priceId) {
                 let tier = "free";
                 const plusPriceId = process.env.STRIPE_PRICE_ID_PLUS || process.env.VITE_STRIPE_PRICE_ID_PLUS;
@@ -249,12 +249,12 @@ export default async function handler(req: any, res: any) {
 
                 const { error: updateError } = await supabase
                   .from("profiles")
-                  .update({ 
+                  .update({
                     subscription_tier: tier,
                     updated_at: new Date().toISOString()
                   })
                   .eq("id", profile.id);
-                
+
                 if (updateError) {
                   console.error(`[StripeWebhook] Update Error: ${updateError.message}`);
                 } else {
