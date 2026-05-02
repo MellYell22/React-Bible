@@ -54,26 +54,87 @@ export default async function handler(req: any, res: any) {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
-        const userId = session.client_reference_id || session.metadata?.userId;
+        let userId = session.client_reference_id || session.metadata?.userId;
         const customerId = session.customer as string;
+        const email = session.customer_details?.email;
         
-        console.log(`[Stripe Webhook] Checkout session completed for user: ${userId}, customer: ${customerId}`);
+        console.log(`[Stripe Webhook] Checkout session completed for user: ${userId}, customer: ${customerId}, email: ${email}`);
+
+        if (!userId && email) {
+          console.log(`[Stripe Webhook] UserId missing in session, attempting email lookup for: ${email}`);
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('email', email)
+            .maybeSingle();
+          if (profile) userId = profile.id;
+        }
 
         if (userId) {
+          console.log(`[Stripe Webhook] Upgrading User ${userId} to Pro`);
           const { error } = await supabase
             .from('profiles')
             .update({
               stripe_customer_id: customerId,
               subscription_tier: 'pro',
+              subscription_status: 'active', // User requested field
+              plan: 'pro', // User requested field
+              stripe_subscription_status: 'active',
               updated_at: new Date().toISOString(),
             })
             .eq('id', userId);
 
           if (error) {
-            console.error(`[Stripe Webhook] Error updating profile for checkout: ${error.message}`);
+            console.error(`[Stripe Webhook] Error updating profile for user ${userId}: ${error.message}`);
           } else {
-            console.log(`[Stripe Webhook] Successfully updated user ${userId} to pro tier.`);
+            console.log(`[Stripe Webhook] User matches: ${userId}. User upgraded to Pro.`);
           }
+        } else {
+          console.error(`[Stripe Webhook] Critical: Could not match user for completed session ${session.id}`);
+        }
+        break;
+      }
+
+      case 'invoice.paid': {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId = invoice.customer as string;
+        const email = invoice.customer_email || invoice.customer_details?.email;
+        const subscriptionId = invoice.subscription as string;
+
+        console.log(`[Stripe Webhook] Invoice paid for customer: ${customerId}, subscription: ${subscriptionId}`);
+
+        let { data: profile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('stripe_customer_id', customerId)
+          .maybeSingle();
+
+        if (!profile && email) {
+          console.log(`[Stripe Webhook] Profile not found by customerId, trying email: ${email}`);
+          const { data: emailProfile } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('email', email)
+            .maybeSingle();
+          profile = emailProfile;
+        }
+
+        if (profile) {
+          const { error } = await supabase
+            .from('profiles')
+            .update({
+              stripe_customer_id: customerId, // Ensure it's set
+              stripe_subscription_id: subscriptionId,
+              subscription_tier: 'pro',
+              subscription_status: 'active',
+              plan: 'pro',
+              stripe_subscription_status: 'active',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', profile.id);
+            
+          if (error) console.error(`[Stripe Webhook] Error updating profile on invoice.paid: ${error.message}`);
+          else console.log(`[Stripe Webhook] User ${profile.id} upgraded/confirmed Pro via invoice.paid`);
         }
         break;
       }
@@ -92,6 +153,11 @@ export default async function handler(req: any, res: any) {
 
         let query = supabase.from('profiles').update({
           subscription_tier: tier,
+          subscription_status: status === 'active' || status === 'trialing' ? 'active' : 'inactive',
+          plan: tier,
+          stripe_subscription_status: status,
+          stripe_subscription_id: subscription.id,
+          stripe_customer_id: customerId,
           updated_at: new Date().toISOString(),
         });
 
@@ -106,7 +172,7 @@ export default async function handler(req: any, res: any) {
         if (error) {
           console.error(`[Stripe Webhook] Error updating profile for subscription ${event.type}: ${error.message}`);
         } else {
-          console.log(`[Stripe Webhook] Updated customer ${customerId} tier to ${tier}.`);
+          console.log(`[Stripe Webhook] Updated customer ${customerId} (user: ${userId}) tier to ${tier}. Status: ${status}`);
         }
         break;
       }
@@ -121,6 +187,9 @@ export default async function handler(req: any, res: any) {
           .from('profiles')
           .update({
             subscription_tier: 'free',
+            subscription_status: 'canceled',
+            plan: 'free',
+            stripe_subscription_status: 'canceled',
             updated_at: new Date().toISOString(),
           })
           .eq('stripe_customer_id', customerId);

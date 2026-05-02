@@ -81,6 +81,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
+      console.log(`[UserContext] Fetching profile for ${userId}...`);
       const { data, error } = await supabase!
         .from('profiles')
         .select('*')
@@ -90,6 +91,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
       
       const profileData = data as Profile;
+      console.log(`[UserContext] Profile fetched success. Tier: ${profileData.subscription_tier}`);
+      
       if (profileData && !profileData.preferred_response_length) {
         profileData.preferred_response_length = 'medium';
       }
@@ -103,8 +106,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = async (showLoading = true) => {
     if (session?.user?.id) {
+      console.log('[UserContext] Manual profile refresh triggered');
       if (showLoading) setLoading(true);
+      // Refreshing local session data to ensure auth is synced
+      await supabase!.auth.refreshSession();
       await fetchProfile(session.user.id);
+    } else {
+      console.warn('[UserContext] refreshProfile called but no active user ID');
     }
   };
 

@@ -30,13 +30,25 @@ export default function PaymentSuccessScreen({ navigation }: { navigation: any }
   }, []);
 
   useEffect(() => {
-    if (profile?.subscription_tier === 'pro') {
+    console.log(`[PaymentSuccess] Current profile tier: ${profile?.subscription_tier}`);
+    if (profile?.subscription_tier === 'pro' || profile?.subscription_tier === 'owner') {
+      console.log('[PaymentSuccess] Pro status detected! Stopping polling and showing success.');
       setIsActivating(false);
+      
+      // Auto-redirect after a small delay to let user see success
+      const timeout = setTimeout(() => {
+        handleContinue();
+      }, 3000);
+      return () => clearTimeout(timeout);
     }
   }, [profile?.subscription_tier]);
 
   const handleContinue = () => {
-    navigation.navigate('Profile');
+    // Redirect to main app entry (Mood)
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Mood' }],
+    });
   };
 
   return (
@@ -56,8 +68,10 @@ export default function PaymentSuccessScreen({ navigation }: { navigation: any }
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
+                  style={styles.flexCenter}
                 >
                   <ActivityIndicator size="large" color="#d4af37" />
+                  <Text style={styles.pollingText}>Finalizing your upgrade...</Text>
                 </motion.div>
               ) : (
                 <motion.div
@@ -73,12 +87,12 @@ export default function PaymentSuccessScreen({ navigation }: { navigation: any }
           </View>
 
           <Text style={styles.title}>
-            {isActivating ? 'ACTIVATING PRO FEATURES' : 'WELCOME TO PRO'}
+            {isActivating ? 'HEAVENLY SYNC IN PROGRESS' : 'GLORY! YOU ARE PRO'}
           </Text>
 
           <Text style={styles.description}>
             {isActivating 
-              ? 'Our angels are updating your account status. This usually takes just a moment...'
+              ? 'Our systems are receiving the confirmation from Stripe. Your account will be transformed into Pro momentarily...'
               : 'Your transformation is complete. You now have unlimited access to AI insights and premium music.'}
           </Text>
 
@@ -88,7 +102,7 @@ export default function PaymentSuccessScreen({ navigation }: { navigation: any }
               onPress={handleContinue}
               activeOpacity={0.8}
             >
-              <Text style={styles.buttonText}>ENTER THE SANCTUARY</Text>
+              <Text style={styles.buttonText}>START YOUR JOURNEY</Text>
               <ArrowRight color="#0b1e3d" size={20} />
             </TouchableOpacity>
           )}
@@ -146,9 +160,20 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     marginBottom: 24,
-    height: 80,
+    height: 100,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  flexCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pollingText: {
+    color: '#d4af37',
+    fontSize: 14,
+    marginTop: 12,
+    fontWeight: '500',
+    letterSpacing: 1,
   },
   title: {
     fontSize: 24,

@@ -103,6 +103,7 @@ serve(async (req) => {
         subscription_data: {
           metadata: {
             userId,
+            user_id: userId,
           },
         },
         success_url: `https://react-bible-six.vercel.app/payment-success?session_id={CHECKOUT_SESSION_ID}`,
@@ -110,6 +111,7 @@ serve(async (req) => {
         client_reference_id: userId,
         metadata: {
           userId,
+          user_id: userId,
         },
       });
 
