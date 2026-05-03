@@ -55,14 +55,14 @@ export default function VoiceScreen({ route, navigation }: any) {
   useEffect(() => {
     if (playbackError && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
-      if (lastMessage.role === 'david' && (lastMessage.text.includes("Playing") || lastMessage.text.includes("putting on"))) {
+      if (lastMessage.role === 'assistant' && (lastMessage.content.includes("Playing") || lastMessage.content.includes("putting on"))) {
         setMessages(prev => {
           const newMessages = [...prev];
           const lastIdx = newMessages.length - 1;
-          if (!newMessages[lastIdx].text.includes("playback did not start")) {
+          if (!newMessages[lastIdx].content.includes("playback did not start")) {
             newMessages[lastIdx] = { 
               ...newMessages[lastIdx], 
-              text: newMessages[lastIdx].text + "\n\nI found the song, but playback did not start. Let me try another way." 
+              content: newMessages[lastIdx].content + "\n\nI found the song, but playback did not start. Let me try another way." 
             };
           }
           return newMessages;

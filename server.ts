@@ -289,6 +289,8 @@ app.post("/api/chat", async (req, res) => {
     return res.status(500).json({ error: "OpenAI API Key is not configured." });
   }
 
+  console.log("OPENAI REQUEST SENT - Chat");
+
   try {
     if (stream) {
       res.setHeader('Content-Type', 'text/event-stream');
@@ -299,6 +301,7 @@ app.post("/api/chat", async (req, res) => {
         model: "gpt-4o",
         messages: [{ role: "system", content: DAVID_PERSONALITY_PROMPT }, ...messages],
         stream: true,
+        temperature: 0.8, // Increased temperature for more variety
       });
 
       for await (const chunk of completion) {
@@ -307,13 +310,16 @@ app.post("/api/chat", async (req, res) => {
           res.write(`data: ${JSON.stringify({ text: content })}\n\n`);
         }
       }
+      console.log("OPENAI RESPONSE RECEIVED - Chat Stream");
       res.write('data: [DONE]\n\n');
       res.end();
     } else {
       const completion = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [{ role: "system", content: DAVID_PERSONALITY_PROMPT }, ...messages],
+        temperature: 0.8,
       });
+      console.log("OPENAI RESPONSE RECEIVED - Chat");
       res.json({ text: completion.choices[0].message.content });
     }
   } catch (error: any) {
@@ -324,6 +330,8 @@ app.post("/api/chat", async (req, res) => {
 
 app.post("/api/mood-scriptures", async (req, res) => {
   const { mood, translation = "NIV" } = req.body;
+
+  console.log("OPENAI REQUEST SENT - Mood Scriptures");
 
   try {
     const completion = await openai.chat.completions.create({
@@ -343,9 +351,11 @@ Ensure the response is valid JSON with the following structure:
 }`
         }
       ],
-      response_format: { type: "json_object" }
+      response_format: { type: "json_object" },
+      temperature: 0.7,
     });
 
+    console.log("OPENAI RESPONSE RECEIVED - Mood Scriptures");
     const content = completion.choices[0].message.content;
     res.json(JSON.parse(content || "{}"));
   } catch (error: any) {
@@ -354,8 +364,47 @@ Ensure the response is valid JSON with the following structure:
   }
 });
 
+app.post("/api/verse-of-the-day", async (req, res) => {
+  const { translation = "NIV" } = req.body;
+  const today = new Date().toISOString().split('T')[0];
+
+  console.log("OPENAI REQUEST SENT - Verse of the Day");
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: "You are a helpful assistant that provides daily Bible verses." },
+        { 
+          role: "user", 
+          content: `Provide a single, inspiring Bible verse for today (${today}) in the ${translation} translation. 
+Include the verse text, the reference (e.g., "John 3:16 (${translation})"), and a short, encouraging explanation (1-2 sentences).
+Ensure the verse is different from common ones if possible, but always uplifting.
+Format your response as valid JSON:
+{
+  "verse": "...",
+  "reference": "...",
+  "explanation": "..."
+}`
+        }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.9, // Higher variety for the daily verse
+    });
+
+    console.log("OPENAI RESPONSE RECEIVED - Verse of the Day");
+    const content = completion.choices[0].message.content;
+    res.json(JSON.parse(content || "{}"));
+  } catch (error: any) {
+    console.error("[OpenAI] Verse of the day error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post("/api/reflection", async (req, res) => {
   const { verse, reference } = req.body;
+
+  console.log("OPENAI REQUEST SENT - Reflection");
 
   try {
     const completion = await openai.chat.completions.create({
@@ -368,8 +417,10 @@ app.post("/api/reflection", async (req, res) => {
 Briefly explain how it applies to a person's life today. The reflection must be exactly 3–4 sentences long.`
         }
       ],
+      temperature: 0.7,
     });
 
+    console.log("OPENAI RESPONSE RECEIVED - Reflection");
     res.json({ text: completion.choices[0].message.content });
   } catch (error: any) {
     console.error("[OpenAI] Reflection error:", error);

@@ -33,7 +33,7 @@ export default function ChatScreen({ navigation }: any) {
   useEffect(() => {
     if (playbackError && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
-      if (lastMessage.role === 'model' && (lastMessage.content.includes("Playing") || lastMessage.content.includes("putting on"))) {
+      if (lastMessage.role === 'assistant' && (lastMessage.content.includes("Playing") || lastMessage.content.includes("putting on"))) {
         setMessages(prev => {
           const newMessages = [...prev];
           const lastIdx = newMessages.length - 1;

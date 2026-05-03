@@ -22,7 +22,7 @@ import { Analytics } from "@vercel/analytics/react";
 import { MusicProvider, useMusic } from './MusicContext';
 import { MusicPlayer } from './components/MusicPlayer';
 import { VerseOfTheDayModal } from './components/VerseOfTheDayModal';
-import { getVerseOfTheDay } from './services/verseOfTheDay';
+import { getVerseOfTheDay } from './services/ai';
 import { Scripture } from './types';
 
 import { UserProvider, useUser } from './UserContext';
