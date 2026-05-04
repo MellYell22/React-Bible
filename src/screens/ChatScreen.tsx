@@ -12,9 +12,19 @@ import { useUser } from '../UserContext';
 export default function ChatScreen({ navigation }: any) {
   const { playSong, playbackError } = useMusic();
   const { profile } = useUser();
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'assistant', content: "Hello, I'm David. How can I encourage you today?" }
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  useEffect(() => {
+    const greetings = [
+      "Hello, I'm David. How can I encourage you today?",
+      "Hi, I’m David. What’s on your mind?",
+      "Hey! I’m David. I’m glad you’re here. What would you like to talk about?",
+      "Hello. I'm David. Is there something specific you'd like to explore today?",
+      "Hi there. I'm David. I'm here for support, scripture, or just to chat."
+    ];
+    const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+    setMessages([{ role: 'assistant', content: randomGreeting }]);
+  }, []);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);

@@ -18,26 +18,26 @@ import { WORSHIP_SONGS } from '../constants/songs';
 import { useUser } from '../UserContext';
 
 const GREETINGS_POOL = [
-  "Hey… I can tell something’s on your mind.",
-  "You don’t even have to have the words yet… I’m right here.",
-  "Let’s take this one moment at a time—what’s been weighing on you?",
-  "Talk to me… what kind of day has it been for you?",
-  "You don’t have to carry everything alone right now.",
-  "Hey... it's good to just sit here for a second. What's going on?",
-  "I've been thinking about what's been on your heart lately. You ready to talk?",
-  "I'm right here with you. What's the heaviest thing you're holding today?",
-  "Peace be with you... I'm listening whenever you're ready.",
-  "It's okay to just be still for a moment. What are you feeling?",
-  "Hey... I'm here. What's the latest in your world?",
-  "I can feel there's a lot moving in your spirit today. What's up?",
-  "Just checking in. How's your soul holding up?",
-  "You've been through a lot today, haven't you? Tell me about it.",
-  "Take a deep breath... I'm here. What's weighing on you?",
-  "It's good to hear from you. What's been the hardest part of your week?",
-  "I'm all ears. What's something you've been wanting to say?",
-  "God is in this moment with us. What's on your heart?",
-  "You don't have to explain it all at once. Just start wherever you want.",
-  "Hey. I'm right here. Tell me what's going on inside."
+  "Hey, I’m David. I’m glad you’re here.",
+  "Hey there. What would you like to talk about today?",
+  "I’m here with you. What’s on your mind?",
+  "Hi, I’m David. You can talk to me about anything.",
+  "Hey. Would you like scripture, encouragement, music, or just a conversation?",
+  "Hi! How’s your day going so far?",
+  "Hey. I'm David. What can I do for you today?",
+  "I'm here for whatever you need—scripture, music, or just to talk.",
+  "Hey. I’m glad we could connect. What’s up?",
+  "Hello. I’m David. What’s on your heart today?",
+  "Hey! I'm David. I'm here to listen whenever you're ready.",
+  "Hi there. Is there anything specific you'd like to dive into today?",
+  "Hey! It's good to talk. What's on your mind?",
+  "Hi, I’m David. I’m here for support, scripture, or just to chat.",
+  "Hey. I was hoping we'd talk today. What's going on?",
+  "Hello! I'm David. What can we explore together right now?",
+  "Hey. I'm ready for whatever you want to talk about.",
+  "Hi! I'm David. It's a pleasure to be here with you.",
+  "Hey. What's the latest in your world today?",
+  "Hi there. I'm David. What's your focus for our conversation?"
 ];
 
 export default function VoiceScreen({ route, navigation }: any) {
