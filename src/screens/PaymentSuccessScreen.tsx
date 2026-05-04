@@ -12,27 +12,33 @@ export default function PaymentSuccessScreen({ navigation }: { navigation: any }
 
   useEffect(() => {
     // Start polling for the pro status
+    console.log('[PaymentSuccess] Starting subscription status polling...');
     const interval = setInterval(async () => {
       setAttempts(prev => {
         const next = prev + 1;
-        if (next >= 20) {
+        if (next >= 30) { // Poll for up to 90 seconds
+          console.warn('[PaymentSuccess] Polling timed out after 90 seconds.');
           clearInterval(interval);
           setIsActivating(false);
           return next;
         }
+        console.log(`[PaymentSuccess] Polling attempt ${next}...`);
         return next;
       });
       
       await refreshProfile();
     }, 3000);
 
-    return () => clearInterval(interval);
+    return () => {
+      console.log('[PaymentSuccess] Cleaning up polling interval.');
+      clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
-    console.log(`[PaymentSuccess] Current profile tier: ${profile?.subscription_tier}`);
-    if (profile?.subscription_tier === 'pro' || profile?.subscription_tier === 'owner') {
-      console.log('[PaymentSuccess] Pro status detected! Stopping polling and showing success.');
+    console.log(`[PaymentSuccess] UI Check - Profile: ${profile?.id}, Tier: ${profile?.subscription_tier}, Status: ${profile?.stripe_subscription_status}`);
+    if (profile?.subscription_tier === 'pro' || profile?.subscription_tier === 'owner' || (profile as any)?.subscription_status === 'active') {
+      console.log('[PaymentSuccess] PRO STATUS DETECTED! Unlocking app features.');
       setIsActivating(false);
       
       // Auto-redirect after a small delay to let user see success

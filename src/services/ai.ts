@@ -74,9 +74,9 @@ export interface ChatHistoryMessage {
 
 export const getChatResponse = async (history: ChatHistoryMessage[], responseLength: ResponseLength = 'short'): Promise<string> => {
   const lengthInstruction = {
-    short: "Keep it very brief (1-2 sentences max). Speak like a human friend.",
-    medium: "Short and thoughtful (2-3 sentences max).",
-    long: "A slightly more detailed reflection (3-4 sentences max)."
+    short: "Provide a warm, meaningful response in 1-2 natural sentences. Avoid generic filler or scripted empathy.",
+    medium: "Offer a deeply present and thoughtful reflection in 2-3 sentences. Let the conversation breathe and feel human.",
+    long: "Provide a rich, spiritually grounded reflection in 3-4 sentences. Speak like a wise friend sitting right next to them."
   }[responseLength];
 
   // Map history to OpenAI format (Gemini uses 'model', OpenAI uses 'assistant')
@@ -113,9 +113,9 @@ export const getChatResponseStream = async (
   responseLength: ResponseLength = 'short'
 ): Promise<string> => {
   const lengthInstruction = {
-    short: "Keep it very brief (1-2 sentences max). Speak like a human friend.",
-    medium: "Short and thoughtful (2-3 sentences max).",
-    long: "A slightly more detailed reflection (3-4 sentences max)."
+    short: "Provide a warm, meaningful response in 1-2 natural sentences. Avoid generic filler or scripted empathy.",
+    medium: "Offer a deeply present and thoughtful reflection in 2-3 sentences. Let the conversation breathe and feel human.",
+    long: "Provide a rich, spiritually grounded reflection in 3-4 sentences. Speak like a wise friend sitting right next to them."
   }[responseLength];
 
   const messages = history.map(h => ({

@@ -18,26 +18,26 @@ import { WORSHIP_SONGS } from '../constants/songs';
 import { useUser } from '../UserContext';
 
 const GREETINGS_POOL = [
-  "Hey... I'm here. What's going on?",
-  "I'm listening. What's on your heart today?",
-  "Take your time... I'm right here. What's up?",
-  "Hey. How are you holding up inside?",
-  "I'm here. What's been on your mind lately?",
-  "It's good to hear from you. What are you feeling?",
-  "Peace be with you. What's happening in your world?",
-  "I'm all ears... tell me what's going on.",
-  "You seem like you have something to say. I'm listening.",
-  "Hey. What's been the hardest part of your day?",
-  "I'm right here. What's the best thing that happened today?",
-  "Just checking in... what's up with you?",
-  "God is with us. What's weighing on you today?",
-  "I'm listening. Speak your heart to me.",
-  "It's good to talk... what's moving in your spirit?",
-  "I'm right here. Speak when you're ready.",
-  "Hey. What are you carrying in your heart right now?",
-  "I'm ready whenever you are. What's going on?",
-  "You've got a lot on your soul, don't you?",
-  "I'm here to walk with you. What's on your heart today?"
+  "Hey… I can tell something’s on your mind.",
+  "You don’t even have to have the words yet… I’m right here.",
+  "Let’s take this one moment at a time—what’s been weighing on you?",
+  "Talk to me… what kind of day has it been for you?",
+  "You don’t have to carry everything alone right now.",
+  "Hey... it's good to just sit here for a second. What's going on?",
+  "I've been thinking about what's been on your heart lately. You ready to talk?",
+  "I'm right here with you. What's the heaviest thing you're holding today?",
+  "Peace be with you... I'm listening whenever you're ready.",
+  "It's okay to just be still for a moment. What are you feeling?",
+  "Hey... I'm here. What's the latest in your world?",
+  "I can feel there's a lot moving in your spirit today. What's up?",
+  "Just checking in. How's your soul holding up?",
+  "You've been through a lot today, haven't you? Tell me about it.",
+  "Take a deep breath... I'm here. What's weighing on you?",
+  "It's good to hear from you. What's been the hardest part of your week?",
+  "I'm all ears. What's something you've been wanting to say?",
+  "God is in this moment with us. What's on your heart?",
+  "You don't have to explain it all at once. Just start wherever you want.",
+  "Hey. I'm right here. Tell me what's going on inside."
 ];
 
 export default function VoiceScreen({ route, navigation }: any) {

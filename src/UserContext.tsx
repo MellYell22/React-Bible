@@ -79,17 +79,29 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
   }, [session?.user?.id]);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string, retries = 3) => {
     try {
-      console.log(`[UserContext] Fetching profile for ${userId}...`);
+      console.log(`[UserContext] Fetching profile for ${userId}... (${retries} retries left)`);
       const { data, error } = await supabase!
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       
+      if (!data) {
+        if (retries > 0) {
+          console.log(`[UserContext] Profile not found for ${userId}, retrying in 1.5s...`);
+          setTimeout(() => fetchProfile(userId, retries - 1), 1500);
+          return;
+        }
+        console.error(`[UserContext] Profile not found after all retries for user ${userId}`);
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+
       const profileData = data as Profile;
       console.log(`[UserContext] Profile fetched success. Tier: ${profileData.subscription_tier}`);
       
@@ -100,19 +112,28 @@ export function UserProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('[UserContext] Error fetching profile:', error);
     } finally {
-      setLoading(false);
+      if (retries === 0 || profile) setLoading(false);
     }
   };
 
-  const refreshProfile = async (showLoading = true) => {
+  const refreshProfile = async (showLoading = false) => {
     if (session?.user?.id) {
-      console.log('[UserContext] Manual profile refresh triggered');
+      console.log(`[UserContext] Profile refresh triggered (loading=${showLoading}) for user ${session.user.id}`);
       if (showLoading) setLoading(true);
-      // Refreshing local session data to ensure auth is synced
+      
+      // Refresh session first to ensure we have current metadata/claims if any
       await supabase!.auth.refreshSession();
+      
+      // Fetch latest profile data from DB
       await fetchProfile(session.user.id);
     } else {
-      console.warn('[UserContext] refreshProfile called but no active user ID');
+      console.warn('[UserContext] refreshProfile called but no active session user ID found');
+      // Fallback check: maybe we need to get current user ID manually
+      const { data: { user } } = await supabase!.auth.getUser();
+      if (user) {
+        console.log(`[UserContext] Found user via getUser fallback: ${user.id}`);
+        await fetchProfile(user.id);
+      }
     }
   };
 
