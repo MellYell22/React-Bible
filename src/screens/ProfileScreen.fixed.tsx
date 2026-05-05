@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, TextInput } from 'react-native';
-import { supabase } from '../services/supabase';
-import { Profile } from '../types';
-import { LogOut, CreditCard, Shield, CheckCircle2, AlertCircle, Lock, Star, Bookmark, Trash2, Check, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import { LogOut, CheckCircle2, AlertCircle, Lock, Star, Bookmark, Trash2, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { createCheckoutSession } from '../services/stripe';
 import { OWNER_EMAIL, hasProAccess } from '../utils/tier';
 import { PLANS } from '../constants';
-import { getSavedScriptures, toggleMemorized, deleteSavedScripture, updateScriptureCategory } from '../services/supabase';
+import { supabase, getSavedScriptures, toggleMemorized, deleteSavedScripture, updateScriptureCategory } from '../services/supabase';
 import { SavedScripture } from '../types';
 
 import { useUser } from '../UserContext';
@@ -21,17 +19,17 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isActivating, setIsActivating] = useState(false);
   const hasHandledRedirect = useRef(false);
-  const pollingInterval = useRef<NodeJS.Timeout | null>(null);
+  const pollingInterval = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
-  const pricingRef = useRef<View>(null);
+  const [pricingY, setPricingY] = useState<number | null>(null);
 
   useEffect(() => {
-      return () => {
-        if (pollingInterval.current) {
-          clearTimeout(pollingInterval.current);
-          pollingInterval.current = null;
-        }
-      };
+    return () => {
+      if (pollingInterval.current) {
+        clearTimeout(pollingInterval.current);
+        pollingInterval.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -47,92 +45,102 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
   }, [isActivating, profile?.subscription_tier]);
 
   useEffect(() => {
-    if (route?.params?.showPricing && !showSavedScriptures) {
-      setTimeout(() => {
-        pricingRef.current?.measureLayout(
-          (scrollViewRef.current as any).getInnerViewNode(),
-          (x, y) => {
-            scrollViewRef.current?.scrollTo({ y: y - 20, animated: true });
-          },
-          () => {}
-        );
-      }, 500);
+    if (route?.params?.showPricing && !showSavedScriptures && pricingY !== null) {
+      const timer = setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: Math.max(pricingY - 20, 0), animated: true });
+      }, 300);
+
+      return () => clearTimeout(timer);
     }
-  }, [route?.params?.showPricing, showSavedScriptures]);
+  }, [route?.params?.showPricing, showSavedScriptures, pricingY]);
 
   useEffect(() => {
-    // Return early if we've already handled this redirect in this component instance
     if (hasHandledRedirect.current) return;
 
-    // Check for URL parameters (success/canceled)
-    const urlParams = new URLSearchParams(window.location.search);
-    const success = urlParams.get('success') === 'true' || route?.params?.success || route?.params?.paymentSuccess;
-    const canceled = urlParams.get('canceled') === 'true' || route?.params?.canceled;
-    const showPricing = route?.params?.showPricing;
+    const handleStripeRedirect = async () => {
+      try {
+        const hasWindow = typeof window !== 'undefined';
+        const urlParams = hasWindow ? new URLSearchParams(window.location.search) : null;
 
-    if (success || canceled) {
-      console.log(`[StripeDebug] Handling Stripe redirect. Success: ${!!success}, Canceled: ${!!canceled}`);
-      
-      // Mark as handled to prevent re-triggering within this lifecycle
-      hasHandledRedirect.current = true;
+        const success =
+          urlParams?.get('success') === 'true' ||
+          route?.params?.success === true ||
+          route?.params?.paymentSuccess === true;
 
-      // Update state based on parameters
-      if (success) {
-        if (profile?.subscription_tier !== 'pro') {
-          setIsActivating(true);
-          setStatusMessage({ text: 'Payment received! Activating your Pro plan...', type: 'info' });
-          
-          // Start polling for subscription update
-          let attempts = 0;
-          const maxAttempts = 20; // 20 attempts * 3 seconds = 60 seconds
-          
-          const checkStatus = async () => {
-            attempts++;
-            console.log(`[StripeDebug] Polling subscription status (Attempt ${attempts}/${maxAttempts})...`);
-            
-            const latestProfile = await refreshProfile(false);
-            
-            if (latestProfile?.subscription_tier === 'pro' || latestProfile?.subscription_tier === 'owner') {
-              console.log('[StripeDebug] PRO STATUS CONFIRMED via manual fetch! Unlocking app features.');
-              setIsActivating(false);
-              setStatusMessage({ text: 'Activation complete! Welcome to the Pro family.', type: 'success' });
-              return; // Stop polling
-            }
+        const canceled =
+          urlParams?.get('canceled') === 'true' ||
+          route?.params?.canceled === true;
 
-            if (attempts >= maxAttempts) {
-              setIsActivating(false);
-              setStatusMessage({ 
-                text: 'Activation is taking a bit longer than expected. It will update automatically in a few moments.', 
-                type: 'info' 
-              });
-              return; // Stop polling
-            }
+        if (!success && !canceled) return;
 
-            // Schedule next attempt
-            pollingInterval.current = setTimeout(checkStatus, 2000);
-          };
+        console.log(`[StripeDebug] Handling Stripe redirect. Success: ${!!success}, Canceled: ${!!canceled}`);
+        hasHandledRedirect.current = true;
 
-          // Start the polling chain
-          checkStatus();
-        } else {
-          setStatusMessage({ text: 'Subscription updated successfully! Welcome to the Pro family.', type: 'success' });
+        if (success) {
+          if (profile?.subscription_tier === 'pro' || profile?.subscription_tier === 'owner') {
+            setStatusMessage({ text: 'Subscription updated successfully! Welcome to the Pro family.', type: 'success' });
+          } else {
+            setIsActivating(true);
+            setStatusMessage({ text: 'Payment received! Activating your Pro plan...', type: 'info' });
+
+            let attempts = 0;
+            const maxAttempts = 20;
+
+            const checkStatus = async () => {
+              attempts += 1;
+              console.log(`[StripeDebug] Polling subscription status (Attempt ${attempts}/${maxAttempts})...`);
+
+              try {
+                const latestProfile = await refreshProfile(false);
+                const latestTier = latestProfile?.subscription_tier;
+
+                if (latestTier === 'pro' || latestTier === 'owner') {
+                  console.log('[StripeDebug] PRO STATUS CONFIRMED via manual fetch! Unlocking app features.');
+                  setIsActivating(false);
+                  setStatusMessage({ text: 'Activation complete! Welcome to the Pro family.', type: 'success' });
+                  return;
+                }
+              } catch (error: any) {
+                console.error('[StripeDebug] Subscription polling failed:', error?.message || error);
+              }
+
+              if (attempts >= maxAttempts) {
+                setIsActivating(false);
+                setStatusMessage({
+                  text: 'Activation is taking a bit longer than expected. It will update automatically in a few moments.',
+                  type: 'info'
+                });
+                return;
+              }
+
+              pollingInterval.current = setTimeout(checkStatus, 2000);
+            };
+
+            await checkStatus();
+          }
+        } else if (canceled) {
+          setStatusMessage({ text: 'Checkout canceled. No changes were made.', type: 'info' });
         }
-      } else if (canceled) {
-        setStatusMessage({ text: 'Checkout canceled. No changes were made.', type: 'info' });
-      }
 
-      // 1. Clear Params from React Navigation state if possible
-      if (navigation && navigation.setParams) {
-        navigation.setParams({ success: undefined, canceled: undefined });
-      }
+        if (navigation?.setParams) {
+          navigation.setParams({ success: undefined, canceled: undefined, paymentSuccess: undefined });
+        }
 
-      // 2. Clear params from Browser URL bar without reload
-      if (typeof window !== 'undefined' && window.history) {
-        const cleanUrl = window.location.pathname;
-        window.history.replaceState({}, '', cleanUrl);
+        if (hasWindow && window.history) {
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      } catch (error: any) {
+        console.error('[StripeDebug] Redirect handling crashed safely:', error?.message || error);
+        setIsActivating(false);
+        setStatusMessage({
+          text: 'We could not verify checkout automatically. Refresh your profile in a moment.',
+          type: 'info'
+        });
       }
-    }
-  }, [route?.params, refreshProfile, navigation]);
+    };
+
+    handleStripeRedirect();
+  }, [route?.params, refreshProfile, navigation, profile?.subscription_tier]);
 
   const handleLogout = async () => {
     await signOut();
@@ -172,8 +180,8 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
       'Are you sure you want to remove this verse from your list?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
+        {
+          text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
@@ -192,11 +200,11 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
     if (!profile) return;
     setLoading(true);
     setStatusMessage(null);
-    
+
     const plan = Object.values(PLANS).find(p => p.id === tierId);
-    
+
     console.log(`[StripeDebug] Upgrade button clicked: ${tierId}`);
-    
+
     try {
       if (!plan || !plan.priceId) {
         throw new Error(`Price ID for ${tierId} plan is not configured.`);
@@ -218,7 +226,7 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
         .from('profiles')
         .update({ [field]: value })
         .eq('id', profile.id);
-      
+
       if (error) throw error;
       setStatusMessage({ text: 'Preferences updated!', type: 'success' });
     } catch (error: any) {
@@ -229,9 +237,9 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
   };
 
   return (
-    <ScrollView 
+    <ScrollView
       ref={scrollViewRef}
-      style={styles.container} 
+      style={styles.container}
       contentContainerStyle={styles.content}
     >
       <View style={styles.header}>
@@ -253,14 +261,14 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
       </View>
 
       <View style={styles.tabContainer}>
-        <TouchableOpacity 
-          style={[styles.tab, !showSavedScriptures && styles.tabActive]} 
+        <TouchableOpacity
+          style={[styles.tab, !showSavedScriptures && styles.tabActive]}
           onPress={() => setShowSavedScriptures(false)}
         >
           <Text style={[styles.tabText, !showSavedScriptures && styles.tabTextActive]}>SETTINGS</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, showSavedScriptures && styles.tabActive]} 
+        <TouchableOpacity
+          style={[styles.tab, showSavedScriptures && styles.tabActive]}
           onPress={() => setShowSavedScriptures(true)}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -290,7 +298,7 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
           ) : (
             savedScriptures.map((item) => (
               <View key={item.id} style={[styles.savedCard, item.is_memorized && styles.memorizedCard]}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.savedCardHeader}
                   onPress={() => setExpandedId(expandedId === item.id ? null : item.id)}
                 >
@@ -307,10 +315,10 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
                 {expandedId === item.id && (
                   <View style={styles.savedCardContent}>
                     <Text style={styles.savedText}>"{item.text}"</Text>
-                    
+
                     <View style={styles.categoryInputRow}>
                       <Text style={styles.categoryLabel}>CATEGORY</Text>
-                      <TextInput 
+                      <TextInput
                         style={styles.categoryInput}
                         value={item.category || ''}
                         onChangeText={(text) => {
@@ -321,9 +329,9 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
                         placeholderTextColor="rgba(212, 175, 55, 0.3)"
                       />
                     </View>
-                    
+
                     <View style={styles.savedActions}>
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         style={[styles.actionBtn, item.is_memorized && styles.memorizedBtn]}
                         onPress={() => handleToggleMemorized(item)}
                       >
@@ -332,8 +340,8 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
                           {item.is_memorized ? 'MEMORIZED' : 'MARK AS MEMORIZED'}
                         </Text>
                       </TouchableOpacity>
-                      
-                      <TouchableOpacity 
+
+                      <TouchableOpacity
                         style={[styles.actionBtn, styles.deleteBtn]}
                         onPress={() => handleDeleteSaved(item.id)}
                       >
@@ -350,213 +358,216 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
       ) : (
         <>
           {statusMessage && (
-        <View style={[styles.statusBanner, styles[`${statusMessage.type}Banner`]]}>
-          {statusMessage.type === 'error' ? <AlertCircle size={16} color="#ef4444" /> : <CheckCircle2 size={16} color={statusMessage.type === 'success' ? '#10B981' : '#d4af37'} />}
-          <Text style={[styles.statusText, styles[`${statusMessage.type}Text`]]}>{statusMessage.text}</Text>
-        </View>
-      )}
-
-      <Text style={styles.sectionTitle}>AI Preferences</Text>
-      <View style={styles.settingsCard}>
-        <Text style={styles.settingsLabel}>Response Length</Text>
-        <View style={styles.optionsRow}>
-          {['short', 'medium', 'long'].map((length) => {
-            const isPro = hasProAccess(profile);
-            const isDisabled = length !== 'short' && !isPro;
-            const isSelected = profile?.preferred_response_length === length;
-
-            return (
-              <TouchableOpacity
-                key={length}
-                style={[
-                  styles.optionButton,
-                  isSelected && styles.optionButtonActive,
-                  isDisabled && styles.optionButtonDisabled
-                ]}
-                onPress={() => !isDisabled && updatePreference('preferred_response_length', length)}
-                disabled={loading}
-              >
-                <Text style={[
-                  styles.optionText,
-                  isSelected && styles.optionTextActive,
-                  isDisabled && styles.optionTextDisabled
-                ]}>
-                  {length.toUpperCase()}
-                </Text>
-                {isDisabled && <Lock size={10} color="rgba(212, 175, 55, 0.3)" style={{ marginTop: 2 }} />}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        {!hasProAccess(profile) && (
-          <Text style={styles.settingsHint}>Upgrade to Pro to unlock medium and long responses.</Text>
-        )}
-
-        <View style={[styles.divider, { marginVertical: 20 }]} />
-
-        <Text style={styles.settingsLabel}>Verse of the Day</Text>
-        <View style={styles.toggleRow}>
-          <Text style={styles.toggleLabel}>Daily Notifications</Text>
-          <TouchableOpacity
-            style={[styles.toggleSwitch, profile?.verse_of_the_day_enabled && styles.toggleSwitchActive]}
-            onPress={() => updatePreference('verse_of_the_day_enabled', !profile?.verse_of_the_day_enabled)}
-            disabled={loading}
-          >
-            <View style={[styles.toggleDot, profile?.verse_of_the_day_enabled && styles.toggleDotActive]} />
-          </TouchableOpacity>
-        </View>
-
-        {profile?.verse_of_the_day_enabled && (
-          <View style={styles.timePickerContainer}>
-            <Text style={styles.timeLabel}>Notification Time</Text>
-            <View style={styles.timeInputRow}>
-              <TextInput
-                style={styles.timeInput}
-                value={profile?.verse_of_the_day_time || '08:00'}
-                onChangeText={(text) => updatePreference('verse_of_the_day_time', text)}
-                placeholder="HH:mm"
-                placeholderTextColor="rgba(212, 175, 55, 0.3)"
-                maxLength={5}
-              />
-              <Text style={styles.timeHint}>(24h format, e.g., 08:00)</Text>
+            <View style={[styles.statusBanner, styles[`${statusMessage.type}Banner`]]}>
+              {statusMessage.type === 'error' ? <AlertCircle size={16} color="#ef4444" /> : <CheckCircle2 size={16} color={statusMessage.type === 'success' ? '#10B981' : '#d4af37'} />}
+              <Text style={[styles.statusText, styles[`${statusMessage.type}Text`]]}>{statusMessage.text}</Text>
             </View>
-          </View>
-        )}
-      </View>
+          )}
 
-      <Text style={[styles.sectionTitle, { paddingLeft: 44 }]}>Your Benefits</Text>
-      <View style={[styles.benefitsSummary, { paddingLeft: 16 }]}>
-        <View style={styles.benefitItem}>
-          <CheckCircle2 size={16} color="#10B981" />
-          <Text style={styles.benefitText}>
-            {profile?.subscription_tier === 'pro' ? 'Unlimited AI Chat with David' : '3 Mood Searches / Day'}
-          </Text>
-        </View>
-        <View style={styles.benefitItem}>
-          <CheckCircle2 size={16} color="#10B981" />
-          <Text style={styles.benefitText}>
-            {profile?.subscription_tier === 'pro' ? 'Live Voice Chat with David' : 'Standard AI Reflections'}
-          </Text>
-        </View>
-        <View style={styles.benefitItem}>
-          <CheckCircle2 size={16} color="#10B981" />
-          <Text style={styles.benefitText}>
-            {profile?.subscription_tier === 'pro' ? 'Mood-based Music and Reflections' : 'Daily Verse of the Day'}
-          </Text>
-        </View>
-        {profile?.subscription_tier === 'pro' && (
-          <View style={styles.benefitItem}>
-            <CheckCircle2 size={16} color="#10B981" />
-            <Text style={styles.benefitText}>Deeper Scripture Insights & Ad-free</Text>
-          </View>
-        )}
-      </View>
+          <Text style={styles.sectionTitle}>AI Preferences</Text>
+          <View style={styles.settingsCard}>
+            <Text style={styles.settingsLabel}>Response Length</Text>
+            <View style={styles.optionsRow}>
+              {['short', 'medium', 'long'].map((length) => {
+                const isPro = hasProAccess(profile);
+                const isDisabled = length !== 'short' && !isPro;
+                const isSelected = profile?.preferred_response_length === length;
 
-      <Text style={styles.sectionTitle} onLayout={(e) => {
-        // Fallback for measurement if needed
-      }} ref={pricingRef}>Subscription Plans</Text>
-      
-      {Object.values(PLANS).map((plan) => {
-        const currentTier = profile?.subscription_tier || 'free';
-        const isOwner = profile?.email === OWNER_EMAIL;
-        const isCurrentPlan = currentTier === plan.id;
-        
-        // Tier hierarchy: free < pro < owner
-        const tierOrder = ['free', 'pro', 'owner'];
-        const currentTierIndex = tierOrder.indexOf(isOwner ? 'owner' : currentTier);
-        const planTierIndex = tierOrder.indexOf(plan.id);
-        
-        const isIncluded = currentTierIndex >= planTierIndex;
-        const canUpgrade = !isIncluded && plan.id !== 'free';
-        const isDisabled = loading || isIncluded || plan.id === 'free';
-
-        return (
-          <View key={plan.id} style={[
-            styles.planCard, 
-            plan.id === 'pro' && styles.proCard,
-            isCurrentPlan && styles.currentPlanCard
-          ]}>
-            {plan.id === 'pro' && (
-              <View style={styles.proBadge}>
-                <Star size={10} color="#0b1e3d" fill="#0b1e3d" />
-                <Text style={styles.proBadgeText}>BEST VALUE</Text>
-              </View>
-            )}
-            
-            {isCurrentPlan && (
-              <View style={styles.currentBadge}>
-                <CheckCircle2 size={10} color="#fff" />
-                <Text style={styles.currentBadgeText}>ACTIVE</Text>
-              </View>
-            )}
-
-            <View style={styles.planHeader}>
-              <View>
-                <Text style={[styles.planName, plan.id === 'pro' && { color: '#fff' }]}>{plan.name}</Text>
-                <Text style={[styles.planInterval, plan.id === 'pro' && { color: 'rgba(255,255,255,0.6)' }]}>
-                  {plan.id === 'free' ? 'Basic Access' : 'Full Experience'}
-                </Text>
-              </View>
-              <View style={styles.priceContainer}>
-                <Text style={[styles.planPrice, plan.id === 'pro' && { color: '#fff' }]}>{plan.price}</Text>
-                <Text style={[styles.planIntervalLabel, plan.id === 'pro' && { color: 'rgba(255,255,255,0.6)' }]}>/{plan.interval}</Text>
-              </View>
-            </View>
-
-            <View style={styles.featureList}>
-              {plan.features.map((feature, idx) => {
-                // For the current plan or higher, show checkmarks. 
-                // For plans higher than current, show what they *will* get.
                 return (
-                  <View key={idx} style={styles.featureItem}>
-                    <CheckCircle2 color={plan.id === 'pro' ? "#fff" : "#10B981"} size={14} />
-                    <Text style={[styles.featureText, plan.id === 'pro' && { color: '#fff' }]}>{feature}</Text>
-                  </View>
+                  <TouchableOpacity
+                    key={length}
+                    style={[
+                      styles.optionButton,
+                      isSelected && styles.optionButtonActive,
+                      isDisabled && styles.optionButtonDisabled
+                    ]}
+                    onPress={() => !isDisabled && updatePreference('preferred_response_length', length)}
+                    disabled={loading}
+                  >
+                    <Text style={[
+                      styles.optionText,
+                      isSelected && styles.optionTextActive,
+                      isDisabled && styles.optionTextDisabled
+                    ]}>
+                      {length.toUpperCase()}
+                    </Text>
+                    {isDisabled && <Lock size={10} color="rgba(212, 175, 55, 0.3)" style={{ marginTop: 2 }} />}
+                  </TouchableOpacity>
                 );
               })}
             </View>
+            {!hasProAccess(profile) && (
+              <Text style={styles.settingsHint}>Upgrade to Pro to unlock medium and long responses.</Text>
+            )}
 
-            {canUpgrade ? (
-              <TouchableOpacity 
-                style={[
-                  styles.planButton, 
-                  plan.id === 'pro' && styles.proButton
-                ]} 
-                onPress={() => handleUpgrade(plan.id)}
+            <View style={[styles.divider, { marginVertical: 20 }]} />
+
+            <Text style={styles.settingsLabel}>Verse of the Day</Text>
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>Daily Notifications</Text>
+              <TouchableOpacity
+                style={[styles.toggleSwitch, profile?.verse_of_the_day_enabled && styles.toggleSwitchActive]}
+                onPress={() => updatePreference('verse_of_the_day_enabled', !profile?.verse_of_the_day_enabled)}
                 disabled={loading}
               >
-                {loading ? (
-                  <ActivityIndicator size="small" color={plan.id === 'pro' ? '#fff' : '#d4af37'} />
-                ) : (
-                  <Text style={[
-                    styles.planButtonText, 
-                    plan.id === 'pro' && { color: '#0b1e3d' }
-                  ]}>
-                    Upgrade to {plan.name.split(' ')[0]}
-                  </Text>
-                )}
+                <View style={[styles.toggleDot, profile?.verse_of_the_day_enabled && styles.toggleDotActive]} />
               </TouchableOpacity>
-            ) : (
-              <View style={[
-                styles.planButton, 
-                styles.activePlanButton,
-                plan.id === 'pro' && styles.activeProButton
-              ]}>
-                <Text style={[
-                  styles.planButtonText,
-                  plan.id === 'pro' && { color: '#fff' }
-                ]}>
-                  {isCurrentPlan ? 'Current Plan' : 'Included'}
-                </Text>
+            </View>
+
+            {profile?.verse_of_the_day_enabled && (
+              <View style={styles.timePickerContainer}>
+                <Text style={styles.timeLabel}>Notification Time</Text>
+                <View style={styles.timeInputRow}>
+                  <TextInput
+                    style={styles.timeInput}
+                    value={profile?.verse_of_the_day_time || '08:00'}
+                    onChangeText={(text) => updatePreference('verse_of_the_day_time', text)}
+                    placeholder="HH:mm"
+                    placeholderTextColor="rgba(212, 175, 55, 0.3)"
+                    maxLength={5}
+                  />
+                  <Text style={styles.timeHint}>(24h format, e.g., 08:00)</Text>
+                </View>
               </View>
             )}
           </View>
-        );
-      })}
-    </>
-  )}
 
-  <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={[styles.sectionTitle, { paddingLeft: 44 }]}>Your Benefits</Text>
+          <View style={[styles.benefitsSummary, { paddingLeft: 16 }]}>
+            <View style={styles.benefitItem}>
+              <CheckCircle2 size={16} color="#10B981" />
+              <Text style={styles.benefitText}>
+                {profile?.subscription_tier === 'pro' ? 'Unlimited AI Chat with David' : '3 Mood Searches / Day'}
+              </Text>
+            </View>
+            <View style={styles.benefitItem}>
+              <CheckCircle2 size={16} color="#10B981" />
+              <Text style={styles.benefitText}>
+                {profile?.subscription_tier === 'pro' ? 'Live Voice Chat with David' : 'Standard AI Reflections'}
+              </Text>
+            </View>
+            <View style={styles.benefitItem}>
+              <CheckCircle2 size={16} color="#10B981" />
+              <Text style={styles.benefitText}>
+                {profile?.subscription_tier === 'pro' ? 'Mood-based Music and Reflections' : 'Daily Verse of the Day'}
+              </Text>
+            </View>
+            {profile?.subscription_tier === 'pro' && (
+              <View style={styles.benefitItem}>
+                <CheckCircle2 size={16} color="#10B981" />
+                <Text style={styles.benefitText}>Deeper Scripture Insights & Ad-free</Text>
+              </View>
+            )}
+          </View>
+
+          <Text
+            style={styles.sectionTitle}
+            onLayout={(event) => setPricingY(event.nativeEvent.layout.y)}
+          >
+            Subscription Plans
+          </Text>
+
+          {Object.values(PLANS).map((plan) => {
+            const currentTier = profile?.subscription_tier || 'free';
+            const isOwner = profile?.email === OWNER_EMAIL;
+            const isCurrentPlan = currentTier === plan.id;
+
+            // Tier hierarchy: free < pro < owner
+            const tierOrder = ['free', 'pro', 'owner'];
+            const currentTierIndex = tierOrder.indexOf(isOwner ? 'owner' : currentTier);
+            const planTierIndex = tierOrder.indexOf(plan.id);
+
+            const isIncluded = currentTierIndex >= planTierIndex;
+            const canUpgrade = !isIncluded && plan.id !== 'free';
+            const isDisabled = loading || isIncluded || plan.id === 'free';
+
+            return (
+              <View key={plan.id} style={[
+                styles.planCard,
+                plan.id === 'pro' && styles.proCard,
+                isCurrentPlan && styles.currentPlanCard
+              ]}>
+                {plan.id === 'pro' && (
+                  <View style={styles.proBadge}>
+                    <Star size={10} color="#0b1e3d" fill="#0b1e3d" />
+                    <Text style={styles.proBadgeText}>BEST VALUE</Text>
+                  </View>
+                )}
+
+                {isCurrentPlan && (
+                  <View style={styles.currentBadge}>
+                    <CheckCircle2 size={10} color="#fff" />
+                    <Text style={styles.currentBadgeText}>ACTIVE</Text>
+                  </View>
+                )}
+
+                <View style={styles.planHeader}>
+                  <View>
+                    <Text style={[styles.planName, plan.id === 'pro' && { color: '#fff' }]}>{plan.name}</Text>
+                    <Text style={[styles.planInterval, plan.id === 'pro' && { color: 'rgba(255,255,255,0.6)' }]}>
+                      {plan.id === 'free' ? 'Basic Access' : 'Full Experience'}
+                    </Text>
+                  </View>
+                  <View style={styles.priceContainer}>
+                    <Text style={[styles.planPrice, plan.id === 'pro' && { color: '#fff' }]}>{plan.price}</Text>
+                    <Text style={[styles.planIntervalLabel, plan.id === 'pro' && { color: 'rgba(255,255,255,0.6)' }]}>/{plan.interval}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.featureList}>
+                  {plan.features.map((feature, idx) => {
+                    // For the current plan or higher, show checkmarks. 
+                    // For plans higher than current, show what they *will* get.
+                    return (
+                      <View key={idx} style={styles.featureItem}>
+                        <CheckCircle2 color={plan.id === 'pro' ? "#fff" : "#10B981"} size={14} />
+                        <Text style={[styles.featureText, plan.id === 'pro' && { color: '#fff' }]}>{feature}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                {canUpgrade ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.planButton,
+                      plan.id === 'pro' && styles.proButton
+                    ]}
+                    onPress={() => handleUpgrade(plan.id)}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <ActivityIndicator size="small" color={plan.id === 'pro' ? '#fff' : '#d4af37'} />
+                    ) : (
+                      <Text style={[
+                        styles.planButtonText,
+                        plan.id === 'pro' && { color: '#0b1e3d' }
+                      ]}>
+                        Upgrade to {plan.name.split(' ')[0]}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <View style={[
+                    styles.planButton,
+                    styles.activePlanButton,
+                    plan.id === 'pro' && styles.activeProButton
+                  ]}>
+                    <Text style={[
+                      styles.planButtonText,
+                      plan.id === 'pro' && { color: '#fff' }
+                    ]}>
+                      {isCurrentPlan ? 'Current Plan' : 'Included'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </>
+      )}
+
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <LogOut color="#EF4444" size={20} />
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>

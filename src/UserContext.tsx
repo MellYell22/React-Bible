@@ -1,5 +1,3 @@
-
-UserContext.tsx
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from './services/supabase';
 import { Profile } from './types';
@@ -25,7 +23,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const timer = setTimeout(() => {
         console.warn('[UserContext] Loading safety timeout reached (12s). Forcing app to initialize.');
         setLoading(false);
-      }, 12000);
+      }, 12000); 
       return () => clearTimeout(timer);
     }
   }, [loading]);
@@ -95,7 +93,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const fetchProfile = async (userId: string, retries = 3): Promise<Profile | null> => {
     try {
       console.log(`[UserContext] Fetching profile for ${userId}... (${retries} retries left)`);
-
+      
       // Force bypass cache for immediate read after webhook
       const { data, error } = await supabase!
         .from('profiles')
@@ -107,7 +105,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         console.error(`[UserContext] Supabase profile fetch error:`, error);
         throw error;
       };
-
+      
       if (!data) {
         if (retries > 0) {
           console.log(`[UserContext] Profile not found for ${userId}, retrying in 2s...`);
@@ -122,15 +120,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       const profileData = data as Profile;
       console.log(`[UserContext] Profile fetched success. Tier: ${profileData.subscription_tier}`);
-
+      
       if (profileData && !profileData.preferred_response_length) {
         profileData.preferred_response_length = 'medium';
       }
-
+      
       setProfile(profileData);
       setLoading(false);
       return profileData;
-
+      
     } catch (error) {
       console.error('[UserContext] Exception in fetchProfile:', error);
       if (retries === 0) {
@@ -147,10 +145,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (session?.user?.id) {
       console.log(`[UserContext] Profile refresh triggered (loading=${showLoading}) for user ${session.user.id}`);
       if (showLoading) setLoading(true);
-
+      
       // Refresh session first to ensure we have current metadata/claims if any
       await supabase!.auth.refreshSession();
-
+      
       // Fetch latest profile data from DB and return it directly
       return await fetchProfile(session.user.id, 0); // No retries on manual refresh to avoid blocking
     } else {
