@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { supabase } from '../services/supabase';
@@ -93,8 +92,7 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
                   .from('profiles')
                   .update({ 
                     subscription_tier: 'pro',
-                    subscription_status: 'active',
-                    plan: 'pro'
+                    subscription_status: 'active'
                   })
                   .eq('id', profile.id);
                   
