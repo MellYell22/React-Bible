@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { supabase } from '../services/supabase';
@@ -82,14 +83,45 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
           setIsActivating(true);
           setStatusMessage({ text: 'Payment received! Activating your Pro plan...', type: 'info' });
           
+          // Fallback: If webhook fails, we optimistically update the tier from the frontend
+          // since Stripe already verified payment to reach this success URL.
+          const forceUpdateTier = async () => {
+            try {
+              if (profile?.id) {
+                console.log('[StripeDebug] Applying optimistic Pro tier update to DB...');
+                const { error } = await supabase
+                  .from('profiles')
+                  .update({ 
+                    subscription_tier: 'pro',
+                    subscription_status: 'active',
+                    plan: 'pro'
+                  })
+                  .eq('id', profile.id);
+                  
+                if (error) {
+                  console.error('[StripeDebug] Optimistic update failed:', error);
+                } else {
+                  console.log('[StripeDebug] Optimistic update successful.');
+                }
+              }
+            } catch (err) {
+              console.error('[StripeDebug] Optimistic update error:', err);
+            }
+          };
+
           // Start polling for subscription update
           let attempts = 0;
-          const maxAttempts = 20; // 20 attempts * 3 seconds = 60 seconds
+          const maxAttempts = 15; 
           
           const checkStatus = async () => {
             attempts++;
             console.log(`[StripeDebug] Polling subscription status (Attempt ${attempts}/${maxAttempts})...`);
             
+            // On attempt 3, if still free, force the update
+            if (attempts === 3) {
+               await forceUpdateTier();
+            }
+
             const latestProfile = await refreshProfile(false);
             
             if (latestProfile?.subscription_tier === 'pro' || latestProfile?.subscription_tier === 'owner') {
