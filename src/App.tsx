@@ -152,7 +152,7 @@ function AppContent() {
     return (
       <>
         <Analytics />
-        <OnboardingScreen onComplete={refreshProfile} />
+        <OnboardingScreen onComplete={() => { refreshProfile(); }} />
       </>
     );
   }
