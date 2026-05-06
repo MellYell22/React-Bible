@@ -458,9 +458,10 @@ app.post("/api/speech", async (req, res) => {
       throw new Error("ElevenLabs API Key is not configured.");
     }
 
-    // Using a calm, natural male voice ID (Adam)
-    const VOICE_ID = "pNInz6obpgDQGcFmaJcg"; 
-    const url = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`;
+    // Use custom David voice ID with env var fallback
+    const defaultVoiceId = '6j5m6aQo2Q3NyLs6PYOz'; // Custom David voice
+    const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || process.env.ELEVEN_LABS_VOICE_ID || defaultVoiceId;
+    const url = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}?optimize_streaming_latency=3`;
 
     const response = await fetch(url, {
       method: "POST",
@@ -471,10 +472,12 @@ app.post("/api/speech", async (req, res) => {
       },
       body: JSON.stringify({
         text: text,
-        model_id: "eleven_monolingual_v1",
+        model_id: "eleven_turbo_v2_5",
         voice_settings: {
-          stability: 0.5,
+          stability: 0.4,
           similarity_boost: 0.75,
+          style: 0.1,
+          use_speaker_boost: true,
         },
       }),
     });

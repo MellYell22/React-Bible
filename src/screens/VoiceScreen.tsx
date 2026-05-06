@@ -63,6 +63,9 @@ export default function VoiceScreen({ route, navigation }: any) {
   const recognitionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const isConnectedRef = useRef(false);
+  const isDavidSpeakingRef = useRef(false);
 
   const addLog = (msg: string) => {
     console.log(`[VoiceDebug] ${msg}`);
@@ -133,6 +136,7 @@ export default function VoiceScreen({ route, navigation }: any) {
     addLog("Starting David voice session...");
     
     try {
+      isConnectedRef.current = true;
       setIsConnected(true);
       setIsConnecting(false);
       
@@ -184,34 +188,63 @@ export default function VoiceScreen({ route, navigation }: any) {
   };
 
   const speakMessage = async (text: string) => {
+    isDavidSpeakingRef.current = true;
     setIsDavidSpeaking(true);
+    // Stop any currently playing audio
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
     try {
       const audioUrl = await generateSpeech(text);
       if (audioUrl) {
         const audio = new Audio(audioUrl);
+        currentAudioRef.current = audio;
         audio.onended = () => {
+          isDavidSpeakingRef.current = false;
           setIsDavidSpeaking(false);
-          setIsListening(false);
           URL.revokeObjectURL(audioUrl); // Clean up memory
+          currentAudioRef.current = null;
+          // Restart listening after David finishes speaking
+          if (isConnectedRef.current) {
+            setTimeout(() => startListening(), 300);
+          }
         };
-        audio.onerror = () => {
+        audio.onerror = (e) => {
+          console.error('[VoiceScreen] Audio playback error:', e);
+          isDavidSpeakingRef.current = false;
           setIsDavidSpeaking(false);
+          currentAudioRef.current = null;
           setError("David's voice encountered a playback error.");
+          // Still restart listening even on error
+          if (isConnectedRef.current) {
+            setTimeout(() => startListening(), 300);
+          }
         };
         await audio.play();
       } else {
+        isDavidSpeakingRef.current = false;
         setIsDavidSpeaking(false);
         setError("David is having trouble speaking right now.");
+        // Restart listening even if speech generation failed
+        if (isConnectedRef.current) {
+          setTimeout(() => startListening(), 300);
+        }
       }
     } catch (error) {
       console.error("Speech error:", error);
+      isDavidSpeakingRef.current = false;
       setIsDavidSpeaking(false);
       setError("David's voice encountered an error.");
+      // Restart listening even on exception
+      if (isConnectedRef.current) {
+        setTimeout(() => startListening(), 300);
+      }
     }
   };
 
   const startListening = () => {
-    if (isDavidSpeaking || !isConnected) return;
+    if (isDavidSpeakingRef.current || !isConnectedRef.current) return;
     
     // @ts-ignore
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -261,6 +294,12 @@ export default function VoiceScreen({ route, navigation }: any) {
     if (currentSourceRef.current) {
       try { currentSourceRef.current.stop(); } catch(e) {}
     }
+    if (currentAudioRef.current) {
+      try { currentAudioRef.current.pause(); } catch(e) {}
+      currentAudioRef.current = null;
+    }
+    isConnectedRef.current = false;
+    isDavidSpeakingRef.current = false;
     setIsConnected(false);
     setIsListening(false);
     setIsDavidSpeaking(false);
