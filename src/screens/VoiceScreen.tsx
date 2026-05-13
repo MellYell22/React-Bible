@@ -533,9 +533,9 @@ export default function VoiceScreen({ route, navigation }: any) {
               }}
               style={{
                 position: 'absolute',
-                width: 200,
-                height: 200,
-                borderRadius: 100,
+                width: 140,
+                height: 140,
+                borderRadius: 70,
                 backgroundColor: 'rgba(212, 175, 55, 0.4)',
                 zIndex: 1,
               }}
@@ -744,16 +744,16 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   visualizerContainer: {
-    width: 200,
-    height: 200,
+    width: 140,
+    height: 140,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 30,
   },
   mainCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: '#0b1e3d',
     justifyContent: 'center',
     alignItems: 'center',
