@@ -62,9 +62,9 @@ export default function AuthScreen() {
 
         if (data.user) {
           await supabase.from('profiles').insert([
-            { 
-              id: data.user.id, 
-              email: data.user.email, 
+            {
+              id: data.user.id,
+              email: data.user.email,
               subscription_tier: 'free',
               has_completed_onboarding: false,
               preferred_translation: preferredTranslation
@@ -118,19 +118,19 @@ export default function AuthScreen() {
 
         {/* Translation Selector - Top Right */}
         <View style={styles.translationContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.translationSelector}
             onPress={() => setShowTranslations(!showTranslations)}
           >
             <Text style={styles.translationLabel}>NIV</Text>
             <Globe size={12} color="#d4af37" />
           </TouchableOpacity>
-          
+
           {showTranslations && (
             <View style={styles.translationDropdown}>
               {TRANSLATIONS.map(t => (
-                <TouchableOpacity 
-                  key={t} 
+                <TouchableOpacity
+                  key={t}
                   style={styles.dropdownItem}
                   onPress={() => {
                     setPreferredTranslation(t);
@@ -197,7 +197,7 @@ export default function AuthScreen() {
             {/* Remember Me Checkbox */}
             {!isResettingPassword && !isSignUp && (
               <View style={styles.rememberMeContainer}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.checkbox, rememberMe && styles.checkboxChecked]}
                   onPress={() => setRememberMe(!rememberMe)}
                 >
@@ -208,9 +208,9 @@ export default function AuthScreen() {
             )}
 
             {/* Sign In Button */}
-            <TouchableOpacity 
-              style={styles.signInButton} 
-              onPress={handleAuth} 
+            <TouchableOpacity
+              style={styles.signInButton}
+              onPress={handleAuth}
               disabled={loading}
             >
               {loading ? (
@@ -224,7 +224,7 @@ export default function AuthScreen() {
 
             {/* Create Free Account Button */}
             {!isResettingPassword && !isSignUp && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.createAccountButton}
                 onPress={() => setIsSignUp(true)}
               >
@@ -241,7 +241,7 @@ export default function AuthScreen() {
 
             {/* Toggle between Sign In and Sign Up */}
             {isSignUp && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.toggleContainer}
                 onPress={() => setIsSignUp(false)}
               >
@@ -250,13 +250,23 @@ export default function AuthScreen() {
             )}
 
             {isResettingPassword && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.toggleContainer}
                 onPress={() => setIsResettingPassword(false)}
               >
                 <Text style={styles.toggleText}>Back to Login</Text>
               </TouchableOpacity>
             )}
+          </View>
+
+          {/* How are you feeling search bar */}
+          <View style={styles.searchBarContainer}>
+            <TextInput
+              style={styles.searchBar}
+              placeholder="How are you feeling?"
+              placeholderTextColor="rgba(212, 175, 55, 0.4)"
+              onChangeText={(text) => console.log('Search:', text)}
+            />
           </View>
         </View>
       </ScrollView>
@@ -603,3 +613,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Playfair Display',
   },
 });
+
+searchBarContainer: {
+  marginHorizontal: 20,
+    marginTop: 10,
+      backgroundColor: 'rgba(11, 30, 61, 0.8)',
+        borderRadius: 8,
+          paddingHorizontal: 12,
+            paddingVertical: 8,
+  },
+searchBar: {
+  fontSize: 14,
+    color: GOLD,
+      fontFamily: 'Cinzel',
+  },
