@@ -47,20 +47,26 @@ const cleanFirstName = (value?: string | null): string => {
 };
 
 const getDavidGreeting = (firstName?: string): string => {
-  const DAVID_OPENING_GREETINGS = [
-    "Hey… I'm glad you came back.",
-    "Hey. What's been on your mind today?",
+  // Greetings without a leading "Hey" — safe to prefix with "Hey, {name}."
+  const NAMED_GREETINGS = [
+    `Hey, ${firstName}. Good to see you.`,
+    `Hey, ${firstName}. I'm here with you.`,
+    `Hey, ${firstName}. What's going on?`,
+    `Hey, ${firstName}. Talk to me.`,
+    `Good to see you, ${firstName}. What's on your mind?`,
+    `I'm glad you're here, ${firstName}.`,
+  ];
+  const UNNAMED_GREETINGS = [
+    "Hey. I'm here with you.",
+    "Hey. Good to see you.",
     "I'm here. What's going on?",
-    "Hey… how's your heart feeling today?",
-    "It's Good To Hear Your Voice, Hows Things Been Going",
-    "What's been weighing on you lately?",
-    "Hey… tell me what's been going on.",
-    "Hey, Lets Talk. Im All Ears",
-    "Everything Good With You?",
+    "Hey. Talk to me.",
+    "Good to see you. What's on your mind?",
+    "Hey. No rush. I'm here.",
+    "I'm glad you're here.",
   ];
 
-  const namedGreetings = DAVID_OPENING_GREETINGS.map(greeting => `Hey, ${firstName}. ${greeting}`);
-  const greetings = firstName ? [...namedGreetings, ...DAVID_OPENING_GREETINGS] : DAVID_OPENING_GREETINGS;
+  const greetings = firstName ? NAMED_GREETINGS : UNNAMED_GREETINGS;
   return greetings[Math.floor(Math.random() * greetings.length)];
 };
 
@@ -544,7 +550,10 @@ export default function VoiceScreen({ route, navigation }: any) {
         audioProcessorRef.current = processor;
 
         let consecutiveSilenceFrames = 0;
-        const silenceFramesNeeded = Math.ceil(SILENCE_DURATION / (2048 / audioContext.sampleRate / 1000)); // aligned with 2048 buffer
+        // How many ScriptProcessor frames fit in SILENCE_DURATION ms
+        // msPerFrame = (bufferSize / sampleRate) * 1000
+        const msPerFrame = (2048 / audioContext.sampleRate) * 1000;
+        const silenceFramesNeeded = Math.ceil(SILENCE_DURATION / msPerFrame);
 
         processor.onaudioprocess = (e) => {
           const dataArray = new Uint8Array(analyser.frequencyBinCount);

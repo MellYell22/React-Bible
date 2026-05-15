@@ -605,7 +605,8 @@ app.post("/api/speech", async (req, res) => {
     // Use custom David voice ID with env var fallback
     const defaultVoiceId = 'Orj0Xa6uq5PZiNYuUbYB'; // Custom David voice (updated)
     const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || process.env.ELEVEN_LABS_VOICE_ID || defaultVoiceId;
-    const url = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}?optimize_streaming_latency=4`; // max latency optimization
+    // eleven_flash_v2_5 is ElevenLabs' lowest-latency model (~75ms vs ~200ms for turbo)
+    const url = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}?optimize_streaming_latency=4&output_format=mp3_22050_32`;
 
     const response = await fetch(url, {
       method: "POST",
@@ -616,12 +617,12 @@ app.post("/api/speech", async (req, res) => {
       },
       body: JSON.stringify({
         text: text,
-        model_id: "eleven_turbo_v2_5",
+        model_id: "eleven_flash_v2_5", // fastest ElevenLabs model (~75ms latency)
         voice_settings: {
-          stability: 0.4,
+          stability: 0.45,
           similarity_boost: 0.75,
-          style: 0.1,
-          use_speaker_boost: true,
+          style: 0.0, // style=0 removes processing overhead
+          use_speaker_boost: false, // speaker_boost adds latency, disable for speed
         },
       }),
     });

@@ -40,7 +40,8 @@ export default async function handler(req: any, res: any) {
     
     console.log(`[Speech API] Using Voice ID: ${voiceId}`);
 
-    const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?optimize_streaming_latency=4`; // max latency optimization
+    // eleven_flash_v2_5 is ElevenLabs' lowest-latency model (~75ms vs ~200ms for turbo)
+    const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?optimize_streaming_latency=4&output_format=mp3_22050_32`;
     console.log(`[Speech API] Calling ElevenLabs: ${url}`);
 
     // 3. Make the API call
@@ -53,12 +54,12 @@ export default async function handler(req: any, res: any) {
       },
       body: JSON.stringify({
         text,
-        model_id: 'eleven_turbo_v2_5',
+        model_id: 'eleven_flash_v2_5', // fastest ElevenLabs model (~75ms latency)
         voice_settings: {
-          stability: 0.4, // Lower stability for more natural, slightly imperfect speech
-          similarity_boost: 0.75, // Balanced similarity
-          style: 0.1, // Slight style variation for natural pauses
-          use_speaker_boost: true
+          stability: 0.45,
+          similarity_boost: 0.75,
+          style: 0.0, // style=0 removes processing overhead
+          use_speaker_boost: false // speaker_boost adds latency, disable for speed
         },
       }),
     });
