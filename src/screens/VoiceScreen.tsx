@@ -50,20 +50,18 @@ const getDavidGreeting = (firstName?: string): string => {
   // Greetings without a leading "Hey" — safe to prefix with "Hey, {name}."
   const NAMED_GREETINGS = [
     `Hey, ${firstName}. Good to see you.`,
-    `Hey, ${firstName}. I'm here with you.`,
     `Hey, ${firstName}. What's going on?`,
-    `Hey, ${firstName}. Talk to me.`,
     `Good to see you, ${firstName}. What's on your mind?`,
     `I'm glad you're here, ${firstName}.`,
+    `Hey, ${firstName}. How are you doing?`,
   ];
   const UNNAMED_GREETINGS = [
-    "Hey. I'm here with you.",
     "Hey. Good to see you.",
-    "I'm here. What's going on?",
-    "Hey. Talk to me.",
+    "Hey. What's going on?",
     "Good to see you. What's on your mind?",
-    "Hey. No rush. I'm here.",
+    "Hey. How are you doing?",
     "I'm glad you're here.",
+    "Hey. What's on your mind?",
   ];
 
   const greetings = firstName ? NAMED_GREETINGS : UNNAMED_GREETINGS;
@@ -285,6 +283,55 @@ export default function VoiceScreen({ route, navigation }: any) {
     }
   };
 
+  // ── Transcript filter helpers ────────────────────────────────────────────
+  // Words that are filler/noise and should not trigger an AI response on their own.
+  const FILLER_WORDS = new Set([
+    'um', 'uh', 'hmm', 'hm', 'ah', 'oh', 'er', 'like',
+    'yeah', 'yep', 'yup', 'okay', 'ok', 'alright', 'right',
+    'hello', 'hey', 'hi', 'bye', 'goodbye',
+    'thanks', 'thank', 'please', 'sure', 'fine', 'good', 'great',
+    'yes', 'no', 'nope', 'maybe',
+  ]);
+
+  // Returns true if the transcript is meaningful enough to send to OpenAI.
+  const isTranscriptMeaningful = (raw: string): boolean => {
+    const cleaned = raw.trim().toLowerCase().replace(/[^a-z0-9\s']/g, '');
+    if (!cleaned) return false;
+
+    const words = cleaned.split(/\s+/).filter(w => w.length > 0);
+
+    // Fewer than 4 words — check if any are non-filler
+    if (words.length < 4) {
+      const meaningfulWords = words.filter(w => !FILLER_WORDS.has(w));
+      if (meaningfulWords.length === 0) return false;
+    }
+
+    return true;
+  };
+
+  // Track the last David response for anti-repeat logic
+  const lastDavidResponseRef = useRef<string>('');
+
+  // Similarity check: returns true if two strings share > 60% of their words
+  const isTooSimilar = (a: string, b: string): boolean => {
+    if (!a || !b) return false;
+    const wordsA = new Set(a.toLowerCase().split(/\s+/));
+    const wordsB = b.toLowerCase().split(/\s+/);
+    const overlap = wordsB.filter(w => wordsA.has(w)).length;
+    const similarity = overlap / Math.max(wordsA.size, wordsB.length);
+    return similarity > 0.6;
+  };
+
+  // Short fallback replies David uses when a response is too similar to the last one
+  const ANTI_REPEAT_FALLBACKS = [
+    "Yeah, go on.",
+    "Tell me more.",
+    "I'm with you.",
+    "What else?",
+    "Okay.",
+    "And then?",
+  ];
+
   // ── Handle voice input (transcript → AI → TTS) ────────────────────────────
   const handleVoiceInput = async (text: string) => {
     // Validate input
@@ -297,10 +344,12 @@ export default function VoiceScreen({ route, navigation }: any) {
       return;
     }
 
-    // Prevent processing empty or duplicate transcripts
     const trimmedText = text.trim();
-    if (trimmedText.length < 2) {
-      addLog('Transcript too short — restarting mic');
+
+    // ── Transcript filter: ignore filler/noise/too-short inputs ──────────────
+    if (!isTranscriptMeaningful(trimmedText)) {
+      addLog(`Transcript filtered (filler/noise): "${trimmedText}" — restarting mic quietly`);
+      log('Transcript filtered — not meaningful enough to send to OpenAI', trimmedText);
       setConversationState('listening');
       if (isConnectedRef.current) {
         setTimeout(() => startListening(), 300);
@@ -339,11 +388,22 @@ export default function VoiceScreen({ route, navigation }: any) {
 
       log('AI response received', response.substring(0, 80) + (response.length > 80 ? '…' : ''));
 
-      setIsDavidThinking(false);
-      setLastResponseText(response);
-      setMessages(prev => [...prev, { role: 'assistant', content: response }]);
+      // ── Anti-repeat guard ─────────────────────────────────────────────────
+      // If the new response is too similar to the last one, swap it for a
+      // short natural fallback so David never sounds like a stuck record.
+      let finalResponse = response;
+      if (isTooSimilar(lastDavidResponseRef.current, response)) {
+        const fallback = ANTI_REPEAT_FALLBACKS[Math.floor(Math.random() * ANTI_REPEAT_FALLBACKS.length)];
+        log('Anti-repeat triggered — swapping response', `"${response.substring(0, 60)}" → "${fallback}"`);
+        finalResponse = fallback;
+      }
+      lastDavidResponseRef.current = finalResponse;
 
-      await speakMessage(response);
+      setIsDavidThinking(false);
+      setLastResponseText(finalResponse);
+      setMessages(prev => [...prev, { role: 'assistant', content: finalResponse }]);
+
+      await speakMessage(finalResponse);
 
     } catch (err: any) {
       addLog(`AI chat error: ${err?.message}`);
