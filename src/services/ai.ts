@@ -74,9 +74,9 @@ export interface ChatHistoryMessage {
 
 export const getChatResponse = async (history: ChatHistoryMessage[], responseLength: ResponseLength = 'short'): Promise<string> => {
   const lengthInstruction = {
-    short: "Answer in 1-2 short, natural sentences. Make one specific emotional observation. Avoid generic empathy, advice-dumping, and scripture unless it truly fits.",
-    medium: "Answer in 2-3 natural sentences with human rhythm. Notice the user's emotion specifically, keep scripture optional, and ask only one gentle follow-up if it feels right.",
-    long: "Answer in 3-4 grounded sentences. Be spiritually comforting without preaching, avoid repeated empathy phrases, and stay conversational rather than clinical."
+    short: "Reply in 1-2 short, plain sentences. Sound human, not scripted. No therapy phrases. A question is optional — sometimes just reflect briefly.",
+    medium: "Reply in 2-3 natural sentences with varied rhythm. Stay grounded. No validation loops. Scripture only if it truly fits.",
+    long: "Reply in 3-4 conversational sentences max. Emotionally present but not preachy or corporate. No repetitive empathy templates."
   }[responseLength];
 
   // Map history to OpenAI format (Gemini uses 'model', OpenAI uses 'assistant')
@@ -113,9 +113,9 @@ export const getChatResponseStream = async (
   responseLength: ResponseLength = 'short'
 ): Promise<string> => {
   const lengthInstruction = {
-    short: "Answer in 1-2 short, natural sentences. Make one specific emotional observation. Avoid generic empathy, advice-dumping, and scripture unless it truly fits.",
-    medium: "Answer in 2-3 natural sentences with human rhythm. Notice the user's emotion specifically, keep scripture optional, and ask only one gentle follow-up if it feels right.",
-    long: "Answer in 3-4 grounded sentences. Be spiritually comforting without preaching, avoid repeated empathy phrases, and stay conversational rather than clinical."
+    short: "Reply in 1-2 short, plain sentences. Sound human, not scripted. No therapy phrases. A question is optional — sometimes just reflect briefly.",
+    medium: "Reply in 2-3 natural sentences with varied rhythm. Stay grounded. No validation loops. Scripture only if it truly fits.",
+    long: "Reply in 3-4 conversational sentences max. Emotionally present but not preachy or corporate. No repetitive empathy templates."
   }[responseLength];
 
   const messages = history.map(h => ({

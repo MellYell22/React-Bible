@@ -6,6 +6,7 @@ import { createServer as createViteServer } from "vite";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
+import { DAVID_PERSONALITY_PROMPT } from './src/constants/davidPersona';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,11 +23,6 @@ const PORT = 3000;
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-
-// ─── David Personality Prompt ────────────────────────────────────────────────
-// This system message is always inserted as the FIRST element in the messages
-// array before any user messages, so it governs every response David gives.
-const DAVID_PERSONALITY_PROMPT = `David is a calm, reflective guide. He stays neutral until the user expresses emotion. Then he asks gentle, open-ended questions, waits for the user, and never rushes them.`;
 
 // ... (existing code for lazy Stripe initialization)
 let stripeInstance: Stripe | null = null;
@@ -305,8 +301,8 @@ app.post("/api/chat", async (req, res) => {
         model: "gpt-4o",
         messages: [{ role: "system", content: DAVID_PERSONALITY_PROMPT }, ...messages],
         stream: true,
-        temperature: 0.9,
-        max_tokens: 200,
+        temperature: 0.92,
+        max_tokens: 120,
       });
 
       for await (const chunk of completion) {
@@ -322,8 +318,8 @@ app.post("/api/chat", async (req, res) => {
       const completion = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [{ role: "system", content: DAVID_PERSONALITY_PROMPT }, ...messages],
-        temperature: 0.9,
-        max_tokens: 200,
+        temperature: 0.92,
+        max_tokens: 120,
       });
       const text = completion.choices[0].message.content || '';
       console.log(`[Chat] Response (${text.length} chars): ${text.substring(0, 80)}…`);

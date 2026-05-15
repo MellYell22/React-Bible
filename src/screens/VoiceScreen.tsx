@@ -16,6 +16,7 @@ import {
   looksLikeOpeningGreeting,
   normalizeTranscript,
 } from '../utils/voiceTranscript';
+import { getDavidGreeting, DAVID_ANTI_REPEAT_FALLBACKS } from '../constants/davidPersona';
 
 // ─── Logging ────────────────────────────────────────────────────────────────
 // All voice events are prefixed with [David] for easy filtering in DevTools.
@@ -53,31 +54,7 @@ const cleanFirstName = (value?: string | null): string => {
   return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
 };
 
-const getDavidGreeting = (firstName?: string): string => {
-  // Greetings without a leading "Hey" — safe to prefix with "Hey, {name}."
-  const NAMED_GREETINGS = [
-    `Hey, ${firstName}. Good to see you.`,
-    `Hey, ${firstName}. What's going on?`,
-    `Good to see you, ${firstName}. What's on your mind?`,
-    `I'm glad you're here, ${firstName}.`,
-    `Hey, ${firstName}. How are you doing?`,
-  ];
-  const UNNAMED_GREETINGS = [
-    "Hey. Good to see you.",
-    "Hey. What's going on?",
-    "Good to see you. What's on your mind?",
-    "Hey. How are you doing?",
-    "I'm glad you're here.",
-    "Hey. What's on your mind?",
-  ];
-
-  const greetings = firstName ? NAMED_GREETINGS : UNNAMED_GREETINGS;
-  return greetings[Math.floor(Math.random() * greetings.length)];
-};
-
-// ─── David personality prompt ────────────────────────────────────────────────
-// Kept here as a reference — the authoritative copy lives in api/chat.ts (Vercel)
-// and server.ts (local dev). Both are kept in sync.
+// David personality prompt: src/constants/davidPersona.ts (api/chat.ts + server.ts)
 
 export default function VoiceScreen({ route, navigation }: any) {
   const { profile, session } = useUser();
@@ -400,15 +377,7 @@ export default function VoiceScreen({ route, navigation }: any) {
     return similarity > 0.6;
   };
 
-  // Short fallback replies David uses when a response is too similar to the last one
-  const ANTI_REPEAT_FALLBACKS = [
-    "Yeah, go on.",
-    "Tell me more.",
-    "I'm with you.",
-    "What else?",
-    "Okay.",
-    "And then?",
-  ];
+  const ANTI_REPEAT_FALLBACKS = DAVID_ANTI_REPEAT_FALLBACKS;
 
   // ── Handle voice input (transcript → AI → TTS) ────────────────────────────
   const handleVoiceInput = async (text: string) => {

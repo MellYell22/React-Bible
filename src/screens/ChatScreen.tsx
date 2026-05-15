@@ -5,6 +5,7 @@ import { getChatResponseStream, generateSpeech, ChatHistoryMessage } from '../se
 import { ChatMessage } from '../types';
 import { saveAIFeedback } from '../services/supabase';
 import { useUser } from '../UserContext';
+import { DAVID_CHAT_GREETINGS } from '../constants/davidPersona';
 
 export default function ChatScreen({ navigation, route }: any) {
   const { profile } = useUser();
@@ -100,14 +101,7 @@ export default function ChatScreen({ navigation, route }: any) {
       return;
     }
 
-    const greetings = [
-      "Hey. I'm here with you.",
-      "Hey, good to see you.",
-      "I'm here. What's on your mind?",
-      "Hey. Talk to me.",
-      "Good to see you. What's going on?"
-    ];
-    const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+    const randomGreeting = DAVID_CHAT_GREETINGS[Math.floor(Math.random() * DAVID_CHAT_GREETINGS.length)];
     setMessages([{ role: 'assistant', content: randomGreeting }]);
   }, [route?.params?.initialPrompt, route?.params?.submittedAt]);
 

@@ -21,9 +21,15 @@ const OPENING_GREETING_PATTERNS = [
   /^hello[,.]?\s/i,
   /^good to (see|hear)/i,
   /^i'?m here/i,
-  /^what'?s been on your mind/i,
-  /^how'?s your heart/i,
+  /^what'?s (been on your mind|going on|up)/i,
+  /^how'?s your (heart|night|day)/i,
   /^glad you came back/i,
+  /^how are you feeling/i,
+  /^i'?m (here for you|here to listen|glad you)/i,
+  /^it sounds like you/i,
+  /^you seem (like you|deep)/i,
+  /^tell me more/i,
+  /^what'?s been weighing/i,
 ];
 
 export const MIN_MEANINGFUL_WORDS = 2;
