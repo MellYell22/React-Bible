@@ -473,6 +473,7 @@ app.post("/api/transcribe", express.raw({ type: '*/*', limit: '25mb' }), async (
       /^(a+h*|u+h*m*|hmm*|mm+|mhm+|uh+h*|oh+h*)[.!?\s]*$/i,
       /^(cough|coughing|\*cough\*|clears? throat|sniff|sneeze|burp|yawn)[.!?\s]*$/i,
       /^(breathing|inhales?|exhales?|sigh|sighs)[.!?\s]*$/i,
+      /^\[.*\]$/,
     ];
 
     const isMeaningful = (text: string): boolean => {
