@@ -71,15 +71,28 @@ export default async function handler(req: any, res: any) {
       console.error(`[Speech API] ElevenLabs Response Body: ${errorText}`);
       
       let parsedError = errorText;
+      let userMessage = `ElevenLabs API Error (${response.status})`;
       try {
         const json = JSON.parse(errorText);
-        if (json.detail) parsedError = json.detail;
+        if (json.detail?.message) parsedError = json.detail.message;
+        else if (json.detail) parsedError = typeof json.detail === 'string' ? json.detail : JSON.stringify(json.detail);
       } catch (e) {
         // Ignore parse error, use raw text
       }
 
+      // 402 = quota exhausted or subscription required on ElevenLabs account
+      if (response.status === 402) {
+        userMessage = 'ElevenLabs quota exhausted or subscription required. Check your ElevenLabs account billing at elevenlabs.io.';
+        console.error('[Speech API] 402 Payment Required — ElevenLabs account has hit its character quota or requires an active subscription.');
+      }
+      // 401 = invalid or missing API key
+      if (response.status === 401) {
+        userMessage = 'ElevenLabs API key is invalid or missing. Check ELEVENLABS_API_KEY in Vercel environment variables.';
+        console.error('[Speech API] 401 Unauthorized — ELEVENLABS_API_KEY is invalid or not set correctly in Vercel.');
+      }
+
       return res.status(response.status).json({ 
-        error: `ElevenLabs API Error (${response.status})`,
+        error: userMessage,
         details: parsedError
       });
     }
