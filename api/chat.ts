@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { DAVID_PERSONALITY_PROMPT } from '../src/constants/davidPersona';
+import { DAVID_PERSONALITY_PROMPT, DAVID_CHAT_TEMPERATURE } from '../src/constants/davidPersona';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
@@ -33,7 +33,7 @@ export default async function handler(req: any, res: any) {
         model: 'gpt-4o-mini',
         messages: [systemMessage, ...messages],
         stream: true,
-        temperature: 0.92,
+        temperature: DAVID_CHAT_TEMPERATURE,
         max_tokens: 120, // voice replies: 1-3 sentences
       });
 
@@ -49,7 +49,7 @@ export default async function handler(req: any, res: any) {
       const completion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [systemMessage, ...messages],
-        temperature: 0.92,
+        temperature: DAVID_CHAT_TEMPERATURE,
         max_tokens: 120, // voice replies: 1-3 sentences
       });
       const text = completion.choices[0].message.content || '';

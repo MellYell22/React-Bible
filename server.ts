@@ -6,7 +6,7 @@ import { createServer as createViteServer } from "vite";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
-import { DAVID_PERSONALITY_PROMPT } from './src/constants/davidPersona';
+import { DAVID_PERSONALITY_PROMPT, DAVID_CHAT_TEMPERATURE } from './src/constants/davidPersona';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -318,7 +318,7 @@ app.post("/api/chat", async (req, res) => {
       const completion = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [{ role: "system", content: DAVID_PERSONALITY_PROMPT }, ...messages],
-        temperature: 0.92,
+        temperature: DAVID_CHAT_TEMPERATURE,
         max_tokens: 120,
       });
       const text = completion.choices[0].message.content || '';
