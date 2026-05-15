@@ -6,60 +6,40 @@ import { ChatMessage } from '../types';
 import { saveAIFeedback } from '../services/supabase';
 import { useUser } from '../UserContext';
 
-export default function ChatScreen({ navigation }: any) {
+export default function ChatScreen({ navigation, route }: any) {
   const { profile } = useUser();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-
-  useEffect(() => {
-    const DAVID_OPENING_GREETINGS = [
-      "Hey… I'm glad you came back.",
-      "Hey. What's been on your mind today?",
-      "I'm here. What's going on?",
-      "Hey… how's your heart feeling today?",
-      "It's Good To Hear Your Voice, Hows Things Been Going",
-      "What's been weighing on you lately?",
-      "Hey… tell me what's been going on.",
-      "Hey, Lets Talk. Im All Ears",
-      "Everything Good With You?",
-    ];
-    const randomGreeting = DAVID_OPENING_GREETINGS[Math.floor(Math.random() * DAVID_OPENING_GREETINGS.length)];
-    setMessages([{ role: 'assistant', content: randomGreeting }]);
-  }, []);
 
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const initialPromptHandledRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    return () => {
-      if (currentAudioRef.current) {
-        currentAudioRef.current.pause();
-        currentAudioRef.current = null;
-      }
-    };
-  }, []);
-
-  const handleSend = async () => {
-    const trimmedInput = input.trim();
+  const submitMessage = async (
+    rawText: string,
+    baseMessages: ChatMessage[] = messages,
+    clearComposer: boolean = true
+  ) => {
+    const trimmedInput = rawText.trim();
     if (!trimmedInput || loading) return;
 
     const userMessage: ChatMessage = { role: 'user', content: trimmedInput };
-    setMessages(prev => [...prev, userMessage]);
-    setInput('');
+    const nextMessages = [...baseMessages, userMessage];
+    const modelMessageIndex = nextMessages.length;
+
+    setMessages([...nextMessages, { role: 'assistant', content: "David is reflecting…" }]);
+    if (clearComposer) setInput('');
     setLoading(true);
 
     try {
-      const history: ChatHistoryMessage[] = messages.map(msg => ({
+      const history: ChatHistoryMessage[] = baseMessages.map(msg => ({
         role: msg.role === 'user' ? 'user' : 'assistant',
         content: msg.content
       }));
       history.push({ role: 'user', content: userMessage.content });
 
-      const modelMessageIndex = messages.length + 1;
-      // Add thinking indicator
-      setMessages(prev => [...prev, { role: 'assistant', content: "David is reflecting…" }]);
 
       // Natural delay (1-2 seconds) before response starts
       await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
@@ -96,8 +76,8 @@ export default function ChatScreen({ navigation }: any) {
       }
       setMessages(prev => {
         const newMessages = [...prev];
-        if (newMessages.length > messages.length + 1) {
-          newMessages[messages.length + 1] = { role: 'assistant', content: errorMessage };
+        if (newMessages.length > modelMessageIndex) {
+          newMessages[modelMessageIndex] = { role: 'assistant', content: errorMessage };
           return newMessages;
         }
         return [...prev, { role: 'assistant', content: errorMessage }];
@@ -105,6 +85,43 @@ export default function ChatScreen({ navigation }: any) {
     } finally {
       setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    const initialPrompt = typeof route?.params?.initialPrompt === 'string'
+      ? route.params.initialPrompt.trim()
+      : '';
+    const initialPromptKey = `${route?.params?.submittedAt || ''}:${initialPrompt}`;
+
+    if (initialPrompt) {
+      if (initialPromptHandledRef.current === initialPromptKey) return;
+      initialPromptHandledRef.current = initialPromptKey;
+      submitMessage(initialPrompt, [], false);
+      return;
+    }
+
+    const greetings = [
+      "Hey. I'm here with you.",
+      "Hey, good to see you.",
+      "I'm here. What's on your mind?",
+      "Hey. Talk to me.",
+      "Good to see you. What's going on?"
+    ];
+    const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+    setMessages([{ role: 'assistant', content: randomGreeting }]);
+  }, [route?.params?.initialPrompt, route?.params?.submittedAt]);
+
+  useEffect(() => {
+    return () => {
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleSend = async () => {
+    await submitMessage(input);
   };
 
   const handleFeedback = async (index: number, type: 'up' | 'down') => {

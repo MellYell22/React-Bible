@@ -165,7 +165,7 @@ function AppContent() {
       case 'Home':         return <HomeScreen navigation={nav} />;
       case 'Mood':         return <MoodScreen navigation={nav} route={{ params: routeParams }} />;
       case 'Reflection':   return <ReflectionScreen navigation={nav} />;
-      case 'Chat':         return <ChatScreen navigation={nav} />;
+      case 'Chat':         return <ChatScreen navigation={nav} route={{ params: routeParams }} />;
       case 'Voice':        return <VoiceScreen navigation={nav} />;
       case 'Profile':      return <ProfileScreen navigation={nav} route={{ params: routeParams }} />;
       case 'PaymentSuccess': return <PaymentSuccessScreen navigation={nav} />;

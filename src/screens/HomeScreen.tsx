@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, TextInput, Platform } from 'react-native';
 import { useUser } from '../UserContext';
 
 const GOLD = '#d4af37';
@@ -41,6 +41,8 @@ export default function HomeScreen({ navigation }: any) {
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [verseIndex, setVerseIndex] = useState(0);
+  const [emotionalEntry, setEmotionalEntry] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
 
   const currentVerse = VERSES_OF_THE_DAY[verseIndex];
 
@@ -54,8 +56,19 @@ export default function HomeScreen({ navigation }: any) {
 
   const handleMoodSelect = (mood: string) => {
     setSelectedMood(mood);
-    // Navigate to mood-based scripture or chat
     navigation.navigate('Mood', { mood });
+  };
+
+  const handleEmotionalEntrySubmit = () => {
+    const prompt = emotionalEntry.trim();
+    if (!prompt) return;
+
+    setEmotionalEntry('');
+    navigation.navigate('Chat', {
+      initialPrompt: prompt,
+      source: 'home-emotional-search',
+      submittedAt: Date.now(),
+    });
   };
 
   const handleTalkWithDavid = () => {
@@ -71,7 +84,35 @@ export default function HomeScreen({ navigation }: any) {
       style={styles.container}
       contentContainerStyle={styles.scrollContent}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      keyboardShouldPersistTaps="handled"
     >
+      {/* Primary Emotional Entry Section */}
+      <View style={styles.searchSection}>
+        <View style={[styles.searchShell, searchFocused && styles.searchShellFocused]}>
+          <TextInput
+            value={emotionalEntry}
+            onChangeText={setEmotionalEntry}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+            onSubmitEditing={handleEmotionalEntrySubmit}
+            placeholder="I am feeling…"
+            placeholderTextColor="rgba(245, 215, 122, 0.46)"
+            returnKeyType="send"
+            style={styles.searchInput}
+            multiline={false}
+            accessibilityLabel="Tell David how you are feeling"
+          />
+          <TouchableOpacity
+            style={[styles.searchSubmit, !emotionalEntry.trim() && styles.searchSubmitDisabled]}
+            onPress={handleEmotionalEntrySubmit}
+            disabled={!emotionalEntry.trim()}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.searchSubmitText}>TALK</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* Mood Selection Section */}
       <View style={styles.moodSection}>
         <View style={styles.moodGrid}>
@@ -108,7 +149,7 @@ export default function HomeScreen({ navigation }: any) {
 
           <Text style={styles.verseReference}>— {currentVerse.reference}</Text>
 
-          <TouchableOpacity onPress={handleReflection}>
+          <TouchableOpacity onPress={handleReflection} activeOpacity={0.75}>
             <Text style={styles.reflectionLink}>TAP FOR DAVID'S REFLECTION</Text>
           </TouchableOpacity>
         </View>
@@ -119,6 +160,7 @@ export default function HomeScreen({ navigation }: any) {
         <TouchableOpacity
           style={styles.talkButton}
           onPress={handleTalkWithDavid}
+          activeOpacity={0.75}
         >
           <Text style={styles.talkButtonText}>TALK WITH DAVID</Text>
         </TouchableOpacity>
@@ -143,12 +185,83 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 18,
-    paddingVertical: 32,
+    paddingTop: 34,
+    paddingBottom: 48,
+    alignItems: 'center',
+  },
+
+  // Primary Emotional Search Section
+  searchSection: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 36,
+  },
+
+  searchShell: {
+    width: '100%',
+    maxWidth: 520,
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.35)',
+    borderRadius: 28,
+    backgroundColor: 'rgba(5, 16, 32, 0.62)',
+    paddingLeft: 22,
+    paddingRight: 6,
+    shadowColor: GOLD,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: Platform.OS === 'web' ? 0.22 : 0.16,
+    shadowRadius: 18,
+    elevation: 4,
+  },
+
+  searchShellFocused: {
+    borderColor: 'rgba(245, 215, 122, 0.82)',
+    backgroundColor: 'rgba(5, 16, 32, 0.82)',
+    shadowOpacity: 0.34,
+    shadowRadius: 24,
+  },
+
+  searchInput: {
+    flex: 1,
+    height: 48,
+    color: '#fff8df',
+    fontSize: 16,
+    fontStyle: 'italic',
+    fontFamily: 'Playfair Display',
+    letterSpacing: 0.3,
+    outlineStyle: 'none' as any,
+  },
+
+  searchSubmit: {
+    minWidth: 70,
+    height: 40,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(212, 175, 55, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 215, 122, 0.9)',
+  },
+
+  searchSubmitDisabled: {
+    backgroundColor: 'rgba(212, 175, 55, 0.12)',
+    borderColor: 'rgba(212, 175, 55, 0.22)',
+  },
+
+  searchSubmitText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: DARK_NAVY,
+    letterSpacing: 1.3,
+    textTransform: 'uppercase',
+    fontFamily: 'Cinzel',
   },
 
   // Mood Section
   moodSection: {
-    marginBottom: 48,
+    marginBottom: 64,
     alignItems: 'center',
   },
 
@@ -157,6 +270,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
     gap: 10,
+    maxWidth: 540,
   },
 
   moodButton: {
@@ -193,19 +307,21 @@ const styles = StyleSheet.create({
 
   // Verse of the Day Section
   verseSection: {
-    marginBottom: 48,
+    marginBottom: 70,
     alignItems: 'center',
+    width: '100%',
   },
 
   verseBorder: {
     width: '100%',
     maxWidth: 500,
-    paddingVertical: 32,
+    paddingVertical: 36,
     paddingHorizontal: 24,
     borderWidth: 1,
     borderColor: 'rgba(212, 175, 55, 0.2)',
     borderRadius: 8,
     alignItems: 'center',
+    backgroundColor: 'rgba(5, 16, 32, 0.16)',
   },
 
   verseLabel: {
@@ -223,7 +339,7 @@ const styles = StyleSheet.create({
     color: 'rgba(212, 175, 55, 0.5)',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
-    marginBottom: 18,
+    marginBottom: 20,
     fontFamily: 'Cinzel',
   },
 
@@ -233,7 +349,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     lineHeight: 26,
-    marginBottom: 14,
+    marginBottom: 16,
     fontFamily: 'Playfair Display',
     fontWeight: '400',
   },
@@ -244,7 +360,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1.2,
     textTransform: 'uppercase',
-    marginBottom: 16,
+    marginBottom: 18,
     fontFamily: 'Cinzel',
   },
 
@@ -260,17 +376,17 @@ const styles = StyleSheet.create({
   // Action Section
   actionSection: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 62,
   },
 
   talkButton: {
-    paddingHorizontal: 32,
-    paddingVertical: 12,
+    paddingHorizontal: 34,
+    paddingVertical: 13,
     borderWidth: 1.5,
     borderColor: GOLD,
     borderRadius: 4,
-    backgroundColor: 'transparent',
-    marginBottom: 12,
+    backgroundColor: 'rgba(5, 16, 32, 0.18)',
+    marginBottom: 14,
   },
 
   talkButtonText: {
@@ -294,7 +410,7 @@ const styles = StyleSheet.create({
   // Footer
   footer: {
     alignItems: 'center',
-    marginTop: 32,
+    marginTop: 'auto',
     paddingBottom: 16,
   },
 
