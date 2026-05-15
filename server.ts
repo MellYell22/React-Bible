@@ -548,7 +548,8 @@ app.post("/api/speech", async (req, res) => {
   const { text } = req.body;
 
   try {
-    if (!process.env.ELEVENLABS_API_KEY) {
+    const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY || process.env.ELEVEN_LABS_API_KEY;
+    if (!elevenLabsApiKey) {
       throw new Error("ElevenLabs API Key is not configured.");
     }
 
@@ -562,7 +563,7 @@ app.post("/api/speech", async (req, res) => {
       headers: {
         "Accept": "audio/mpeg",
         "Content-Type": "application/json",
-        "xi-api-key": process.env.ELEVENLABS_API_KEY,
+        "xi-api-key": elevenLabsApiKey,
       },
       body: JSON.stringify({
         text: text,
@@ -634,7 +635,8 @@ async function startServer() {
       console.log(`💳 Stripe: ${getStripe() ? "✅ Configured" : "❌ Missing STRIPE_SECRET_KEY"}`);
       console.log(`🗄️ Supabase: ${supabase ? "✅ Configured" : "❌ Missing SUPABASE_URL/SERVICE_ROLE_KEY"}`);
       console.log(`🤖 OpenAI: ${process.env.OPENAI_API_KEY ? "✅ Configured" : "❌ Missing OPENAI_API_KEY"}`);
-      console.log(`🎙️ ElevenLabs: ${process.env.ELEVENLABS_API_KEY ? "✅ Configured" : "❌ Missing ELEVENLABS_API_KEY"}`);
+      console.log(`🎙️ ElevenLabs: ${(process.env.ELEVENLABS_API_KEY || process.env.ELEVEN_LABS_API_KEY) ? "✅ Configured" : "❌ Missing ELEVENLABS_API_KEY or ELEVEN_LABS_API_KEY"}`);
+      console.log(`🗣️ ElevenLabs Voice ID: ${(process.env.ELEVENLABS_VOICE_ID || process.env.ELEVEN_LABS_VOICE_ID) ? "✅ Configured" : "ℹ️ Using default David voice"}`);
       console.log("--------------------------\n");
     });
   }
