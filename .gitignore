@@ -4,6 +4,8 @@ dist/
 coverage/
 .DS_Store
 *.log
+speech_test_out.bin
+*_test_out.bin
 .env*
 !.env.example
 .vercel
