@@ -146,14 +146,13 @@ export const DAVID_CHAT_GREETINGS = [
 export const DAVID_ANTI_REPEAT_FALLBACKS = [
   "mm…",
   "yeah…",
-  "hm.",
-  "alright…",
-  "I hear you.",
+  "I see.",
+  "alright.",
+  "that's heavy.",
   "fair enough.",
-  "that’s a lot.",
   "okay.",
   "right.",
   "what happened?",
   "and then?",
-  "I’m with you.",
+  "that takes time.",
 ];
