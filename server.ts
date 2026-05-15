@@ -268,7 +268,7 @@ app.post("/api/stripe-webhook", async (req: any, res) => {
 // API Routes
 app.get("/api/health", (req, res) => {
   const elevenLabsKey = process.env.ELEVENLABS_API_KEY || process.env.ELEVEN_LABS_API_KEY;
-  const elevenLabsVoiceId = process.env.ELEVENLABS_VOICE_ID || process.env.ELEVEN_LABS_VOICE_ID || 'Orj0Xa6uq5PZiNYuUbYB (default)';
+  const elevenLabsVoiceId = process.env.ELEVENLABS_VOICE_ID || process.env.ELEVEN_LABS_VOICE_ID || '9X1Jz0xL6DHvaiD9uzHw (default)';
   res.json({ 
     status: "ok", 
     stripeConfigured: !!getStripe(),
@@ -523,7 +523,7 @@ app.post("/api/speech", async (req, res) => {
     }
 
     // Use custom David voice ID with env var fallback
-    const defaultVoiceId = 'Orj0Xa6uq5PZiNYuUbYB'; // Custom David voice (updated)
+    const defaultVoiceId = '9X1Jz0xL6DHvaiD9uzHw'; // Custom David voice
     const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || process.env.ELEVEN_LABS_VOICE_ID || defaultVoiceId;
     // eleven_flash_v2_5 is ElevenLabs' lowest-latency model (~75ms vs ~200ms for turbo)
     const url = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}?optimize_streaming_latency=4&output_format=mp3_22050_32`;
