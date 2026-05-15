@@ -75,7 +75,40 @@ export default async function handler(req: any, res: any) {
         }),
       });
 
-    const response = await synthesize(voiceId);
+        let response = await synthesize(voiceId);
+
+    // ── Fallback voice retry ──────────────────────────────────────────────────
+    // If the primary voice fails with a 4xx (voice not found, plan restriction,
+    // or unauthorized), retry with ElevenLabs built-in Adam voice which is
+    // available on all plans including free tier.
+    if (!response.ok && [401, 403, 404, 422].includes(response.status)) {
+      const errPreview = await response.text();
+      console.warn(`[Speech API] Primary voice ${voiceId} failed (${response.status}): ${errPreview.substring(0, 200)}`);
+      const FALLBACK_VOICE_ID = 'pNInz6obpgDQGcFmaJgB'; // Adam — available on all ElevenLabs plans
+      console.warn(`[Speech API] Retrying with fallback voice: ${FALLBACK_VOICE_ID}`);
+      response = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${FALLBACK_VOICE_ID}?optimize_streaming_latency=4&output_format=mp3_22050_32`,
+        {
+          method: 'POST',
+          headers: {
+            'Accept': 'audio/mpeg',
+            'Content-Type': 'application/json',
+            'xi-api-key': apiKey,
+          },
+          body: JSON.stringify({
+            text: ttsPayload.ssmlText,
+            model_id: 'eleven_monolingual_v1', // most compatible model
+            enable_ssml_parsing: false, // disable SSML for fallback safety
+            voice_settings: {
+              stability: 0.45,
+              similarity_boost: 0.75,
+              style: 0.0,
+              use_speaker_boost: false,
+            },
+          }),
+        },
+      );
+    }
 
     // 4. Handle ElevenLabs errors explicitly
     if (!response.ok) {
