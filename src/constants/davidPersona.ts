@@ -132,23 +132,22 @@ export const getDavidGreeting = (firstName?: string): string => {
 
 /** Instant voice-session openers — sync, no API wait */
 export const DAVID_VOICE_SESSION_GREETINGS = [
-  'hey… good to hear your voice.',
-  "mm… how's your day been?",
-  'hey…',
-  'mm.',
-  'there you are…',
-  "hey. how's it going?",
-  'good to see you.',
+  "hey… good to hear your voice. how have you been lately?",
+  "hey… good to hear your voice. how's your day been?",
+  "mm… good to hear your voice. what's been going on?",
+  "hey… I'm glad you're here. how have you been?",
+  "there you are… good to hear your voice. what's the day been like?",
+  "hey. good to hear your voice. what's been on your mind?",
 ];
 
 export const getVoiceSessionGreeting = (firstName?: string): string => {
   const cleanName = cleanFirstName(firstName);
   if (cleanName) {
     const named = [
-      `hey, ${cleanName}… good to hear your voice.`,
-      `mm… hey ${cleanName}. how's your day been?`,
-      `hey ${cleanName}…`,
-      `there you are, ${cleanName}.`,
+      `hey, ${cleanName}… good to hear your voice. how have you been lately?`,
+      `mm… hey ${cleanName}. good to hear your voice. how's your day been?`,
+      `hey ${cleanName}… good to hear your voice. what's been going on?`,
+      `there you are, ${cleanName}. good to hear your voice. what's the day been like?`,
     ];
     return named[Math.floor(Math.random() * named.length)];
   }

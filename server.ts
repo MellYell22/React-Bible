@@ -449,18 +449,56 @@ app.post("/api/transcribe", express.raw({ type: '*/*', limit: '25mb' }), async (
     const contentType = req.headers['content-type'] || 'audio/webm';
     console.log(`[Transcribe] Received ${rawBody.length} bytes, type: ${contentType}`);
 
-    // Determine MIME type and extension
-    const mimeType = contentType.split(';')[0].trim();
+    let audioBuffer = rawBody;
+    let mimeType = contentType.split(';')[0].trim() || 'audio/webm';
+    let filename = 'audio.webm';
+
+    if (contentType.includes('multipart/form-data')) {
+      const boundary = contentType.split('boundary=')[1]?.trim();
+      if (!boundary) {
+        return res.status(400).json({ error: 'Missing multipart boundary' });
+      }
+
+      const parts = splitBuffer(rawBody, Buffer.from(`--${boundary}`));
+      const audioPart = parts.find((part) => {
+        const headerEnd = part.indexOf('\r\n\r\n');
+        if (headerEnd === -1) return false;
+        const headers = part.slice(0, headerEnd).toString();
+        return headers.includes('name="audio"') || headers.includes('filename=');
+      });
+
+      if (!audioPart) {
+        return res.status(400).json({ error: 'No audio file found in request' });
+      }
+
+      const headerEnd = audioPart.indexOf('\r\n\r\n');
+      const headers = audioPart.slice(0, headerEnd).toString();
+      const contentTypeMatch = headers.match(/Content-Type:\s*([^\r\n]+)/i);
+      const filenameMatch = headers.match(/filename="([^"]+)"/i);
+
+      if (contentTypeMatch) mimeType = contentTypeMatch[1].trim().split(';')[0].trim();
+      if (filenameMatch) filename = filenameMatch[1];
+
+      audioBuffer = audioPart.slice(headerEnd + 4);
+      while (audioBuffer.length > 0 && (audioBuffer[audioBuffer.length - 1] === 10 || audioBuffer[audioBuffer.length - 1] === 13)) {
+        audioBuffer = audioBuffer.slice(0, -1);
+      }
+    }
+
+    console.log(`[Transcribe] Audio file extracted: ${audioBuffer.length} bytes, type: ${mimeType}`);
+
     const extMap: Record<string, string> = {
       'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'mp4',
       'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/flac': 'flac',
+      'audio/x-wav': 'wav', 'audio/m4a': 'm4a',
       'video/webm': 'webm',
     };
     const ext = extMap[mimeType] || 'webm';
 
     const { OpenAI } = await import('openai');
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const audioFile = new File([rawBody], `audio.${ext}`, { type: mimeType });
+    const safeFilename = filename.includes('.') ? filename : `audio.${ext}`;
+    const audioFile = new File([audioBuffer], safeFilename, { type: mimeType });
 
     const MIN_AUDIO_BYTES = 5000;
     const MIN_MEANINGFUL_WORDS = 2;
@@ -489,7 +527,7 @@ app.post("/api/transcribe", express.raw({ type: '*/*', limit: '25mb' }), async (
       return true;
     };
 
-    if (rawBody.length < MIN_AUDIO_BYTES) {
+    if (audioBuffer.length < MIN_AUDIO_BYTES) {
       return res.json({ transcript: '', rejected: true, reason: 'audio_too_small' });
     }
 
@@ -617,6 +655,21 @@ app.post("/api/speech", async (req, res) => {
     res.status(500).json({ error: error?.message || 'Speech generation failed' });
   }
 });
+
+function splitBuffer(buf: Buffer, delimiter: Buffer): Buffer[] {
+  const parts: Buffer[] = [];
+  let start = 0;
+  let idx = buf.indexOf(delimiter, start);
+
+  while (idx !== -1) {
+    parts.push(buf.slice(start, idx));
+    start = idx + delimiter.length;
+    idx = buf.indexOf(delimiter, start);
+  }
+
+  parts.push(buf.slice(start));
+  return parts.filter((part) => part.length > 2);
+}
 
 // 404 for API routes - MUST be after all API routes
 app.all("/api/*", (req, res) => {
