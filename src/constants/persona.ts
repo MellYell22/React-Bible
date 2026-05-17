@@ -144,3 +144,11 @@ Not filling silence.
 Not repeating a script.
 Just present, steady, and grounded in faith.
 `;
+
+export const DAVID_CHAT_GREETINGS = [
+  "Hey... I'm here with you.",
+  "Good to see you.",
+  "Hey... what's on your mind?",
+  "I'm here. Talk to me.",
+  "How are you holding up today?"
+];
