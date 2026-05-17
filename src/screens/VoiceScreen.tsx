@@ -547,7 +547,7 @@ export default function VoiceScreen({ route, navigation }: any) {
         isDavidSpeakingRef.current = false;
         setIsDavidSpeaking(false);
         setConversationState('listening');
-        setError("David's voice is unavailable right now. Check the ElevenLabs API key.");
+        setError("David's voice is unavailable right now. Check the Cartesia API key.");
         isProcessingVoiceRef.current = false;
         if (isConnectedRef.current) scheduleListenRetry('TTS failed');
         return;

@@ -7,9 +7,13 @@ import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import { DAVID_PERSONALITY_PROMPT, DAVID_CHAT_TEMPERATURE } from './src/constants/davidPersona';
-import { isAlreadyElevenLabsSsml, prepareDavidTtsPayload } from './src/utils/davidSpeechDelivery';
-import { resolveDavidVoiceId } from './src/constants/elevenLabsVoice';
 import { buildDavidSystemPromptWithMood, resolveMoodKey } from './src/utils/davidMoodContext';
+import {
+  CARTESIA_API_VERSION,
+  CARTESIA_MODEL_ID,
+  CARTESIA_TTS_URL,
+  resolveCartesiaVoiceId,
+} from './src/constants/cartesiaVoice';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -270,16 +274,14 @@ app.post("/api/stripe-webhook", async (req: any, res) => {
 
 // API Routes
 app.get("/api/health", (req, res) => {
-  const elevenLabsKey = process.env.ELEVENLABS_API_KEY || process.env.ELEVEN_LABS_API_KEY;
-  const envVoiceId = process.env.ELEVENLABS_VOICE_ID || process.env.ELEVEN_LABS_VOICE_ID;
-  const elevenLabsVoiceId = resolveDavidVoiceId(envVoiceId);
+  const cartesiaVoiceId = resolveCartesiaVoiceId(process.env.CARTESIA_VOICE_ID);
   res.json({ 
     status: "ok", 
     stripeConfigured: !!getStripe(),
     supabaseConfigured: !!supabase,
     openaiConfigured: !!process.env.OPENAI_API_KEY,
-    elevenLabsConfigured: !!elevenLabsKey,
-    elevenLabsVoiceId,
+    cartesiaConfigured: !!process.env.CARTESIA_API_KEY,
+    cartesiaVoiceId,
     env: process.env.NODE_ENV,
     appUrl: process.env.APP_URL || "not set"
   });
@@ -567,8 +569,6 @@ app.post("/api/transcribe", express.raw({ type: '*/*', limit: '25mb' }), async (
 });
 
 app.post("/api/speech", async (req, res) => {
-  // LemonFox TTS — replaces ElevenLabs
-  // Docs: https://www.lemonfox.ai/apis/text-to-speech
   const { text } = req.body ?? {};
 
   if (!text || typeof text !== 'string' || !text.trim()) {
@@ -576,72 +576,65 @@ app.post("/api/speech", async (req, res) => {
     return res.status(400).json({ error: 'Missing text parameter' });
   }
 
-  // Strip any SSML tags — LemonFox uses plain text only
+  // Strip any markup — Cartesia receives David's plain conversational text
   const cleanText = text.trim().replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
   if (!cleanText) {
     return res.status(400).json({ error: 'Text was empty after stripping markup' });
   }
 
-  const apiKey = process.env.LEMONFOX_API_KEY;
+  const apiKey = process.env.CARTESIA_API_KEY;
   if (!apiKey) {
-    console.error('[Speech] LEMONFOX_API_KEY is not configured');
-    return res.status(500).json({ error: 'LemonFox API key not configured. Add LEMONFOX_API_KEY to environment.' });
+    console.error('[Speech] CARTESIA_API_KEY is not configured');
+    return res.status(500).json({ error: 'Cartesia API key not configured. Add CARTESIA_API_KEY to environment.' });
   }
 
-  const callLemonFox = (voice: string) =>
-    fetch('https://api.lemonfox.ai/v1/audio/speech', {
+  const voiceId = resolveCartesiaVoiceId(process.env.CARTESIA_VOICE_ID);
+  const callCartesia = () =>
+    fetch(CARTESIA_TTS_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'X-API-Key': apiKey,
+        'Cartesia-Version': process.env.CARTESIA_API_VERSION || CARTESIA_API_VERSION,
         'Content-Type': 'application/json',
         'Accept': 'audio/mpeg',
       },
       body: JSON.stringify({
-        input: cleanText,
-        voice,
-        language: 'en-us',
-        response_format: 'mp3',
-        speed: 0.95,
+        model_id: process.env.CARTESIA_MODEL_ID || CARTESIA_MODEL_ID,
+        transcript: cleanText,
+        voice: {
+          mode: 'id',
+          id: voiceId,
+        },
+        language: 'en',
+        output_format: {
+          container: 'mp3',
+          bit_rate: 128000,
+          sample_rate: 44100,
+        },
       }),
     });
 
   try {
-    const attempts = [
-      { voice: 'onyx',  label: 'LemonFox/onyx (primary)' },
-      { voice: 'eric',  label: 'LemonFox/eric (fallback)' },
-    ];
+    console.log(`[Speech] Calling Cartesia voice=${voiceId} text="${cleanText.substring(0, 60)}..."`);
+    const response = await callCartesia();
 
-    let lastStatus = 500;
-    let lastBody = '';
-
-    for (const attempt of attempts) {
-      console.log(`[Speech] Trying ${attempt.label}...`);
-      const response = await callLemonFox(attempt.voice);
-
-      if (response.ok) {
-        console.log(`[Speech] Success with ${attempt.label}`);
-        const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        res.setHeader('Content-Type', 'audio/mpeg');
-        return res.send(buffer);
-      }
-
-      lastStatus = response.status;
-      lastBody = await response.text();
-      console.warn(`[Speech] ${attempt.label} failed: HTTP ${lastStatus} — ${lastBody.substring(0, 300)}`);
-
-      if (lastStatus === 401) {
-        return res.status(401).json({ error: 'LemonFox API key invalid. Check LEMONFOX_API_KEY.', details: lastBody });
-      }
-      if (lastStatus === 402 || lastStatus === 429) {
-        return res.status(lastStatus).json({ error: 'LemonFox quota or rate limit hit.', details: lastBody });
-      }
+    if (!response.ok) {
+      const body = await response.text();
+      console.error(`[Speech] Cartesia failed: HTTP ${response.status} — ${body.substring(0, 500)}`);
+      return res.status(response.status).json({
+        error: `Cartesia TTS failed (${response.status})`,
+        details: body,
+      });
     }
 
-    return res.status(500).json({ error: 'All LemonFox TTS attempts failed', lastStatus, details: lastBody });
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    res.setHeader('Content-Type', response.headers.get('content-type') || 'audio/mpeg');
+    res.setHeader('Content-Length', buffer.length);
+    return res.send(buffer);
   } catch (error: any) {
-    console.error('[Speech] Unexpected error:', error?.message || error);
-    res.status(500).json({ error: error?.message || 'Speech generation failed' });
+    console.error('[Speech] Cartesia request failed:', error?.message || error);
+    res.status(500).json({ error: error?.message || 'Cartesia speech generation failed' });
   }
 });
 
@@ -702,8 +695,8 @@ async function startServer() {
       console.log(`💳 Stripe: ${getStripe() ? "✅ Configured" : "❌ Missing STRIPE_SECRET_KEY"}`);
       console.log(`🗄️ Supabase: ${supabase ? "✅ Configured" : "❌ Missing SUPABASE_URL/SERVICE_ROLE_KEY"}`);
       console.log(`🤖 OpenAI: ${process.env.OPENAI_API_KEY ? "✅ Configured" : "❌ Missing OPENAI_API_KEY"}`);
-      console.log(`🎙️ LemonFox TTS: ${process.env.LEMONFOX_API_KEY ? "✅ Configured" : "❌ Missing LEMONFOX_API_KEY"}`);
-      console.log(`🗣️ David Voice: onyx (LemonFox)`);
+      console.log(`🎙️ Cartesia TTS: ${process.env.CARTESIA_API_KEY ? "✅ Configured" : "❌ Missing CARTESIA_API_KEY"}`);
+      console.log(`🗣️ David Voice: ${resolveCartesiaVoiceId(process.env.CARTESIA_VOICE_ID)} (Cartesia)`);
       console.log("--------------------------\n");
     });
   }

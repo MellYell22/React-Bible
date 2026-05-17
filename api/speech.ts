@@ -1,49 +1,42 @@
-/**
- * api/speech.ts — LemonFox TTS endpoint
- *
- * Replaces ElevenLabs with LemonFox TTS API.
- * LemonFox is OpenAI/ElevenLabs-compatible, lower cost, and lower latency.
- *
- * Endpoint: POST https://api.lemonfox.ai/v1/audio/speech
- * Auth:     Authorization: Bearer LEMONFOX_API_KEY
- *
- * David's voice: "onyx" — deep, calm, grounded male voice
- * Fallback voice: "eric" — warm, natural male voice
- *
- * Docs: https://www.lemonfox.ai/apis/text-to-speech
- */
+import {
+  CARTESIA_API_VERSION,
+  CARTESIA_MODEL_ID,
+  CARTESIA_TTS_URL,
+  resolveCartesiaVoiceId,
+} from '../src/constants/cartesiaVoice';
 
-// David's primary voice — deep, calm, grounded
-const DAVID_VOICE = 'onyx';
-// Fallback voice if primary fails
-const FALLBACK_VOICE = 'eric';
-
-const LEMONFOX_TTS_URL = 'https://api.lemonfox.ai/v1/audio/speech';
-
-/** Strip any SSML tags so the plain-text API doesn't receive markup */
-function stripSsml(text: string): string {
+/** Strip any markup so Cartesia receives plain conversational text. */
+function cleanTranscript(text: string): string {
   return text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
 }
 
-/** Call LemonFox TTS and return the fetch Response */
-async function callLemonFox(
+/** Call Cartesia TTS and return the audio byte response. */
+async function callCartesia(
   apiKey: string,
-  voice: string,
+  voiceId: string,
   text: string,
 ): Promise<Response> {
-  return fetch(LEMONFOX_TTS_URL, {
+  return fetch(CARTESIA_TTS_URL, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'X-API-Key': apiKey,
+      'Cartesia-Version': process.env.CARTESIA_API_VERSION || CARTESIA_API_VERSION,
       'Content-Type': 'application/json',
       'Accept': 'audio/mpeg',
     },
     body: JSON.stringify({
-      input: text,
-      voice,
-      language: 'en-us',
-      response_format: 'mp3',
-      speed: 0.95, // Slightly slower than default — more natural, less rushed
+      model_id: process.env.CARTESIA_MODEL_ID || CARTESIA_MODEL_ID,
+      transcript: text,
+      voice: {
+        mode: 'id',
+        id: voiceId,
+      },
+      language: 'en',
+      output_format: {
+        container: 'mp3',
+        bit_rate: 128000,
+        sample_rate: 44100,
+      },
     }),
   });
 }
@@ -65,82 +58,43 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'Missing text parameter' });
   }
 
-  // Strip SSML tags — LemonFox uses plain text only
-  const text = stripSsml(rawText);
+  const text = cleanTranscript(rawText);
   if (!text) {
     return res.status(400).json({ error: 'Text was empty after stripping markup' });
   }
 
   // ── API Key ───────────────────────────────────────────────────────────────
-  const apiKey = process.env.LEMONFOX_API_KEY;
+  const apiKey = process.env.CARTESIA_API_KEY;
   if (!apiKey) {
-    console.error('[Speech API] CRITICAL: LEMONFOX_API_KEY not set in environment');
+    console.error('[Speech API] CRITICAL: CARTESIA_API_KEY not set in environment');
     return res.status(500).json({
-      error: 'LemonFox API key not configured. Add LEMONFOX_API_KEY to Vercel env vars.',
+      error: 'Cartesia API key not configured. Add CARTESIA_API_KEY to Vercel env vars.',
     });
   }
-  console.log(`[Speech API] LemonFox key OK (len=${apiKey.length}), text="${text.substring(0, 60)}..."`);
+  const voiceId = resolveCartesiaVoiceId(process.env.CARTESIA_VOICE_ID);
+  console.log(`[Speech API] Cartesia key OK (len=${apiKey.length}), voice=${voiceId}, text="${text.substring(0, 60)}..."`);
 
-  // ── 2-tier fallback ───────────────────────────────────────────────────────
-  const attempts = [
-    { voice: DAVID_VOICE,    label: `LemonFox/${DAVID_VOICE} (primary)` },
-    { voice: FALLBACK_VOICE, label: `LemonFox/${FALLBACK_VOICE} (fallback)` },
-  ];
-
-  let lastStatus = 500;
-  let lastBody = '';
-
-  for (const attempt of attempts) {
-    console.log(`[Speech API] Trying ${attempt.label}...`);
-    try {
-      const response = await callLemonFox(apiKey, attempt.voice, text);
-
-      if (response.ok) {
-        console.log(`[Speech API] Success with ${attempt.label}`);
-        const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        res.setHeader('Content-Type', 'audio/mpeg');
-        res.setHeader('Content-Length', buffer.length);
-        return res.status(200).send(buffer);
-      }
-
-      // Non-2xx — log and try next tier
-      lastStatus = response.status;
-      lastBody = await response.text();
-      console.warn(
-        `[Speech API] ${attempt.label} failed: HTTP ${lastStatus} — ${lastBody.substring(0, 300)}`,
-      );
-
-      // 401 = bad API key — no point retrying
-      if (lastStatus === 401) {
-        console.error('[Speech API] 401 — Invalid LEMONFOX_API_KEY');
-        return res.status(401).json({
-          error: 'LemonFox API key is invalid. Check LEMONFOX_API_KEY in Vercel env vars.',
-          details: lastBody,
-        });
-      }
-
-      // 402 / 429 = quota or rate limit — no point retrying
-      if (lastStatus === 402 || lastStatus === 429) {
-        console.error(`[Speech API] ${lastStatus} — LemonFox quota or rate limit hit`);
-        return res.status(lastStatus).json({
-          error: 'LemonFox quota exhausted or rate limit hit. Check billing at lemonfox.ai.',
-          details: lastBody,
-        });
-      }
-
-      // Otherwise continue to fallback voice
-    } catch (fetchErr: any) {
-      console.error(`[Speech API] ${attempt.label} threw: ${fetchErr.message}`);
-      lastBody = fetchErr.message;
+  try {
+    const response = await callCartesia(apiKey, voiceId, text);
+    if (!response.ok) {
+      const body = await response.text();
+      console.error(`[Speech API] Cartesia failed: HTTP ${response.status} — ${body.substring(0, 500)}`);
+      return res.status(response.status).json({
+        error: `Cartesia TTS failed (${response.status})`,
+        details: body,
+      });
     }
-  }
 
-  // Both tiers failed
-  console.error(`[Speech API] All attempts failed. Last status: ${lastStatus}. Last body: ${lastBody.substring(0, 500)}`);
-  return res.status(500).json({
-    error: 'All LemonFox TTS attempts failed',
-    lastStatus,
-    details: lastBody,
-  });
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    res.setHeader('Content-Type', response.headers.get('content-type') || 'audio/mpeg');
+    res.setHeader('Content-Length', buffer.length);
+    return res.status(200).send(buffer);
+  } catch (error: any) {
+    console.error('[Speech API] Cartesia request threw:', error?.message || error);
+    return res.status(500).json({
+      error: 'Cartesia TTS request failed',
+      details: error?.message || String(error),
+    });
+  }
 }

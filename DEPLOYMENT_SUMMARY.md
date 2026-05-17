@@ -79,14 +79,10 @@ Your "Bible Mood Search – AI Scripture Companion" app has been comprehensively
 - Error handling for API key and quota issues
 - Temperature set to 0.9 for natural response variation
 
-**ElevenLabs Text-to-Speech (`/api/speech.ts`):**
-- Voice ID configured with fallback system
-- Turbo v2.5 model for fast, natural speech
-- Voice settings optimized:
-  - Stability: 0.4 (natural, slightly imperfect speech)
-  - Similarity: 0.75 (balanced voice matching)
-  - Style: 0.1 (natural pauses and variation)
-  - Speaker boost: enabled
+**Cartesia Text-to-Speech (`/api/speech.ts`):**
+- Cartesia voice ID configured
+- Sonic model for fast, natural speech
+- Cartesia `/tts/bytes` endpoint configured for MP3 byte output
 - Comprehensive error logging and handling
 - Audio format: MP3
 
@@ -135,7 +131,7 @@ Your "Bible Mood Search – AI Scripture Companion" app has been comprehensively
 1. **AI Companion "David"** — Warm, emotionally intelligent Christian chat companion
 2. **Bible Scripture Browsing** — Search and read verses by book, chapter, keyword
 3. **Mood-Based Scripture Suggestions** — Relevant verses based on emotional state
-4. **Voice Interaction** — Speech-to-text (Whisper) and text-to-speech (ElevenLabs)
+4. **Voice Interaction** — Speech-to-text (Whisper) and text-to-speech (Cartesia)
 5. **User Authentication** — Manus OAuth login with profile persistence
 6. **Conversation History** — Save and revisit past chat sessions
 7. **Pro Subscription Tier** — Premium features via Stripe integration
@@ -157,12 +153,8 @@ Ensure these are configured in your deployment environment:
 
 **Required:**
 - `OPENAI_API_KEY` — OpenAI API key for chat and transcription
-- `ELEVENLABS_API_KEY` — ElevenLabs API key for text-to-speech
-- `ELEVENLABS_VOICE_ID` — Custom voice ID for David's voice (optional, has fallback)
-
-**Optional:**
-- `ELEVEN_LABS_API_KEY` — Alternative env var name for ElevenLabs key
-- `ELEVEN_LABS_VOICE_ID` — Alternative env var name for voice ID
+- `CARTESIA_API_KEY` — Cartesia API key for text-to-speech
+- `CARTESIA_VOICE_ID` — Cartesia voice ID for David's voice
 
 ---
 
@@ -200,7 +192,7 @@ Before deploying to production:
 - Voice features require microphone permission
 - Some browsers (Safari Private, Firefox Strict ETP) may have audio restrictions
 - Whisper transcription limited to 30+ seconds per request
-- ElevenLabs API has rate limits (check documentation)
+- Cartesia API has rate limits (check documentation)
 
 ---
 
@@ -208,7 +200,7 @@ Before deploying to production:
 
 **Recommended Monitoring:**
 - OpenAI API usage and errors
-- ElevenLabs API usage and errors
+- Cartesia API usage and errors
 - User feedback on David's responses
 - Voice feature reliability
 - Performance metrics
