@@ -70,6 +70,46 @@ serve(async (req) => {
 
   console.log(`[Stripe Webhook] Handling event: ${event.type}`);
 
+  const getProfileById = async (id: string) => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, subscription_tier")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      console.error(`[Stripe Webhook] Error loading profile ${id}: ${error.message}`);
+    }
+
+    return data;
+  };
+
+  const getProfileByCustomerId = async (customerId: string) => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, subscription_tier")
+      .eq("stripe_customer_id", customerId)
+      .maybeSingle();
+
+    if (error) {
+      console.error(`[Stripe Webhook] Error loading profile for customer ${customerId}: ${error.message}`);
+    }
+
+    return data;
+  };
+
+  const buildTierUpdate = (profile: any, tier: "free" | "pro", update: Record<string, unknown>) => {
+    if (profile?.subscription_tier === "owner") {
+      console.log(`[Stripe Webhook] Preserving owner tier for user ${profile.id} while syncing Stripe fields.`);
+      return update;
+    }
+
+    return {
+      ...update,
+      subscription_tier: tier,
+    };
+  };
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {
@@ -137,12 +177,12 @@ serve(async (req) => {
 
         console.log(`[Stripe Webhook] Performing update for user ${userId} to tier: ${tier}`);
 
-        const updateData = {
-          subscription_tier: tier,
+        const profile = await getProfileById(userId);
+        const updateData = buildTierUpdate(profile, tier as "free" | "pro", {
           stripe_customer_id: customerId,
           ...subscriptionDetails,
           updated_at: new Date().toISOString(),
-        };
+        });
         
         console.log(`[Stripe Webhook] Update payload: ${JSON.stringify(updateData)}`);
 
@@ -184,17 +224,19 @@ serve(async (req) => {
 
           console.log(`[Stripe Webhook] Updating customer ${customerId} to tier: ${tier}`);
 
+          const profile = await getProfileByCustomerId(customerId);
+          const updateData = buildTierUpdate(profile, tier as "free" | "pro", {
+            stripe_customer_id: customerId,
+            stripe_subscription_id: subscriptionId,
+            stripe_subscription_status: subscription.status,
+            stripe_price_id: priceId,
+            stripe_current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+
           const { data, error } = await supabase
             .from("profiles")
-            .update({
-              subscription_tier: tier,
-              stripe_customer_id: customerId,
-              stripe_subscription_id: subscriptionId,
-              stripe_subscription_status: subscription.status,
-              stripe_price_id: priceId,
-              stripe_current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-              updated_at: new Date().toISOString(),
-            })
+            .update(updateData)
             .eq("stripe_customer_id", customerId)
             .select();
 
@@ -225,16 +267,18 @@ serve(async (req) => {
 
         console.log(`[Stripe Webhook] Subscription changed for customer ${customerId}. New tier: ${tier}, Status: ${subscription.status}`);
 
+        const profile = await getProfileByCustomerId(customerId);
+        const updateData = buildTierUpdate(profile, tier as "free" | "pro", {
+          stripe_subscription_id: subscription.id,
+          stripe_subscription_status: subscription.status,
+          stripe_price_id: priceId,
+          stripe_current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
         const { data, error } = await supabase
           .from("profiles")
-          .update({
-            subscription_tier: tier,
-            stripe_subscription_id: subscription.id,
-            stripe_subscription_status: subscription.status,
-            stripe_price_id: priceId,
-            stripe_current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq("stripe_customer_id", customerId)
           .select();
 
@@ -257,12 +301,14 @@ serve(async (req) => {
 
         console.log(`[Stripe Webhook] Subscription deleted for customer ${customerId}`);
 
+        const profile = await getProfileByCustomerId(customerId);
+        const updateData = buildTierUpdate(profile, "free", {
+          updated_at: new Date().toISOString(),
+        });
+
         const { error } = await supabase
           .from("profiles")
-          .update({
-            subscription_tier: "free",
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq("stripe_customer_id", customerId);
 
         if (error) throw error;
