@@ -132,6 +132,18 @@ app.post("/api/stripe-webhook", async (req: any, res) => {
     return null;
   };
 
+  const buildTierUpdate = (profile: any, tier: 'free' | 'pro', update: Record<string, any>) => {
+    if (profile?.subscription_tier === 'owner') {
+      console.log(`[Server Webhook] Preserving owner tier for user ${profile.id} while syncing Stripe fields.`);
+      return update;
+    }
+
+    return {
+      ...update,
+      subscription_tier: tier,
+    };
+  };
+
   try {
     switch (event.type) {
       case 'checkout.session.completed': {
@@ -146,14 +158,12 @@ app.post("/api/stripe-webhook", async (req: any, res) => {
         
         if (profile) {
           console.log(`[Server Webhook] Upgrading user ${profile.id} to Pro...`);
-          const { error } = await supabase.from('profiles').update({
+          const { error } = await supabase.from('profiles').update(buildTierUpdate(profile, 'pro', {
             stripe_customer_id: customerId,
-            subscription_tier: 'pro',
             subscription_status: 'active',
-            plan: 'pro',
             stripe_subscription_status: 'active',
             updated_at: new Date().toISOString()
-          }).eq('id', profile.id);
+          })).eq('id', profile.id);
 
           if (error) {
             console.error(`[Server Webhook] UPDATE FAILED for user ${profile.id}: ${error.message}`);
@@ -179,15 +189,13 @@ app.post("/api/stripe-webhook", async (req: any, res) => {
 
         if (profile) {
           console.log(`[Server Webhook] Confirming Pro status for user ${profile.id}...`);
-          const { error } = await supabase.from('profiles').update({
+          const { error } = await supabase.from('profiles').update(buildTierUpdate(profile, 'pro', {
             stripe_customer_id: customerId,
             stripe_subscription_id: subscriptionId,
-            subscription_tier: 'pro',
             subscription_status: 'active',
-            plan: 'pro',
             stripe_subscription_status: 'active',
             updated_at: new Date().toISOString()
-          }).eq('id', profile.id);
+          })).eq('id', profile.id);
           
           if (error) {
             console.error(`[Server Webhook] UPDATE FAILED for user ${profile.id} on invoice: ${error.message}`);
@@ -215,15 +223,13 @@ app.post("/api/stripe-webhook", async (req: any, res) => {
         
         if (profile) {
           console.log(`[Server Webhook] Syncing user ${profile.id} to tier ${tier}...`);
-          const { error } = await supabase.from('profiles').update({
+          const { error } = await supabase.from('profiles').update(buildTierUpdate(profile, tier, {
             stripe_customer_id: customerId,
             stripe_subscription_id: subscription.id,
-            subscription_tier: tier,
             subscription_status: isPro ? 'active' : 'inactive',
-            plan: tier,
             stripe_subscription_status: status,
             updated_at: new Date().toISOString()
-          }).eq('id', profile.id);
+          })).eq('id', profile.id);
 
           if (error) {
             console.error(`[Server Webhook] SYNC FAILED for user ${profile.id}: ${error.message}`);
@@ -244,13 +250,11 @@ app.post("/api/stripe-webhook", async (req: any, res) => {
         
         if (profile) {
           console.log(`[Server Webhook] Reverting user ${profile.id} to Free...`);
-          const { error } = await supabase.from('profiles').update({
-            subscription_tier: 'free',
+          const { error } = await supabase.from('profiles').update(buildTierUpdate(profile, 'free', {
             subscription_status: 'canceled',
-            plan: 'free',
             stripe_subscription_status: 'canceled',
             updated_at: new Date().toISOString()
-          }).eq('id', profile.id);
+          })).eq('id', profile.id);
 
           if (error) {
             console.error(`[Server Webhook] CANCELLATION FAILED for user ${profile.id}: ${error.message}`);

@@ -35,8 +35,8 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
   }, []);
 
   useEffect(() => {
-    if (isActivating && profile?.subscription_tier === 'pro') {
-      console.log('[StripeDebug] Pro tier detected! Stopping polling.');
+    if (isActivating && hasProAccess(profile)) {
+      console.log('[StripeDebug] Full access detected! Stopping polling.');
       setIsActivating(false);
       setStatusMessage({ text: 'Activation complete! Welcome to the Pro family.', type: 'success' });
       if (pollingInterval.current) {
@@ -44,7 +44,7 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
         pollingInterval.current = null;
       }
     }
-  }, [isActivating, profile?.subscription_tier]);
+  }, [isActivating, profile?.subscription_tier, profile?.email]);
 
   useEffect(() => {
     if (route?.params?.showPricing && !showSavedScriptures) {
@@ -78,7 +78,7 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
 
       // Update state based on parameters
       if (success) {
-        if (profile?.subscription_tier !== 'pro') {
+        if (!hasProAccess(profile)) {
           setIsActivating(true);
           setStatusMessage({ text: 'Payment received! Activating your Pro plan...', type: 'info' });
           
@@ -87,6 +87,17 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
           const forceUpdateTier = async () => {
             try {
               if (profile?.id) {
+                const { data: latestProfile } = await supabase
+                  .from('profiles')
+                  .select('subscription_tier')
+                  .eq('id', profile.id)
+                  .maybeSingle();
+
+                if (latestProfile?.subscription_tier === 'owner' || latestProfile?.subscription_tier === 'pro') {
+                  console.log('[StripeDebug] Optimistic update skipped; user already has full access.');
+                  return;
+                }
+
                 console.log('[StripeDebug] Applying optimistic Pro tier update to DB...');
                 const { error } = await supabase
                   .from('profiles')
@@ -94,7 +105,8 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
                     subscription_tier: 'pro',
                     subscription_status: 'active'
                   })
-                  .eq('id', profile.id);
+                  .eq('id', profile.id)
+                  .neq('subscription_tier', 'owner');
                   
                 if (error) {
                   console.error('[StripeDebug] Optimistic update failed:', error);
@@ -122,7 +134,7 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
 
             const latestProfile = await refreshProfile(false);
             
-            if (latestProfile?.subscription_tier === 'pro' || latestProfile?.subscription_tier === 'owner') {
+            if (hasProAccess(latestProfile)) {
               console.log('[StripeDebug] PRO STATUS CONFIRMED via manual fetch! Unlocking app features.');
               setIsActivating(false);
               setStatusMessage({ text: 'Activation complete! Welcome to the Pro family.', type: 'success' });

@@ -160,8 +160,16 @@ function AppContent() {
     setRouteParams((prev: any) => ({ ...prev, ...params }));
   };
 
+  const reset = (state: { index?: number; routes?: Array<{ name: string; params?: any }> }) => {
+    const routes = state?.routes || [];
+    const target = routes[state?.index ?? 0] || routes[0];
+    if (!target?.name) return;
+    setCurrentRoute(target.name);
+    setRouteParams(target.params || null);
+  };
+
   const renderScreen = () => {
-    const nav = { navigate, setParams };
+    const nav = { navigate, setParams, reset };
     switch (currentRoute) {
       case 'Home':         return <HomeScreen navigation={nav} />;
       case 'Mood':         return <MoodScreen navigation={nav} route={{ params: routeParams }} />;
