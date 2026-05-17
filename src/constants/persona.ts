@@ -152,3 +152,62 @@ export const DAVID_CHAT_GREETINGS = [
   "I'm here. Talk to me.",
   "How are you holding up today?"
 ];
+
+export const DAVID_PERSONALITY_PROMPT = DAVID_PERSONA;
+
+export const DAVID_CHAT_TEMPERATURE = 0.92;
+
+export const DAVID_VOICE_SESSION_GREETINGS = [
+  "Hey... I'm here with you.",
+  "Good to see you.",
+  "Hey... what's on your mind?",
+  "I'm here. Talk to me.",
+  "How are you holding up today?"
+];
+
+function cleanFirstName(name?: string): string | undefined {
+  if (!name) return undefined;
+
+  const cleaned = name.trim();
+
+  if (
+    cleaned.includes('@') ||
+    cleaned.includes('.') ||
+    cleaned.length > 20 ||
+    /\d/.test(cleaned)
+  ) {
+    return undefined;
+  }
+
+  return cleaned.split(' ')[0];
+}
+
+export const getVoiceSessionGreeting = (firstName?: string): string => {
+  const cleanName = cleanFirstName(firstName);
+
+  if (cleanName) {
+    const named = [
+      `Hey, ${cleanName}... I'm here with you.`,
+      `Good to see you, ${cleanName}.`,
+      `Hey ${cleanName}... what's on your mind?`,
+      `${cleanName}, I'm here. Talk to me.`,
+      `How are you holding up today, ${cleanName}?`
+    ];
+
+    return named[Math.floor(Math.random() * named.length)];
+  }
+
+  return DAVID_VOICE_SESSION_GREETINGS[
+    Math.floor(Math.random() * DAVID_VOICE_SESSION_GREETINGS.length)
+  ];
+};
+
+export const DAVID_ANTI_REPEAT_FALLBACKS = [
+  "hmm...",
+  "yeah...",
+  "ah.",
+  "I hear you.",
+  "that's a lot.",
+  "I get that.",
+  "Say that again for me... I want to hear you right."
+];
