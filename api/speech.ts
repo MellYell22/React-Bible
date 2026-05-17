@@ -1,9 +1,11 @@
-import {
-  CARTESIA_API_VERSION,
-  CARTESIA_MODEL_ID,
-  CARTESIA_TTS_URL,
-  resolveCartesiaVoiceId,
-} from '../src/constants/cartesiaVoice';
+const DAVID_CARTESIA_VOICE_ID = 'a5136bf9-224c-4d76-b823-52bd5efcffcc';
+const CARTESIA_TTS_URL = 'https://api.cartesia.ai/tts/bytes';
+const CARTESIA_MODEL_ID = 'sonic-2';
+const CARTESIA_API_VERSION = '2025-04-16';
+
+function resolveCartesiaVoiceId(envVoiceId?: string | null): string {
+  return envVoiceId?.trim() || DAVID_CARTESIA_VOICE_ID;
+}
 
 /** Strip any markup so Cartesia receives plain conversational text. */
 function cleanTranscript(text: string): string {
