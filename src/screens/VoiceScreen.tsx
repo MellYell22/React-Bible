@@ -18,11 +18,12 @@ import {
   normalizeTranscript,
 } from '../utils/voiceTranscript';
 import { getVoiceSessionGreeting, DAVID_ANTI_REPEAT_FALLBACKS } from '../constants/persona';
-import { humanizeForTts, preSpeechThinkingDelay } from '../utils/davidSpeechDelivery';
+import { humanizeForTts, preSpeechThinkingDelay, prepareDavidTtsPayload } from '../utils/davidSpeechDelivery';
 
 const TTS_START_TIMEOUT_MS = 2500;
 const LLM_RESPONSE_TIMEOUT_MS = 20000;
 const TTS_RESPONSE_TIMEOUT_MS = 14000;
+const USER_CONTEXT_READY_TIMEOUT_MS = 1800;
 const POST_GREETING_MIC_DELAY_MS = 650;
 const INTERRUPT_RESUME_DELAY_MS = 180;
 
@@ -78,7 +79,7 @@ const cleanFirstName = (value?: string | null): string => {
 // David personality prompt: src/constants/persona.ts (api/chat.ts + server.ts)
 
 export default function VoiceScreen({ route, navigation }: any) {
-  const { profile, session } = useUser();
+  const { profile, session, loading: userContextLoading, refreshProfile } = useUser();
 
   // ── Conversation state machine ────────────────────────────────────────────
   // idle: not connected
@@ -128,6 +129,10 @@ export default function VoiceScreen({ route, navigation }: any) {
   const recentTranscriptsRef = useRef<string[]>([]);
   const sessionGenerationRef = useRef(0);
   const listeningActiveRef = useRef(false);
+  const profileRef = useRef(profile);
+  const userContextLoadingRef = useRef(userContextLoading);
+  const activeVoiceTurnRef = useRef(0);
+  const playbackTokenRef = useRef(0);
 
   // RMS thresholds — permissive enough to resume natural turn-taking after TTS.
   const SPEECH_RMS_THRESHOLD = 0.016;
@@ -162,6 +167,14 @@ export default function VoiceScreen({ route, navigation }: any) {
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
+
+  useEffect(() => {
+    userContextLoadingRef.current = userContextLoading;
+  }, [userContextLoading]);
 
   const clearListenRetry = () => {
     if (listenRetryTimeoutRef.current) {
@@ -215,6 +228,38 @@ export default function VoiceScreen({ route, navigation }: any) {
 
   const isSessionGenerationActive = (generation: number): boolean =>
     sessionGenerationRef.current === generation && isConnectedRef.current;
+
+  const isVoiceTurnActive = (turnId: number, generation: number): boolean =>
+    activeVoiceTurnRef.current === turnId && isSessionGenerationActive(generation);
+
+  const waitForVoiceContextReady = async (): Promise<void> => {
+    if (!session?.user?.id) return;
+    if (!userContextLoadingRef.current && profileRef.current) return;
+
+    const startedAt = Date.now();
+    log('User context readiness check before TTS', {
+      loading: userContextLoadingRef.current,
+      hasProfile: Boolean(profileRef.current),
+    });
+
+    try {
+      const latestProfile = await withTimeout(
+        refreshProfile(false),
+        USER_CONTEXT_READY_TIMEOUT_MS,
+        'User context readiness'
+      );
+      if (latestProfile) profileRef.current = latestProfile;
+      log('User context ready before TTS', {
+        waitedMs: Date.now() - startedAt,
+        hasProfile: Boolean(profileRef.current || latestProfile),
+      });
+    } catch (err: any) {
+      // Do not block speech forever on profile/network delays. David can still
+      // speak calmly with safe defaults, but playback will not begin until this
+      // readiness check has either completed or timed out.
+      log('User context readiness timeout — using safe voice defaults', err?.message);
+    }
+  };
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -273,6 +318,8 @@ export default function VoiceScreen({ route, navigation }: any) {
   /** Opening greeting — sync pick, async TTS without blocking session lifecycle */
   const playOpeningGreeting = async (greeting: string, generation: number) => {
     if (!isSessionGenerationActive(generation)) return;
+
+    const playbackToken = ++playbackTokenRef.current;
 
     isDavidSpeakingRef.current = true;
     setIsDavidSpeaking(true);
@@ -351,6 +398,8 @@ export default function VoiceScreen({ route, navigation }: any) {
     unlockAudioContext();
 
     const generation = ++sessionGenerationRef.current;
+    activeVoiceTurnRef.current += 1;
+    playbackTokenRef.current += 1;
 
     setIsConnecting(true);
     setConversationState('starting');
@@ -478,6 +527,8 @@ export default function VoiceScreen({ route, navigation }: any) {
     setMessages(prev => [...prev, newUserMessage]);
     setIsDavidThinking(true);
     isProcessingVoiceRef.current = true;
+    const generation = sessionGenerationRef.current;
+    const voiceTurnId = ++activeVoiceTurnRef.current;
     setListeningInactive('response requested');
     setConversationState('processing');
 
@@ -488,7 +539,7 @@ export default function VoiceScreen({ route, navigation }: any) {
       const response = await withTimeout(
         getChatResponse(
           history,
-          profile?.preferred_response_length || 'short',
+          profileRef.current?.preferred_response_length || profile?.preferred_response_length || 'short',
           route?.params?.mood,
         ),
         LLM_RESPONSE_TIMEOUT_MS,
@@ -504,7 +555,12 @@ export default function VoiceScreen({ route, navigation }: any) {
         return;
       }
 
-      log('AI response received — sending to TTS', response.substring(0, 80) + (response.length > 80 ? '…' : ''));
+      if (!isVoiceTurnActive(voiceTurnId, generation)) {
+        log('AI response ignored — newer voice turn is active');
+        return;
+      }
+
+      log('AI response received — preparing speech text', response.substring(0, 80) + (response.length > 80 ? '…' : ''));
       addLog('David response received — preparing voice…');
 
       // ── Response guards — swap bad lines for a short fallback (never silent retry) ──
@@ -527,14 +583,29 @@ export default function VoiceScreen({ route, navigation }: any) {
         log('Anti-repeat triggered — swapping response', `"${response.substring(0, 60)}" → "${fallback}"`);
         finalResponse = fallback;
       }
-      finalResponse = humanizeForTts(finalResponse);
-      lastDavidResponseRef.current = finalResponse;
+      await waitForVoiceContextReady();
+      if (!isVoiceTurnActive(voiceTurnId, generation)) {
+        log('Prepared response ignored — newer voice turn is active');
+        return;
+      }
+
+      const { displayText, speechText } = prepareDavidTtsPayload(finalResponse);
+      if (!speechText) {
+        addLog('Speech text empty after sanitation');
+        setIsDavidThinking(false);
+        isProcessingVoiceRef.current = false;
+        setConversationState('listening');
+        scheduleListenRetry('Empty speech text');
+        return;
+      }
+
+      lastDavidResponseRef.current = displayText;
 
       setIsDavidThinking(false);
-      setLastResponseText(finalResponse);
-      setMessages(prev => [...prev, { role: 'assistant', content: finalResponse }]);
+      setLastResponseText(displayText);
+      setMessages(prev => [...prev, { role: 'assistant', content: displayText }]);
 
-      await speakMessage(finalResponse);
+      await speakMessage(displayText, speechText, voiceTurnId, generation);
 
     } catch (err: any) {
       addLog(`AI chat error: ${err?.message}`);
@@ -546,7 +617,9 @@ export default function VoiceScreen({ route, navigation }: any) {
   };
 
   // ── Text-to-speech ────────────────────────────────────────────────────────
-  const speakMessage = async (text: string) => {
+  const speakMessage = async (displayText: string, speechText: string, voiceTurnId: number, generation: number) => {
+    if (!isVoiceTurnActive(voiceTurnId, generation)) return;
+
     // Stop any audio that might still be playing
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
@@ -557,20 +630,26 @@ export default function VoiceScreen({ route, navigation }: any) {
       currentAudioUrlRef.current = null;
     }
 
+    const playbackToken = ++playbackTokenRef.current;
+
     isDavidSpeakingRef.current = true;
     setIsDavidSpeaking(true);
     setListeningInactive('response playback started');
     setConversationState('speaking');
     setError(null);
 
-    log('TTS started', `${text.length} chars`);
+    log('TTS queued after sanitation', { displayChars: displayText.length, speechChars: speechText.length });
 
     try {
-      await preSpeechThinkingDelay(text);
-      log('TTS request started', `${text.length} chars`);
+      await preSpeechThinkingDelay(speechText);
+      if (!isVoiceTurnActive(voiceTurnId, generation) || playbackTokenRef.current !== playbackToken) {
+        log('TTS request skipped — voice turn no longer active');
+        return;
+      }
+      log('TTS request started after formatting complete', `${speechText.length} chars`);
       addLog('Generating David’s voice…');
       const audioUrl = await withTimeout(
-        generateSpeech(text, { skipHumanize: true }),
+        generateSpeech(speechText, { skipHumanize: true, alreadyPrepared: true }),
         TTS_RESPONSE_TIMEOUT_MS,
         'David voice generation'
       );
@@ -583,6 +662,12 @@ export default function VoiceScreen({ route, navigation }: any) {
         setError("David's voice is unavailable right now. Check the Cartesia API key.");
         isProcessingVoiceRef.current = false;
         if (isConnectedRef.current) scheduleListenRetry('TTS failed');
+        return;
+      }
+
+      if (!isVoiceTurnActive(voiceTurnId, generation) || playbackTokenRef.current !== playbackToken) {
+        log('Audio URL ignored — voice turn no longer active');
+        URL.revokeObjectURL(audioUrl);
         return;
       }
 
@@ -600,11 +685,16 @@ export default function VoiceScreen({ route, navigation }: any) {
       };
 
       audio.onplay = () => {
+        if (playbackTokenRef.current !== playbackToken) return;
         log('Audio playback started');
         addLog('David is speaking…');
       };
 
       audio.onended = () => {
+        if (playbackTokenRef.current !== playbackToken) {
+          URL.revokeObjectURL(audioUrl);
+          return;
+        }
         log('TTS playback ended', 'response');
         isDavidSpeakingRef.current = false;
         isProcessingVoiceRef.current = false;
@@ -615,7 +705,7 @@ export default function VoiceScreen({ route, navigation }: any) {
         if (isConnectedRef.current) {
           setListeningActive(`response playback ended — mic resumes in ${POST_TTS_MIC_DELAY_MS}ms`);
           setTimeout(() => {
-            if (isConnectedRef.current && !isDavidSpeakingRef.current && !isProcessingVoiceRef.current) {
+            if (isVoiceTurnActive(voiceTurnId, generation) && !isDavidSpeakingRef.current && !isProcessingVoiceRef.current) {
               startListening();
             }
           }, POST_TTS_MIC_DELAY_MS);
@@ -623,6 +713,7 @@ export default function VoiceScreen({ route, navigation }: any) {
       };
 
       audio.onerror = (e) => {
+        if (playbackTokenRef.current !== playbackToken) return;
         const errMsg = (e as any)?.message || 'unknown';
         log('Audio playback error', errMsg);
         addLog(`Audio playback failed: ${errMsg}`);
@@ -638,11 +729,18 @@ export default function VoiceScreen({ route, navigation }: any) {
         if (isConnectedRef.current) scheduleListenRetry('Playback error');
       };
 
+      if (!isVoiceTurnActive(voiceTurnId, generation) || playbackTokenRef.current !== playbackToken) {
+        log('audio.play() skipped — voice turn no longer active');
+        URL.revokeObjectURL(audioUrl);
+        return;
+      }
+
       log('Calling audio.play()');
       // play() returns a Promise — catch rejection (autoplay policy)
       const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise.catch((playErr: any) => {
+          if (playbackTokenRef.current !== playbackToken) return;
           log('audio.play() rejected (autoplay policy?)', playErr?.message);
           addLog(`audio.play() blocked: ${playErr?.message}. Try tapping the screen first.`);
           isDavidSpeakingRef.current = false;
@@ -676,6 +774,9 @@ export default function VoiceScreen({ route, navigation }: any) {
   const interruptDavidAndListen = (reason = 'user interrupted playback') => {
     if (!isConnectedRef.current) return;
     if (!isDavidSpeakingRef.current && !isProcessingVoiceRef.current) return;
+
+    activeVoiceTurnRef.current += 1;
+    playbackTokenRef.current += 1;
 
     log('David interrupted', reason);
     addLog('David paused — listening now');
@@ -1049,6 +1150,8 @@ export default function VoiceScreen({ route, navigation }: any) {
     log('session ended', reason);
     sessionGenerationRef.current += 1;
     isConnectedRef.current = false;
+    activeVoiceTurnRef.current += 1;
+    playbackTokenRef.current += 1;
     isDavidSpeakingRef.current = false;
     isProcessingVoiceRef.current = false;
     lastTranscriptRef.current = '';

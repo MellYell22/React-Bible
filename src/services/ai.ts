@@ -5,6 +5,8 @@ export type GenerateSpeechOptions = {
   isGreeting?: boolean;
   /** Set when text was already passed through humanizeForTts */
   skipHumanize?: boolean;
+  /** Set when caller has already completed final speech sanitation/formatting. */
+  alreadyPrepared?: boolean;
 };
 
 export const getMoodScriptures = async (
@@ -220,10 +222,12 @@ export const generateSpeech = async (
   text: string,
   options: GenerateSpeechOptions = {},
 ): Promise<string | null> => {
-  const { speechText } = prepareDavidTtsPayload(text, {
-    isGreeting: options.isGreeting,
-    force: options.skipHumanize,
-  });
+  const speechText = options.alreadyPrepared
+    ? text.trim()
+    : prepareDavidTtsPayload(text, {
+      isGreeting: options.isGreeting,
+      force: options.skipHumanize,
+    }).speechText;
   try {
     const response = await fetch('/api/speech', {
       method: 'POST',

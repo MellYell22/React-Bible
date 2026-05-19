@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './services/supabase';
 import { Profile } from './types';
 
@@ -10,20 +10,39 @@ interface UserContextType {
   signOut: () => Promise<void>;
 }
 
+const PROFILE_FETCH_TIMEOUT_MS = 4500;
+const PROFILE_RETRY_DELAY_MS = 750;
+
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const withProfileTimeout = async <T,>(promise: Promise<T>, timeoutMs = PROFILE_FETCH_TIMEOUT_MS): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`Profile fetch timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const profileFetchInFlightRef = useRef<Promise<Profile | null> | null>(null);
 
   // Safety net: ensure loading screen eventually disappears
   useEffect(() => {
     if (loading) {
       const timer = setTimeout(() => {
-        console.warn('[UserContext] Loading safety timeout reached (12s). Forcing app to initialize.');
+        console.warn('[UserContext] Loading safety timeout reached (8s). Forcing app to initialize.');
         setLoading(false);
-      }, 12000); 
+      }, 8000); 
       return () => clearTimeout(timer);
     }
   }, [loading]);
@@ -108,9 +127,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
       
       if (!data) {
         if (retries > 0) {
-          console.log(`[UserContext] Profile not found for ${userId}, retrying in 2s...`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          return fetchProfile(userId, retries - 1);
+          console.log(`[UserContext] Profile not found for ${userId}, retrying in ${PROFILE_RETRY_DELAY_MS}ms...`);
+          await wait(PROFILE_RETRY_DELAY_MS);
+          return withProfileTimeout(fetchProfile(userId, retries - 1));
         }
         console.error(`[UserContext] Profile not found after all retries for user ${userId}`);
         setProfile(null);
@@ -132,8 +151,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (retries === 0) {
         return null;
       } else {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        return fetchProfile(userId, retries - 1);
+        await wait(PROFILE_RETRY_DELAY_MS);
+        return withProfileTimeout(fetchProfile(userId, retries - 1));
       }
     }
   };
@@ -141,14 +160,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const refreshProfile = useCallback(async (showLoading = false): Promise<Profile | null> => {
     if (session?.user?.id) {
       console.log(`[UserContext] Profile refresh triggered (loading=${showLoading}) for user ${session.user.id}`);
+      if (profileFetchInFlightRef.current && !showLoading) {
+        return profileFetchInFlightRef.current;
+      }
       if (showLoading) setLoading(true);
       
       // Refresh session first to ensure we have current metadata/claims if any
       await supabase!.auth.refreshSession();
       
       try {
-        return await fetchProfile(session.user.id, 0);
+        const request = withProfileTimeout(fetchProfile(session.user.id, 0));
+        profileFetchInFlightRef.current = request;
+        return await request;
       } finally {
+        if (profileFetchInFlightRef.current) profileFetchInFlightRef.current = null;
         if (showLoading) setLoading(false);
       }
     } else {
@@ -159,8 +184,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
         console.log(`[UserContext] Found user via getUser fallback: ${user.id}`);
         if (showLoading) setLoading(true);
         try {
-          return await fetchProfile(user.id, 0);
+          const request = withProfileTimeout(fetchProfile(user.id, 0));
+          profileFetchInFlightRef.current = request;
+          return await request;
         } finally {
+          if (profileFetchInFlightRef.current) profileFetchInFlightRef.current = null;
           if (showLoading) setLoading(false);
         }
       }

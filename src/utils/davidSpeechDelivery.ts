@@ -75,6 +75,21 @@ const joinLineBreaksConversationally = (text: string): string => {
 const protectDecimalPoints = (text: string): string => text.replace(/(\d)\.(\d)/g, `$1${DECIMAL_PLACEHOLDER}$2`);
 const restoreDecimalPoints = (text: string): string => text.replaceAll(DECIMAL_PLACEHOLDER, '.');
 
+const softenPunctuationForTts = (text: string): string => {
+  let t = text;
+
+  // Cartesia treats periods as strong stops. Preserve real sentence endings, but
+  // soften separators that are usually formatting or mid-thought punctuation.
+  t = t.replace(/\s*[;:]\s*/g, ', ');
+  t = t.replace(/\s+[–—]\s+/g, ', ');
+  t = t.replace(/\s+-\s+/g, ', ');
+  t = t.replace(/,{2,}/g, ',');
+  t = t.replace(/\s+,/g, ',');
+  t = t.replace(/,\s*(and|but|so|because|then)\b/gi, ', $1');
+
+  return t;
+};
+
 const softenShortInternalStops = (text: string): string => {
   let t = protectDecimalPoints(text);
 
@@ -119,6 +134,7 @@ export function humanizeForTts(
   t = t.replace(/\.{3,}|…/g, '...');
   t = t.replace(/\s+/g, ' ');
   t = t.replace(/\s+([,.!?])/g, '$1');
+  t = softenPunctuationForTts(t);
   t = softenShortInternalStops(t);
 
   t = lightlyShortenRunOn(t);
@@ -149,6 +165,7 @@ export function sanitizeForDavidSpeech(text: string): string {
   t = t.replace(/!{2,}/g, '!');
   t = t.replace(/\s+/g, ' ');
   t = t.replace(/\s+([,.!?])/g, '$1');
+  t = softenPunctuationForTts(t);
   t = softenShortInternalStops(t);
 
   // Ellipses create a more human pause in Cartesia than commas alone, but too
@@ -202,10 +219,10 @@ export function prepareDavidTtsPayload(
 export function preSpeechThinkingDelay(text = ''): Promise<void> {
   const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
   const emotionalCue = /\b(anxious|afraid|sad|lonely|guilt|ashamed|overwhelmed|grief|hurt|heavy|panic|worried|tired)\b/i.test(text);
-  const base = emotionalCue ? 520 : 320;
-  const lengthAdjustment = wordCount <= 10 ? 220 : wordCount >= 35 ? -120 : 0;
+  const base = emotionalCue ? 620 : 420;
+  const lengthAdjustment = wordCount <= 10 ? 260 : wordCount >= 35 ? -80 : 80;
   const jitter = Math.floor(Math.random() * 260);
-  const delayMs = Math.max(260, Math.min(1050, base + lengthAdjustment + jitter));
+  const delayMs = Math.max(360, Math.min(1180, base + lengthAdjustment + jitter));
 
   return new Promise(resolve => setTimeout(resolve, delayMs));
 }
