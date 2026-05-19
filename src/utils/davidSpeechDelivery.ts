@@ -16,17 +16,21 @@ const SOFT_FILLER_RE = /^(mm+|hmm+|hm+|yeah|you know|i mean)[,\.\s…]+/i;
 const SCRIPTED_MARKUP_RE = /\[(?:soft\s+breath|breath|inhale|exhale|sigh|pause)\]|\((?:soft\s+breath|breath|inhale|exhale|sigh|pause)\)|\*(?:soft\s+breath|breath|inhale|exhale|sigh|pause)\*/gi;
 
 const HUMAN_OPENERS = [
-  'mm.',
-  'hmm.',
-  'yeah...',
+  'mm,',
+  'hmm,',
+  'yeah,',
 ] as const;
 
 const SHORT_ACKNOWLEDGEMENTS = [
-  'I hear you.',
-  "I'm with you.",
-  "That's a lot.",
-  'That feels heavy.',
+  'I hear you,',
+  "I'm with you,",
+  "That's a lot,",
+  'That feels heavy,',
 ] as const;
+
+const ACKNOWLEDGEMENT_PERIOD_RE = /\b(I hear you|I'm with you|I am with you|That feels heavy|That's a lot|That is a lot|I get that|I understand)\.\s+/gi;
+const FILLER_PERIOD_RE = /\b(mm+|hmm+|hm+|yeah|you know|i mean)\.\s+/gi;
+const DECIMAL_PLACEHOLDER = '__DAVID_DECIMAL_POINT__';
 
 const shouldMaybeAddOpener = (text: string, options: HumanizeOptions): boolean => {
   if (options.isGreeting || options.force) return false;
@@ -38,6 +42,55 @@ const shouldMaybeAddOpener = (text: string, options: HumanizeOptions): boolean =
   // deterministic-ish and sparse so David does not develop a verbal tic.
   const emotionalCue = /\b(anxious|afraid|sad|lonely|alone|guilt|guilty|ashamed|overwhelmed|tired|grief|lost|hurt|heavy|panic|worried|depressed)\b/i.test(text);
   return emotionalCue ? Math.random() < 0.38 : Math.random() < 0.16;
+};
+
+const joinLineBreaksConversationally = (text: string): string => {
+  const lines = text
+    .replace(/\r\n?/g, '\n')
+    .split(/\n+/)
+    .map(line => line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').trim())
+    .filter(Boolean);
+
+  if (lines.length <= 1) return text;
+
+  return lines
+    .map((line, index) => {
+      let current = line;
+      const isLast = index === lines.length - 1;
+
+      if (!isLast) {
+        // Newlines are visual formatting, not mandatory speech stops. Remove
+        // trailing punctuation that was likely added only because the phrase was
+        // placed on its own line, while keeping true question marks intact.
+        current = current.replace(/[.;:]+$/g, '');
+        if (/[!?]$/.test(current)) return current;
+        return `${current},`;
+      }
+
+      return current;
+    })
+    .join(' ');
+};
+
+const protectDecimalPoints = (text: string): string => text.replace(/(\d)\.(\d)/g, `$1${DECIMAL_PLACEHOLDER}$2`);
+const restoreDecimalPoints = (text: string): string => text.replaceAll(DECIMAL_PLACEHOLDER, '.');
+
+const softenShortInternalStops = (text: string): string => {
+  let t = protectDecimalPoints(text);
+
+  // Filler and acknowledgement periods sound like hard stops in TTS. They should
+  // be a soft conversational beat, not a sentence break.
+  t = t.replace(FILLER_PERIOD_RE, (_match, filler: string) => `${filler}, `);
+  t = t.replace(ACKNOWLEDGEMENT_PERIOD_RE, (_match, phrase: string) => `${phrase}, `);
+
+  // If a very short first beat is followed by more speech, make it flow like a
+  // spoken lead-in. Longer complete thoughts keep their sentence boundary.
+  t = t.replace(/^([^.!?]{2,34})\.\s+(?=[A-Z"'])/u, (_match, leadIn: string) => {
+    const wordCount = leadIn.trim().split(/\s+/).filter(Boolean).length;
+    return wordCount <= 5 ? `${leadIn}, ` : `${leadIn}. `;
+  });
+
+  return restoreDecimalPoints(t);
 };
 
 const lightlyShortenRunOn = (text: string): string => {
@@ -60,11 +113,13 @@ export function humanizeForTts(
 
   // Keep the displayed assistant text conversational and speech-friendly.
   t = t.replace(SCRIPTED_MARKUP_RE, '');
-  t = t.replace(/\s+/g, ' ');
+  t = joinLineBreaksConversationally(t);
   t = t.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
-  t = t.replace(/!+/g, '.');
+  t = t.replace(/!{2,}/g, '!');
   t = t.replace(/\.{3,}|…/g, '...');
+  t = t.replace(/\s+/g, ' ');
   t = t.replace(/\s+([,.!?])/g, '$1');
+  t = softenShortInternalStops(t);
 
   t = lightlyShortenRunOn(t);
 
@@ -88,18 +143,21 @@ export function sanitizeForDavidSpeech(text: string): string {
   let t = text.trim();
 
   t = t.replace(SCRIPTED_MARKUP_RE, '');
+  t = joinLineBreaksConversationally(t);
   t = t.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
   t = t.replace(/…/g, '...');
-  t = t.replace(/[!?]+/g, '.');
+  t = t.replace(/!{2,}/g, '!');
   t = t.replace(/\s+/g, ' ');
-  t = t.replace(/\s+([,.])/g, '$1');
+  t = t.replace(/\s+([,.!?])/g, '$1');
+  t = softenShortInternalStops(t);
 
   // Ellipses create a more human pause in Cartesia than commas alone, but too
-  // many make speech drag. Keep the first two, soften the rest.
+  // many make speech drag. Keep the first one, soften the rest so the line keeps
+  // moving instead of repeatedly stopping.
   let ellipsisCount = 0;
   t = t.replace(/\.\.\./g, () => {
     ellipsisCount += 1;
-    return ellipsisCount <= 2 ? '...' : ', ';
+    return ellipsisCount <= 1 ? '...' : ', ';
   });
 
   // Add one small acknowledgement to very short emotional replies only when the
@@ -112,11 +170,10 @@ export function sanitizeForDavidSpeech(text: string): string {
 
   t = t.replace(TRAILING_PAUSE_MARKS, '');
 
-  if (t && !/[.!?]$/.test(t)) {
-    t += '.';
-  }
-
-  return t;
+  // Do not append an artificial period. Cartesia should only pause when the LLM
+  // actually produced a meaningful sentence boundary, not because the frontend
+  // forced every TTS payload to end with a hard stop.
+  return t.trim();
 }
 
 export type PrepareTtsResult = {
