@@ -208,3 +208,42 @@ export function preSpeechThinkingDelay(text = ''): Promise<void> {
 export const enhanceSpeechDelivery = (text: string): string => {
   return sanitizeForDavidSpeech(humanizeForTts(text));
 };
+
+// Fetch Cartesia TTS settings dynamically from environment variables
+const CARTESIA_MODEL_ID = import.meta.env?.CARTESIA_MODEL_ID || env.CARTESIA_MODEL_ID || 'default-model';
+const CARTESIA_API_VERSION = import.meta.env?.CARTESIA_API_VERSION || env.CARTESIA_API_VERSION || '2026-01-01';
+const CARTESIA_TTS_SPEED = parseFloat(import.meta.env?.CARTESIA_TTS_SPEED || env.CARTESIA_TTS_SPEED || '1.0');
+const CARTESIA_TTS_VOLUME = parseFloat(import.meta.env?.CARTESIA_TTS_VOLUME || env.CARTESIA_TTS_VOLUME || '1.0');
+const CARTESIA_TTS_EMOTION = import.meta.env?.CARTESIA_TTS_EMOTION || env.CARTESIA_TTS_EMOTION || 'neutral';
+
+// Generate the speech request payload dynamically
+export function generateSpeechPayload(text: string): Record<string, any> {
+  return {
+    modelId: CARTESIA_MODEL_ID,
+    apiVersion: CARTESIA_API_VERSION,
+    ttsSettings: {
+      speed: CARTESIA_TTS_SPEED,
+      volume: CARTESIA_TTS_VOLUME,
+      emotion: CARTESIA_TTS_EMOTION,
+    },
+    text: improveSentencePacing(text),
+  };
+}
+
+// Improve sentence pacing by splitting long responses and adding subtle pauses
+function improveSentencePacing(text: string): string {
+  const sentences = text.split(/(?<=[.!?])\s+/);
+
+  return sentences
+    .map((sentence, index) => {
+      const isLast = index === sentences.length - 1;
+
+      // Add subtle pauses between thoughts
+      if (!isLast) {
+        return `${sentence} <break time='300ms'/>`;
+      }
+
+      return sentence;
+    })
+    .join(' ');
+}
