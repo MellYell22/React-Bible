@@ -11,6 +11,34 @@ const corsHeaders = {
 const DEFAULT_PRO_PRICE_ID = "price_1TRTQuGDw0P2L0A1MsgZiMeM";
 const isPaidSubscription = (status: string) => status === "active" || status === "trialing";
 
+// The project's legacy anon/service_role keys are disabled, so auth calls must
+// use a modern publishable key. Publishable keys are safe to embed.
+const FALLBACK_PUBLISHABLE_KEY = "sb_publishable_XpVDXroi6heBFrljTrWGrA__tFu6PTp";
+
+const resolveAuthApiKey = (): string => {
+  const candidates = [
+    Deno.env.get("SB_PUBLISHABLE_KEY"),
+    Deno.env.get("SUPABASE_PUBLISHABLE_KEY"),
+  ];
+  for (const candidate of candidates) {
+    if (candidate && candidate.startsWith("sb_publishable_")) return candidate;
+  }
+  return FALLBACK_PUBLISHABLE_KEY;
+};
+
+// Prefer a modern secret key when configured; the legacy service_role key is
+// disabled on this project, so it is intentionally not used here.
+const resolveSecretKey = (): string | null => {
+  const candidates = [
+    Deno.env.get("SB_SECRET_KEY"),
+    Deno.env.get("SUPABASE_SECRET_KEY"),
+  ];
+  for (const candidate of candidates) {
+    if (candidate && candidate.startsWith("sb_secret_")) return candidate;
+  }
+  return null;
+};
+
 const response = (body: Record<string, unknown>, status = 200) => new Response(
   JSON.stringify(body),
   { status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -23,11 +51,9 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
 
-    if (!authHeader || !supabaseUrl || !supabaseAnonKey || !supabaseServiceKey || !stripeSecretKey) {
+    if (!authHeader || !supabaseUrl || !stripeSecretKey) {
       console.error("[sync-checkout-session] Missing required configuration or authorization.");
       return response({ error: "Unable to verify checkout because the server is not configured." }, 500);
     }
@@ -37,10 +63,13 @@ serve(async (req) => {
       return response({ error: "Invalid Stripe Checkout Session ID." }, 400);
     }
 
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+    const authClient = createClient(supabaseUrl, resolveAuthApiKey(), {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: { user }, error: userError } = await authClient.auth.getUser();
+    // Pass the JWT explicitly: server context has no stored session, so
+    // getUser() without an argument always fails with "Auth session missing".
+    const accessToken = authHeader.replace(/^Bearer\s+/i, "");
+    const { data: { user }, error: userError } = await authClient.auth.getUser(accessToken);
 
     if (userError || !user) {
       return response({ error: "Your sign-in session is no longer valid. Please sign in again." }, 401);
@@ -65,26 +94,30 @@ serve(async (req) => {
     const subscriptionId = checkout.subscription as string;
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
     const priceId = subscription.items.data[0]?.price?.id;
-    const proPriceId = Deno.env.get("STRIPE_PRICE_ID_PRO") || DEFAULT_PRO_PRICE_ID;
+    const envPriceId = Deno.env.get("STRIPE_PRICE_ID_PRO");
+    const proPriceId = (envPriceId && envPriceId.startsWith("price_")) ? envPriceId : DEFAULT_PRO_PRICE_ID;
 
     if (priceId !== proPriceId || !isPaidSubscription(subscription.status)) {
       console.warn(`[sync-checkout-session] Checkout ${sessionId} is not an active Pro subscription.`);
       return response({ error: "This checkout did not create an active Pro subscription." }, 409);
     }
 
-    const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
-    const { data: profile, error: updateError } = await serviceClient
+    // Payment is verified against Stripe above, so writing the entitlement with
+    // the user's own row-level-security scoped client is safe. A modern secret
+    // key is preferred when configured.
+    const secretKey = resolveSecretKey();
+    const writeClient = secretKey ? createClient(supabaseUrl, secretKey) : authClient;
+
+    const { data: profile, error: updateError } = await writeClient
       .from("profiles")
       .update({
         subscription_tier: "pro",
         subscription_status: "active",
-        plan: "pro",
         stripe_customer_id: checkout.customer as string,
         stripe_subscription_id: subscription.id,
         stripe_subscription_status: subscription.status,
         stripe_price_id: priceId,
         stripe_current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-        updated_at: new Date().toISOString(),
       })
       .eq("id", user.id)
       .select("id, subscription_tier")

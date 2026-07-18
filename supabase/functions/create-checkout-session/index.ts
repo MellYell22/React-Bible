@@ -9,9 +9,24 @@ const corsHeaders = {
 };
 
 const DEFAULT_PRO_PRICE_ID = "price_1TRTQuGDw0P2L0A1MsgZiMeM";
+const TRIAL_PERIOD_DAYS = 7;
+
+// The project's legacy anon/service_role keys are disabled, so auth calls must
+// use a modern publishable key. Publishable keys are safe to embed.
+const FALLBACK_PUBLISHABLE_KEY = "sb_publishable_XpVDXroi6heBFrljTrWGrA__tFu6PTp";
+
+const resolveAuthApiKey = (): string => {
+  const candidates = [
+    Deno.env.get("SB_PUBLISHABLE_KEY"),
+    Deno.env.get("SUPABASE_PUBLISHABLE_KEY"),
+  ];
+  for (const candidate of candidates) {
+    if (candidate && candidate.startsWith("sb_publishable_")) return candidate;
+  }
+  return FALLBACK_PUBLISHABLE_KEY;
+};
 
 serve(async (req) => {
-  // Handle preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -24,12 +39,14 @@ serve(async (req) => {
   }
 
   try {
-    const proPriceId = Deno.env.get("STRIPE_PRICE_ID_PRO") || DEFAULT_PRO_PRICE_ID;
+    // Only use the env var if it looks like a real Stripe price ID
+    const envPriceId = Deno.env.get("STRIPE_PRICE_ID_PRO");
+    const proPriceId = (envPriceId && envPriceId.startsWith("price_")) ? envPriceId : DEFAULT_PRO_PRICE_ID;
+    console.log(`[create-checkout-session] Using price ID: ${proPriceId}`);
 
-    // Get user strictly from JWT to verify and get identity
     let userId: string | undefined = undefined;
     let userEmail: string | undefined = undefined;
-    
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       console.error("[create-checkout-session] Error: Missing Authorization header");
@@ -40,13 +57,16 @@ serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    const supabase = createClient(supabaseUrl, resolveAuthApiKey(), {
       global: { headers: { Authorization: authHeader } },
     });
-    
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
+
+    // IMPORTANT: pass the JWT explicitly. In a server context there is no
+    // stored session, so getUser() without an argument always fails with
+    // "Auth session missing" regardless of the token's validity.
+    const accessToken = authHeader.replace(/^Bearer\s+/i, "");
+    const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
+
     if (userError || !user) {
       console.error(`[create-checkout-session] Auth error or user not found: ${userError?.message}`);
       return new Response(
@@ -58,10 +78,9 @@ serve(async (req) => {
     userId = user.id;
     userEmail = user.email;
 
-    // Fetch profile to see if they already have a stripe_customer_id
     const { data: profile } = await supabase
       .from('profiles')
-      .select('stripe_customer_id')
+      .select('stripe_customer_id, stripe_subscription_id')
       .eq('id', userId)
       .single();
 
@@ -85,10 +104,12 @@ serve(async (req) => {
       httpClient: Stripe.createFetchHttpClient(),
     });
 
-    // Get origin for success/cancel URLs. Always return to the SPA root so React can catch the payment params.
     const origin = req.headers.get("origin") || Deno.env.get("APP_URL") || "http://localhost:3000";
     const normalizedOrigin = origin.replace(/\/$/, "");
     console.log(`[create-checkout-session] Creating Pro checkout for user: ${userId}, price: ${proPriceId}, origin: ${normalizedOrigin}`);
+
+    // Only offer the free trial to customers who have never had a subscription.
+    const hadSubscriptionBefore = !!profile?.stripe_subscription_id;
 
     try {
       const sessionOptions: any = {
@@ -101,6 +122,7 @@ serve(async (req) => {
         ],
         mode: "subscription",
         subscription_data: {
+          ...(hadSubscriptionBefore ? {} : { trial_period_days: TRIAL_PERIOD_DAYS }),
           metadata: {
             userId,
             user_id: userId,
