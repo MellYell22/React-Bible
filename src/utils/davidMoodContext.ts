@@ -144,8 +144,21 @@ export function buildDavidSystemPromptWithMood(
   return buildDavidSystemPromptFromGuidance(guidance);
 }
 
-export function buildDavidSystemPromptFromGuidance(guidance: DavidScriptureGuidance): string {
+export type DavidPromptOptions = {
+  /** When false (streaming text chat), the private [VERSE USED] footer instruction is omitted so it can never leak into user-visible output. */
+  includeVerseFooter?: boolean;
+};
+
+export function buildDavidSystemPromptFromGuidance(
+  guidance: DavidScriptureGuidance,
+  options: DavidPromptOptions = {},
+): string {
   if (!guidance.moodKey || !guidance.scripture) return DAVID_PERSONALITY_PROMPT;
+
+  const includeVerseFooter = options.includeVerseFooter !== false;
+  const footerRule = includeVerseFooter
+    ? `\n- Only if you actually used this scripture (a phrase, the reference, or the full verse), end the response with this exact private tracking footer on its own line: [VERSE USED: ${guidance.scripture.reference}]. If you did not use it, do not add the footer.`
+    : '\n- Never output any bracketed tracking tags such as [VERSE USED: ...]; they are for internal systems only.';
 
   const scriptureSection = `
 
@@ -159,8 +172,7 @@ How to use it:
 - This scripture is an option, not a requirement. Skip it entirely when the user's words call for simple human presence.
 - When it fits, usually weave in a short phrase or just the reference ("Psalm 46 has that quiet line about being still..."). Read the full verse only when the moment truly calls for it.
 - Never turn the reply into a devotional or a lecture. Keep the whole reply to one or two short spoken sentences.
-- Do not end every reply with a question. Ask at most one gentle question, and only when it genuinely helps the user keep talking. Ending warmly with no question is often better.
-- Only if you actually used this scripture (a phrase, the reference, or the full verse), end the response with this exact private tracking footer on its own line: [VERSE USED: ${guidance.scripture.reference}]. If you did not use it, do not add the footer.`;
+- Do not end every reply with a question. Ask at most one gentle question, and only when it genuinely helps the user keep talking. Ending warmly with no question is often better.${footerRule}`;
 
   return `${DAVID_PERSONALITY_PROMPT}
 CURRENT EMOTIONAL THREAD:

@@ -58,7 +58,7 @@ export default function ChatScreen({ navigation, route }: any) {
           newMessages[modelMessageIndex] = { role: 'assistant', content: fullText };
           return newMessages;
         });
-      }, profile?.preferred_response_length || 'medium');
+      }, profile?.preferred_response_length || 'medium', undefined, { userId: profile?.id || null });
 
       if (!response) {
         setMessages(prev => {
@@ -70,10 +70,8 @@ export default function ChatScreen({ navigation, route }: any) {
     } catch (error: any) {
       console.error("Chat Error:", error);
       let errorMessage = "I'm having a bit of trouble connecting right now. Let's try again in a moment.";
-      if (error?.message?.includes("API_KEY_INVALID") || error?.message?.includes("API key not found")) {
-        errorMessage = "It looks like the API key is missing or invalid. Please ensure the OPENAI_API_KEY is set in the environment.";
-      } else if (error?.message?.includes("quota")) {
-        errorMessage = "I've reached my daily limit for conversations. Please try again later.";
+      if (error?.message?.includes("quota") || error?.message?.includes("rate limit")) {
+        errorMessage = "I need a short breather — a lot of people are talking with me right now. Try me again in a few minutes.";
       }
       setMessages(prev => {
         const newMessages = [...prev];

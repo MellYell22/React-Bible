@@ -467,21 +467,44 @@ export const getDavidVoiceResponse = async (
   };
 };
 
+const VERSE_FOOTER_CLIENT_RE = /\s*\[VERSE USED:\s*[^\]]*\]\s*/gi;
+
+const stripVerseFooterClient = (text: string): string =>
+  text.replace(VERSE_FOOTER_CLIENT_RE, ' ').replace(/[ \t]{2,}/g, ' ').trim();
+
 export const getChatResponseStream = async (
   history: ChatHistoryMessage[],
   onChunk: (text: string) => void,
   responseLength: ResponseLength = 'short',
   moodKey?: string,
-  options: RequestOptions = {},
+  options: RequestOptions & { userId?: string | null } = {},
 ): Promise<string> => {
   const lengthInstruction = {
-    short: "Voice turn: 6-28 words when possible. One natural spoken beat, maybe two. No lists, no greeting, no customer-support language.",
-    medium: "Voice turn: 1-2 short sentences. Human rhythm, modest pauses, no polished paragraph, no validation formula.",
-    long: "Voice turn: 2-3 short sentences max. Give the simple answer first, then stop. No sermon, no bullet list."
+    short: "Text chat turn: 1-3 short sentences. Warm and plain. No lists, no greeting, no customer-support language.",
+    medium: "Text chat turn: 2-4 short sentences. Meet the feeling first; share one verse only when it truly fits, and explain it like a friend would.",
+    long: "Text chat turn: 3-5 short sentences max. Give the simple answer first, then stop. No sermon, no bullet list."
   }[responseLength];
 
+  // Text chat gets the same long-term memory voice chat has, so David can
+  // carry facts (a sick spouse, a job loss) across sessions. The lookup runs
+  // with a time budget so a slow network never stalls the reply.
+  const memoryContextPromise: Promise<{ userId: string | null; memory: DavidConversationMemory[] }> =
+    resolveDavidMemoryUserId(options.userId)
+      .then(async (userId) => ({ userId, memory: await getVoiceMemory(userId) }))
+      .catch(() => ({ userId: null, memory: [] as DavidConversationMemory[] }));
+
+  const memoryContext = await Promise.race([
+    memoryContextPromise,
+    waitFor(800).then(() => null),
+  ]);
+  const memory = memoryContext?.memory || [];
+
+  const memoryUsedVerses = memory
+    .map(item => item.verse_used)
+    .filter((verse): verse is string => Boolean(verse));
+
   const voiceContext = [
-    buildVoiceConversationContext(history),
+    buildVoiceConversationContext(history, memory),
     `Response length instruction: ${lengthInstruction}`,
   ].filter(Boolean).join('\n');
 
@@ -491,7 +514,14 @@ export const getChatResponseStream = async (
   }));
 
   const latestUserMessage = [...history].reverse().find(message => message.role === 'user')?.content || '';
-  const streamPayload = { messages, stream: true, moodKey, voiceContext };
+  const streamPayload = {
+    messages,
+    stream: true,
+    moodKey,
+    voiceContext,
+    usedVerses: memoryUsedVerses,
+    liveVoice: false,
+  };
 
   logApiRequest('POST /api/chat', {
     mode: 'stream',
@@ -551,7 +581,7 @@ export const getChatResponseStream = async (
         try {
           const data = JSON.parse(dataStr);
           fullText += data.text;
-          onChunk(fullText);
+          onChunk(stripVerseFooterClient(fullText));
         } catch (e) {
           // Ignore parse errors for incomplete lines.
         }
@@ -559,14 +589,44 @@ export const getChatResponseStream = async (
     }
   }
 
+  const finalText = stripVerseFooterClient(fullText);
+
   logApiResponse('POST /api/chat', {
     ok: true,
     mode: 'stream_complete',
-    textLength: fullText.length,
-    textPreview: previewText(fullText),
+    textLength: finalText.length,
+    textPreview: previewText(finalText),
   });
 
-  return fullText;
+  // Persist the exchange so future sessions (text or voice) remember it.
+  if (latestUserMessage && finalText && !options.signal?.aborted) {
+    void memoryContextPromise.then(({ userId: memoryUserId }) => {
+      if (!memoryUserId) return;
+
+      const memoryEntry: DavidConversationMemory = {
+        user_id: memoryUserId,
+        mood_key: moodKey || null,
+        user_message: latestUserMessage,
+        david_response: finalText,
+        verse_used: null,
+        opening_phrase: getOpeningPhrase(finalText),
+        follow_up_question: getFollowUpQuestion(finalText),
+        short_summary: `${moodKey || 'unknown mood'}: ${safeText(latestUserMessage, 180)}`,
+        created_at: new Date().toISOString(),
+      };
+      const cached = voiceMemoryCache.get(memoryUserId);
+      voiceMemoryCache.set(memoryUserId, {
+        memory: [memoryEntry, ...(cached?.memory || [])].slice(0, 10),
+        expiresAt: Date.now() + 60_000,
+        request: cached?.request,
+      });
+      void saveDavidConversationMemory(memoryEntry).catch((error) => {
+        console.log('[David Memory] Save failed without blocking the chat reply:', error);
+      });
+    });
+  }
+
+  return finalText;
 };
 
 export const generateSpeech = async (

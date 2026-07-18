@@ -145,6 +145,48 @@ export const MOODS_DATA: MoodData[] = [
     ],
   },
   {
+    key: 'GUILTY',
+    label: 'Guilty',
+    davidReaction: [
+      "mm… guilt gets loud, doesn't it. it replays things.",
+      "yeah… carrying something like that wears on a person.",
+      "man… shame has a way of telling you it's permanent. it isn't.",
+      "yeah… regret can sit heavy long after everyone else has moved on.",
+    ],
+    davidFollowUps: [
+      "is this about something recent, or something you've been carrying a while?",
+      "have you been able to say it out loud to anyone before now?",
+      "yeah… what does the guilt keep telling you?",
+      "do you feel like it's something God is holding against you… or something you're holding against yourself?",
+    ],
+    scriptures: [
+      {
+        reference: 'Romans 8:1',
+        verse: 'Therefore, there is now no condemnation for those who are in Christ Jesus.',
+        davidIntro: "there's a line at the start of Romans 8 that I keep coming back to for exactly this…",
+        davidReflection: "no condemnation. it doesn't say no consequences or no memories — it says the verdict of condemned is gone. the guilt can be loud, but it isn't the final voice.",
+      },
+      {
+        reference: '1 John 1:9',
+        verse: 'If we confess our sins, he is faithful and just and will forgive us our sins and purify us from all unrighteousness.',
+        davidIntro: "there's a promise in 1 John that's almost startlingly simple…",
+        davidReflection: "faithful and just to forgive. not reluctant. not keeping score. saying it honestly is the whole doorway.",
+      },
+      {
+        reference: 'Psalm 103:12',
+        verse: 'As far as the east is from the west, so far has he removed our transgressions from us.',
+        davidIntro: "there's a picture in Psalm 103 that's stayed with me…",
+        davidReflection: "east and west never meet. that's the distance. the thing you keep replaying — God isn't replaying it.",
+      },
+      {
+        reference: 'Micah 7:19',
+        verse: 'You will again have compassion on us; you will tread our sins underfoot and hurl all our iniquities into the depths of the sea.',
+        davidIntro: "there's a verse in Micah with an image that's hard to forget…",
+        davidReflection: "hurled into the depths of the sea. not filed away to bring up later. gone. the question is whether you'll let yourself stop diving for it.",
+      },
+    ],
+  },
+  {
     key: 'STRESSED',
     label: 'Stressed',
     davidReaction: [
