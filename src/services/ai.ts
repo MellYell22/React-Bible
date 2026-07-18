@@ -305,9 +305,9 @@ const buildVoiceConversationContext = (
 
 const buildLengthInstruction = (responseLength: ResponseLength): string => {
   return {
-    short: "Voice turn: 1 to 2 short spoken sentences, warm and simple. Use scripture only if it fits naturally, and vary the wording every turn.",
-    medium: "Voice turn: sound human and unscripted. Acknowledge, use scripture naturally if it fits, give one short reflection, and only ask a gentle question if it truly fits.",
-    long: "Voice turn: 2 to 3 short sentences max, conversational and pastoral, no list formatting. Avoid recycled openings and repeated question endings."
+    short: "Voice turn: 1 to 2 complete, natural spoken sentences, warm and fluent. Use scripture only if it fits naturally, and vary the wording every turn.",
+    medium: "Voice turn: sound human and unscripted, in complete flowing sentences. Acknowledge, use scripture naturally if it fits, give one short reflection, and only ask a gentle question if it truly fits.",
+    long: "Voice turn: 2 to 3 complete sentences max, conversational and pastoral, no list formatting. Avoid recycled openings and repeated question endings."
   }[responseLength];
 };
 

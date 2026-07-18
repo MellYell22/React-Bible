@@ -20,7 +20,10 @@ import { getVoiceSessionGreeting } from '../constants/persona';
 
 const IDLE_VOICE_LEVELS = [0.18, 0.26, 0.2, 0.3, 0.22, 0.34, 0.24, 0.31, 0.2];
 
-const SPEECH_VOLUME_THRESHOLD = 0.11;
+const SPEECH_VOLUME_THRESHOLD = 0.16;
+/** Voiced audio must persist this long (cumulative) before it counts as the user
+ * actually speaking — a stray TV syllable or clatter no longer arms the recorder. */
+const SPEECH_SUSTAIN_MS = 280;
 const SILENCE_STOP_MS = 850;
 const MIN_RECORDING_MS = 700;
 const HARD_MAX_RECORDING_MS = 45000;
@@ -162,6 +165,8 @@ export default function VoiceScreen() {
   const speechDetectedRef = useRef(false);
   const lastSpeechAtRef = useRef<number | null>(null);
   const autoStopTriggeredRef = useRef(false);
+  const voicedMsRef = useRef(0);
+  const lastVadTickAtRef = useRef<number | null>(null);
 
   const transcribeAbortControllerRef = useRef<AbortController | null>(null);
   const chatAbortControllerRef = useRef<AbortController | null>(null);
@@ -373,9 +378,22 @@ export default function VoiceScreen() {
         setVoiceLevels(nextLevels);
 
         if (options.monitorSilence && conversationActiveRef.current) {
+          const lastTickAt = lastVadTickAtRef.current;
+          const deltaMs = lastTickAt === null ? 0 : Math.min(now - lastTickAt, 100);
+          lastVadTickAtRef.current = now;
+
           if (normalizedVolume >= SPEECH_VOLUME_THRESHOLD) {
-            speechDetectedRef.current = true;
-            lastSpeechAtRef.current = now;
+            // Only count it as the user speaking once voiced audio has been
+            // sustained — brief background sounds (TV, clatter) decay away.
+            voicedMsRef.current += deltaMs;
+            if (voicedMsRef.current >= SPEECH_SUSTAIN_MS) {
+              speechDetectedRef.current = true;
+            }
+            if (speechDetectedRef.current) {
+              lastSpeechAtRef.current = now;
+            }
+          } else {
+            voicedMsRef.current = Math.max(0, voicedMsRef.current - deltaMs * 0.5);
           }
 
           const elapsed = now - recordingStartedAtRef.current;
@@ -458,7 +476,16 @@ export default function VoiceScreen() {
     listenSessionIdRef.current = localListenSessionId;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Explicit constraints: echo cancellation keeps David from hearing his own
+      // voice; noise suppression tames background hum; auto-gain OFF stops the
+      // browser from amplifying quiet room audio (TV, music) up to speech level.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: false,
+        },
+      });
       pendingStream = stream;
 
       if (!isCurrentConversation(localConversationId) || listenSessionIdRef.current !== localListenSessionId) {
@@ -479,6 +506,8 @@ export default function VoiceScreen() {
       speechDetectedRef.current = false;
       lastSpeechAtRef.current = null;
       autoStopTriggeredRef.current = false;
+      voicedMsRef.current = 0;
+      lastVadTickAtRef.current = null;
 
       startVoiceActivity(stream, {
         monitorSilence: true,

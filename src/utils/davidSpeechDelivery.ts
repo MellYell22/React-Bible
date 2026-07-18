@@ -92,13 +92,15 @@ const addTinyNaturalBreaths = (text: string): string => {
 const lightlyShortenRunOn = (text: string): string => {
   const sentenceMatches = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g);
 
-  if (!sentenceMatches || sentenceMatches.length <= 2) {
+  // Allow up to three complete sentences so David's follow-up question is
+  // never chopped off; only truly run-on replies get trimmed.
+  if (!sentenceMatches || sentenceMatches.length <= 3) {
     return text;
   }
 
-  const firstTwo = sentenceMatches.slice(0, 2).join(' ').trim();
+  const firstThree = sentenceMatches.slice(0, 3).join(' ').trim();
 
-  return firstTwo.length >= 28 ? firstTwo : text;
+  return firstThree.length >= 28 ? firstThree : text;
 };
 
 function preparePlainSpeechText(text: string): string {

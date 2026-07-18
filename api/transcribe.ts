@@ -158,7 +158,7 @@ export default async function handler(req: any, res: any) {
     console.log('[API Request] OpenAI audio.transcriptions.create', {
       model: 'whisper-1',
       language: 'en',
-      responseFormat: 'json',
+      responseFormat: 'verbose_json',
       prompt: 'Spiritual conversation in English.',
       temperature: 0,
       filename: audioFilename,
@@ -169,13 +169,37 @@ export default async function handler(req: any, res: any) {
       file: audioFile,
       model: 'whisper-1',
       language: 'en',
-      response_format: 'json',
+      // verbose_json exposes per-segment confidence so we can drop background
+      // audio (TV, music, distant conversation) that Whisper transcribes as
+      // fluent English but was never directed at David.
+      response_format: 'verbose_json',
       // Neutral prompt reduces conversational hallucinations on non-speech audio
       prompt: 'Spiritual conversation in English.',
       temperature: 0,
     });
 
-    const rawTranscript = transcription.text?.trim() || '';
+    // Keep only segments Whisper is confident are real, foreground speech.
+    // no_speech_prob is high for background audio and music; avg_logprob is
+    // very low for mumbled/distant speech the user did not say into the mic.
+    const segments = Array.isArray((transcription as any).segments)
+      ? (transcription as any).segments as Array<{ text?: string; no_speech_prob?: number; avg_logprob?: number }>
+      : null;
+
+    let rawTranscript: string;
+    if (segments && segments.length > 0) {
+      const confident = segments.filter((segment) => {
+        const noSpeechProb = typeof segment.no_speech_prob === 'number' ? segment.no_speech_prob : 0;
+        const avgLogprob = typeof segment.avg_logprob === 'number' ? segment.avg_logprob : 0;
+        return noSpeechProb < 0.5 && avgLogprob > -1.0;
+      });
+      const dropped = segments.length - confident.length;
+      if (dropped > 0) {
+        console.log(`[Transcribe] Dropped ${dropped}/${segments.length} low-confidence segments (likely background audio)`);
+      }
+      rawTranscript = confident.map((segment) => (segment.text || '').trim()).filter(Boolean).join(' ').trim();
+    } else {
+      rawTranscript = transcription.text?.trim() || '';
+    }
     const sanitized = sanitizeTranscript(rawTranscript);
     console.log('[API Response] OpenAI audio.transcriptions.create', {
       transcriptLength: rawTranscript.length,

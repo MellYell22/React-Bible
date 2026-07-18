@@ -723,7 +723,7 @@ app.post("/api/transcribe", express.raw({ type: '*/*', limit: '25mb' }), async (
     console.log('[API Request] OpenAI audio.transcriptions.create', {
       model: 'whisper-1',
       language: 'en',
-      responseFormat: 'json',
+      responseFormat: 'verbose_json',
       prompt: 'Spiritual conversation in English.',
       temperature: 0,
       filename: safeFilename,
@@ -734,12 +734,32 @@ app.post("/api/transcribe", express.raw({ type: '*/*', limit: '25mb' }), async (
       file: audioFile,
       model: 'whisper-1',
       language: 'en',
-      response_format: 'json',
+      // verbose_json exposes per-segment confidence so background audio
+      // (TV, music, distant conversation) can be dropped before it reaches David.
+      response_format: 'verbose_json',
       prompt: 'Spiritual conversation in English.',
       temperature: 0,
     });
 
-    const rawTranscript = transcription.text?.trim() || '';
+    const segments = Array.isArray((transcription as any).segments)
+      ? (transcription as any).segments as Array<{ text?: string; no_speech_prob?: number; avg_logprob?: number }>
+      : null;
+
+    let rawTranscript: string;
+    if (segments && segments.length > 0) {
+      const confident = segments.filter((segment) => {
+        const noSpeechProb = typeof segment.no_speech_prob === 'number' ? segment.no_speech_prob : 0;
+        const avgLogprob = typeof segment.avg_logprob === 'number' ? segment.avg_logprob : 0;
+        return noSpeechProb < 0.5 && avgLogprob > -1.0;
+      });
+      const dropped = segments.length - confident.length;
+      if (dropped > 0) {
+        console.log(`[Transcribe] Dropped ${dropped}/${segments.length} low-confidence segments (likely background audio)`);
+      }
+      rawTranscript = confident.map((segment) => (segment.text || '').trim()).filter(Boolean).join(' ').trim();
+    } else {
+      rawTranscript = transcription.text?.trim() || '';
+    }
     const accepted = isMeaningful(rawTranscript);
     console.log('[API Response] OpenAI audio.transcriptions.create', {
       transcriptLength: rawTranscript.length,
