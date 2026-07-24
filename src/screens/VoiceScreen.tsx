@@ -20,13 +20,26 @@ import { getVoiceSessionGreeting } from '../constants/persona';
 
 const IDLE_VOICE_LEVELS = [0.18, 0.26, 0.2, 0.3, 0.22, 0.34, 0.24, 0.31, 0.2];
 
-const SPEECH_VOLUME_THRESHOLD = 0.16;
+const SPEECH_VOLUME_THRESHOLD = 0.11;
 /** Voiced audio must persist this long (cumulative) before it counts as the user
  * actually speaking — a stray TV syllable or clatter no longer arms the recorder. */
 const SPEECH_SUSTAIN_MS = 280;
-const SILENCE_STOP_MS = 850;
+const SILENCE_STOP_MS = 600;
 const MIN_RECORDING_MS = 700;
-const HARD_MAX_RECORDING_MS = 45000;
+const HARD_MAX_RECORDING_MS = 60000;
+
+/** If the user goes quiet mid-listening for this long, David gently checks in
+ * instead of leaving dead air — low-pressure, never interrupts active thought. */
+const SILENCE_CHECKIN_MS = 48000;
+const MAX_SILENCE_CHECKINS = 2;
+const SILENCE_CHECKIN_LINES = [
+  "Hey... you still there? No rush at all.",
+  "Still with me? Take all the time you need.",
+  "I'm still right here whenever you're ready.",
+  "No pressure... I'm right here when you want to keep going.",
+  "Take your time. I'm not going anywhere.",
+  "You okay over there? I'm still here with you.",
+];
 
 type ScreenPhase =
   | 'checking'
@@ -167,6 +180,8 @@ export default function VoiceScreen() {
   const autoStopTriggeredRef = useRef(false);
   const voicedMsRef = useRef(0);
   const lastVadTickAtRef = useRef<number | null>(null);
+  const silenceCheckinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const silenceCheckinCountRef = useRef(0);
 
   const transcribeAbortControllerRef = useRef<AbortController | null>(null);
   const chatAbortControllerRef = useRef<AbortController | null>(null);
@@ -285,8 +300,16 @@ export default function VoiceScreen() {
     tick();
   };
 
+  const clearSilenceCheckin = () => {
+    if (silenceCheckinTimerRef.current !== null) {
+      clearTimeout(silenceCheckinTimerRef.current);
+      silenceCheckinTimerRef.current = null;
+    }
+  };
+
   const stopListening = (discard = false) => {
     const recorder = mediaRecorderRef.current;
+    clearSilenceCheckin();
 
     if (recorder && recorder.state !== 'inactive') {
       discardRecordingRef.current = discard;
@@ -386,8 +409,10 @@ export default function VoiceScreen() {
             // Only count it as the user speaking once voiced audio has been
             // sustained — brief background sounds (TV, clatter) decay away.
             voicedMsRef.current += deltaMs;
-            if (voicedMsRef.current >= SPEECH_SUSTAIN_MS) {
+            if (voicedMsRef.current >= SPEECH_SUSTAIN_MS && !speechDetectedRef.current) {
               speechDetectedRef.current = true;
+              clearSilenceCheckin();
+              silenceCheckinCountRef.current = 0;
             }
             if (speechDetectedRef.current) {
               lastSpeechAtRef.current = now;
@@ -546,7 +571,9 @@ export default function VoiceScreen() {
         }
 
         if (!chunks.length) {
-          setError("David couldn't hear enough audio. Try speaking again.");
+          if (speechDetectedRef.current) {
+            setError("David couldn't hear enough audio. Try speaking again.");
+          }
           setPhase('listening');
           void startListening({ conversationId: localConversationId });
           return;
@@ -575,10 +602,12 @@ export default function VoiceScreen() {
 
           const transcript = normalizeTranscript(result.transcript);
           if (!isMeaningfulUserText(transcript)) {
-            const reason = result.reason === 'audio_too_small'
-              ? 'Try speaking a little longer before stopping.'
-              : 'David could not catch enough words yet. Try again.';
-            setError(reason);
+            if (speechDetectedRef.current) {
+              const reason = result.reason === 'audio_too_small'
+                ? 'Try speaking a little longer before stopping.'
+                : 'David could not catch enough words yet. Try again.';
+              setError(reason);
+            }
             setPhase('listening');
             void startListening({ conversationId: localConversationId });
             return;
@@ -605,6 +634,7 @@ export default function VoiceScreen() {
 
       recorder.start();
       setPhase('listening');
+      scheduleSilenceCheckin(localConversationId, localListenSessionId);
     } catch (err: any) {
       if (!mountedRef.current) return;
       pendingStream?.getTracks().forEach(track => track.stop());
@@ -760,6 +790,36 @@ export default function VoiceScreen() {
     setPhase('idle');
   }, [hasVoiceAccess, userContextLoading]);
 
+  const triggerSilenceCheckin = async (conversationId: number, listenSessionId: number) => {
+    if (!isCurrentConversation(conversationId)) return;
+    if (listenSessionIdRef.current !== listenSessionId) return;
+    if (phaseRef.current !== 'listening') return;
+    if (processingRef.current) return;
+    if (speechDetectedRef.current) return;
+    if (silenceCheckinCountRef.current >= MAX_SILENCE_CHECKINS) return;
+
+    silenceCheckinCountRef.current += 1;
+    const line = SILENCE_CHECKIN_LINES[Math.floor(Math.random() * SILENCE_CHECKIN_LINES.length)];
+
+    const nextMessages: ChatTurn[] = [...messagesRef.current, { role: 'assistant', content: line }];
+    commitMessages(nextMessages);
+
+    await playDavidResponseAudio(line, {
+      conversationId,
+      isGreeting: false,
+      resumeListening: true,
+      onPlaybackStart: () => setLastResponseText(line),
+    });
+  };
+
+  const scheduleSilenceCheckin = (conversationId: number, listenSessionId: number) => {
+    clearSilenceCheckin();
+    silenceCheckinTimerRef.current = setTimeout(() => {
+      silenceCheckinTimerRef.current = null;
+      void triggerSilenceCheckin(conversationId, listenSessionId);
+    }, SILENCE_CHECKIN_MS);
+  };
+
   const submitUserText = async (
     rawText: string,
     options: {
@@ -774,6 +834,9 @@ export default function VoiceScreen() {
     }
 
     if (processingRef.current) return;
+
+    clearSilenceCheckin();
+    silenceCheckinCountRef.current = 0;
 
     const localConversationId = options.conversationId ?? conversationIdRef.current;
     const shouldResumeListening = Boolean(options.resumeListening);
@@ -881,6 +944,8 @@ export default function VoiceScreen() {
     stopListening(true);
     stopCurrentAudio();
     stopVoiceActivity();
+    clearSilenceCheckin();
+    silenceCheckinCountRef.current = 0;
 
     commitMessages([]);
     setTextInput('');
@@ -919,6 +984,8 @@ export default function VoiceScreen() {
     stopListening(true);
     stopCurrentAudio();
     stopVoiceActivity();
+    clearSilenceCheckin();
+    silenceCheckinCountRef.current = 0;
     setTextInput('');
     setPhase('ended');
   };

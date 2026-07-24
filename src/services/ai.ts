@@ -298,15 +298,15 @@ const buildVoiceConversationContext = (
     sessionOpenings.length ? `Openings David already used this session: ${sessionOpenings.join(' | ')}. Open a genuinely different way this turn.` : '',
     sessionQuestions.length ? `Questions David already asked this session: ${sessionQuestions.join(' | ')}. Do not repeat these; often end with no question at all.` : '',
     buildMemorySummary(memory),
-    'Continue the live voice conversation. Follow the user current direction, avoid restarting, and keep the next spoken turn short.',
+    'Continue the live voice conversation. Follow the user current direction, avoid restarting. Keep small talk short; when the user shares a feeling, give it a little more room to meet the emotion and connect it to scripture, without rambling.',
     'Use varied wording, varied scripture lead-ins, and varied endings.'
   ].filter(Boolean).join('\n');
 };
 
 const buildLengthInstruction = (responseLength: ResponseLength): string => {
   return {
-    short: "Voice turn: 1 to 2 complete, natural spoken sentences, warm and fluent. Use scripture only if it fits naturally, and vary the wording every turn.",
-    medium: "Voice turn: sound human and unscripted, in complete flowing sentences. Acknowledge, use scripture naturally if it fits, give one short reflection, and only ask a gentle question if it truly fits.",
+    short: "Voice turn: meet the feeling first, in your own warm words — never a verse first. When it fits, gently name a biblical figure who felt something similar, then share one verse, then one plain sentence on why it connects, then usually a gentle question. Small talk stays to 1-2 short sentences; when the user shares a feeling, up to 3 flowing sentences is fine. Vary the wording every turn.",
+    medium: "Voice turn: sound human and unscripted, in complete flowing sentences. Acknowledge the feeling first, connect it to someone in Scripture when it fits, use scripture naturally, give one short reflection, and usually ask a gentle question.",
     long: "Voice turn: 2 to 3 complete sentences max, conversational and pastoral, no list formatting. Avoid recycled openings and repeated question endings."
   }[responseLength];
 };

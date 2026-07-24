@@ -19,7 +19,7 @@ const ACKNOWLEDGEMENT_PERIOD_RE =
   /\b(I hear you|I'm with you|I am with you|That feels heavy|That's a lot|That is a lot|I get that|I understand)\.\s+/gi;
 
 const FILLER_PERIOD_RE =
-  /\b(mm+|hmm+|hm+|yeah|hey|okay|alright|you know|i mean|well)\.\s+/gi;
+  /\b(mm+|hmm+|hm+|oh+|ah+|i see|i know|yeah|hey|okay|alright|you know|i mean|well)\.\s+/gi;
 
 const DECIMAL_PLACEHOLDER = '__DAVID_DECIMAL_POINT__';
 
