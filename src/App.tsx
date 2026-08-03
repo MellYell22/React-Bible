@@ -45,7 +45,7 @@ const getInitialRoute = (): RouteState => {
 };
 
 function AppShell() {
-  const { session, profile, loading } = useUser();
+  const { session, profile, loading, signOut } = useUser();
   const [route, setRoute] = useState<RouteState>(() => getInitialRoute());
 
   const navigation = useMemo(() => ({
@@ -94,6 +94,14 @@ function AppShell() {
             <Text style={[styles.tabText, route.name === item && styles.tabTextActive]}>{item}</Text>
           </TouchableOpacity>
         ))}
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Log out"
+          style={[styles.tabButton, styles.logoutButton]}
+          onPress={() => void signOut()}
+        >
+          <Text style={styles.logoutText}>Log out</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -154,5 +162,15 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: '#d4af37',
+  },
+  logoutButton: {
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(212, 175, 55, 0.25)',
+  },
+  logoutText: {
+    color: '#f5d77a',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
 });

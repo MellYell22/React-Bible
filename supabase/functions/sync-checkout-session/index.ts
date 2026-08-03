@@ -9,71 +9,65 @@ const corsHeaders = {
 };
 
 const DEFAULT_PRO_PRICE_ID = "price_1TRTQuGDw0P2L0A1MsgZiMeM";
-const isPaidSubscription = (status: string) => status === "active" || status === "trialing";
-
-// The project's legacy anon/service_role keys are disabled, so auth calls must
-// use a modern publishable key. Publishable keys are safe to embed.
+const OWNER_EMAIL = "alissasmith.apps@gmail.com";
 const FALLBACK_PUBLISHABLE_KEY = "sb_publishable_XpVDXroi6heBFrljTrWGrA__tFu6PTp";
+const PAID_STATUSES = new Set(["active", "trialing"]);
 
-const resolveAuthApiKey = (): string => {
-  const candidates = [
-    Deno.env.get("SB_PUBLISHABLE_KEY"),
-    Deno.env.get("SUPABASE_PUBLISHABLE_KEY"),
-  ];
-  for (const candidate of candidates) {
-    if (candidate && candidate.startsWith("sb_publishable_")) return candidate;
-  }
-  return FALLBACK_PUBLISHABLE_KEY;
-};
-
-// Prefer a modern secret key when configured; the legacy service_role key is
-// disabled on this project, so it is intentionally not used here.
-const resolveSecretKey = (): string | null => {
-  const candidates = [
-    Deno.env.get("SB_SECRET_KEY"),
-    Deno.env.get("SUPABASE_SECRET_KEY"),
-  ];
-  for (const candidate of candidates) {
-    if (candidate && candidate.startsWith("sb_secret_")) return candidate;
-  }
-  return null;
-};
-
-const response = (body: Record<string, unknown>, status = 200) => new Response(
+const json = (body: Record<string, unknown>, status = 200) => new Response(
   JSON.stringify(body),
   { status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
 );
 
+const resolveAuthApiKey = (): string => {
+  for (const candidate of [
+    Deno.env.get("SB_PUBLISHABLE_KEY"),
+    Deno.env.get("SUPABASE_PUBLISHABLE_KEY"),
+  ]) {
+    if (candidate?.startsWith("sb_publishable_")) return candidate;
+  }
+  return FALLBACK_PUBLISHABLE_KEY;
+};
+
+const resolveSecretKey = (): string | null => {
+  for (const candidate of [
+    Deno.env.get("SB_SECRET_KEY"),
+    Deno.env.get("SUPABASE_SECRET_KEY"),
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+  ]) {
+    if (candidate) return candidate;
+  }
+  return null;
+};
+
+const getId = (value: string | { id: string } | null | undefined) => (
+  typeof value === "string" ? value : value?.id || null
+);
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return response({ error: "Method not allowed" }, 405);
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   try {
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
+    const proPriceId = Deno.env.get("STRIPE_PRICE_ID_PRO") || DEFAULT_PRO_PRICE_ID;
 
-    if (!authHeader || !supabaseUrl || !stripeSecretKey) {
-      console.error("[sync-checkout-session] Missing required configuration or authorization.");
-      return response({ error: "Unable to verify checkout because the server is not configured." }, 500);
+    if (!authHeader || !supabaseUrl || !stripeSecretKey || !proPriceId.startsWith("price_")) {
+      return json({ error: "Unable to verify checkout because billing is not fully configured." }, 500);
     }
 
     const { sessionId } = await req.json();
     if (typeof sessionId !== "string" || !sessionId.startsWith("cs_")) {
-      return response({ error: "Invalid Stripe Checkout Session ID." }, 400);
+      return json({ error: "Invalid Stripe Checkout Session ID." }, 400);
     }
 
     const authClient = createClient(supabaseUrl, resolveAuthApiKey(), {
       global: { headers: { Authorization: authHeader } },
     });
-    // Pass the JWT explicitly: server context has no stored session, so
-    // getUser() without an argument always fails with "Auth session missing".
     const accessToken = authHeader.replace(/^Bearer\s+/i, "");
     const { data: { user }, error: userError } = await authClient.auth.getUser(accessToken);
-
-    if (userError || !user) {
-      return response({ error: "Your sign-in session is no longer valid. Please sign in again." }, 401);
-    }
+    if (userError || !user) return json({ error: "Your sign-in session expired. Please sign in again." }, 401);
 
     const stripe = new Stripe(stripeSecretKey, {
       apiVersion: "2023-10-16",
@@ -83,60 +77,64 @@ serve(async (req) => {
     const checkoutUserId = checkout.client_reference_id || checkout.metadata?.userId || checkout.metadata?.user_id;
 
     if (checkout.mode !== "subscription" || checkoutUserId !== user.id) {
-      console.warn(`[sync-checkout-session] Checkout ${sessionId} does not belong to user ${user.id}.`);
-      return response({ error: "This checkout cannot be used to update this account." }, 403);
+      return json({ error: "This checkout does not belong to this signed-in account." }, 403);
     }
 
-    if (checkout.payment_status !== "paid" || !checkout.subscription) {
-      return response({ error: "Stripe has not confirmed this payment yet. Please try again shortly." }, 409);
+    if (!checkout.subscription || !["paid", "no_payment_required"].includes(checkout.payment_status)) {
+      return json({ error: "Stripe has not confirmed this subscription yet. Please try again shortly." }, 409);
     }
 
-    const subscriptionId = checkout.subscription as string;
+    const keyIsLive = stripeSecretKey.startsWith("sk_live_");
+    if (checkout.livemode !== keyIsLive) {
+      console.error(`[sync-checkout-session] Stripe mode mismatch for ${sessionId}.`);
+      return json({ error: "This checkout was created in a different Stripe mode." }, 409);
+    }
+
+    const subscriptionId = getId(checkout.subscription);
+    if (!subscriptionId) return json({ error: "Stripe did not return a subscription ID." }, 409);
+
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-    const priceId = subscription.items.data[0]?.price?.id;
-    const envPriceId = Deno.env.get("STRIPE_PRICE_ID_PRO");
-    const proPriceId = (envPriceId && envPriceId.startsWith("price_")) ? envPriceId : DEFAULT_PRO_PRICE_ID;
-
-    if (priceId !== proPriceId || !isPaidSubscription(subscription.status)) {
-      console.warn(`[sync-checkout-session] Checkout ${sessionId} is not an active Pro subscription.`);
-      return response({ error: "This checkout did not create an active Pro subscription." }, 409);
+    const priceIds = subscription.items.data.map((item) => item.price.id);
+    if (!PAID_STATUSES.has(subscription.status) || !priceIds.includes(proPriceId)) {
+      return json({ error: "This checkout did not create an active Bible Mood Search Pro subscription." }, 409);
     }
 
-    // Payment is verified against Stripe above, so writing the entitlement with
-    // the user's own row-level-security scoped client is safe. A modern secret
-    // key is preferred when configured.
-    const secretKey = resolveSecretKey();
-    const writeClient = secretKey ? createClient(supabaseUrl, secretKey) : authClient;
+    const writeKey = resolveSecretKey();
+    const writeClient = writeKey ? createClient(supabaseUrl, writeKey) : authClient;
+    const { data: existingProfile, error: readError } = await writeClient
+      .from("profiles")
+      .select("id, email, subscription_tier")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (readError) throw readError;
+    if (!existingProfile) return json({ error: "We could not find a profile for this account." }, 404);
+
+    const preserveOwner = user.email?.toLowerCase() === OWNER_EMAIL || existingProfile.subscription_tier === "owner";
+    const update: Record<string, unknown> = {
+      subscription_status: "active",
+      stripe_customer_id: getId(checkout.customer),
+      stripe_subscription_id: subscription.id,
+      stripe_subscription_status: subscription.status,
+      stripe_price_id: proPriceId,
+      stripe_current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+    };
+    if (!preserveOwner) update.subscription_tier = "pro";
 
     const { data: profile, error: updateError } = await writeClient
       .from("profiles")
-      .update({
-        subscription_tier: "pro",
-        subscription_status: "active",
-        stripe_customer_id: checkout.customer as string,
-        stripe_subscription_id: subscription.id,
-        stripe_subscription_status: subscription.status,
-        stripe_price_id: priceId,
-        stripe_current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-      })
+      .update(update)
       .eq("id", user.id)
       .select("id, subscription_tier")
       .maybeSingle();
 
-    if (updateError) {
-      console.error("[sync-checkout-session] Failed to save entitlement:", updateError.message);
-      return response({ error: "Stripe confirmed your payment, but we could not save your access yet." }, 500);
-    }
+    if (updateError) throw updateError;
+    if (!profile) return json({ error: "Stripe confirmed payment, but the profile update did not complete." }, 500);
 
-    if (!profile) {
-      console.error(`[sync-checkout-session] No profile found for user ${user.id}.`);
-      return response({ error: "We could not find a profile for this signed-in account." }, 404);
-    }
-
-    console.log(`[sync-checkout-session] Pro access activated for ${user.id}.`);
-    return response({ subscriptionTier: "pro" });
+    console.log(`[sync-checkout-session] Activated ${profile.subscription_tier} for ${user.id}.`);
+    return json({ subscriptionTier: profile.subscription_tier });
   } catch (error: any) {
-    console.error("[sync-checkout-session] Unexpected error:", error?.message || error);
-    return response({ error: "Unable to verify your checkout right now. Please try again shortly." }, 500);
+    console.error("[sync-checkout-session] Failed:", error?.message || error);
+    return json({ error: "Unable to verify checkout right now. Please try again shortly." }, 500);
   }
 });
