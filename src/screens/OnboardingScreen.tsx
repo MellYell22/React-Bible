@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { ActivityIndicator, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Search, MessageCircle, Mic, BookOpen, ChevronRight, Check } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { BibleTranslation } from '../types';
@@ -46,53 +46,80 @@ const STEPS = [
 const TRANSLATIONS: BibleTranslation[] = ['KJV', 'NIV', 'ESV', 'NKJV', 'NASB', 'NLT', 'CSB', 'AMP', 'MSG'];
 
 const TRANSLATION_DETAILS: Record<BibleTranslation, string> = {
-  'KJV': 'King James Version - Classic and poetic.',
-  'NIV': 'New International Version - Modern and readable.',
-  'ESV': 'English Standard Version - Word-for-word accuracy.',
-  'NKJV': 'New King James Version - Modernized classic.',
-  'NASB': 'New American Standard Bible - Highly literal.',
-  'NLT': 'New Living Translation - Easy to understand.',
-  'CSB': 'Christian Standard Bible - Optimal blend of accuracy and readability.',
-  'AMP': 'Amplified Bible - Expanded meanings for deeper study.',
-  'MSG': 'The Message - Contemporary paraphrase.'
+  KJV: 'King James Version - Classic and poetic.',
+  NIV: 'New International Version - Modern and readable.',
+  ESV: 'English Standard Version - Word-for-word accuracy.',
+  NKJV: 'New King James Version - Modernized classic.',
+  NASB: 'New American Standard Bible - Highly literal.',
+  NLT: 'New Living Translation - Easy to understand.',
+  CSB: 'Christian Standard Bible - Optimal blend of accuracy and readability.',
+  AMP: 'Amplified Bible - Expanded meanings for deeper study.',
+  MSG: 'The Message - Contemporary paraphrase.',
 };
 
-export default function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
+type OnboardingScreenProps = {
+  onComplete: () => void | Promise<void>;
+};
+
+export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedTranslation, setSelectedTranslation] = useState<BibleTranslation>('KJV');
-  const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const step = STEPS[currentStep];
   const Icon = step.icon;
+  const isFinalStep = currentStep === STEPS.length - 1;
 
   const handleNext = async () => {
-    if (currentStep < STEPS.length - 1) {
-      setCurrentStep(currentStep + 1);
-    } else {
-      setLoading(true);
-      try {
-        const { data: { user } } = await supabase!.auth.getUser();
-        if (user) {
-          const { error } = await supabase!
-            .from('profiles')
-            .update({ 
-              has_completed_onboarding: true,
-              preferred_translation: selectedTranslation,
-              preferred_response_length: 'medium',
-              verse_of_the_day_enabled: true,
-              verse_of_the_day_time: '08:00'
-            })
-            .eq('id', user.id);
-          
-          if (error) throw error;
-          onComplete();
-        }
-      } catch (error: any) {
-        console.error('Error completing onboarding:', error);
-        alert(`Error: ${error.message || 'Failed to complete setup. Please ensure your database is updated.'}`);
-      } finally {
-        setLoading(false);
+    if (!isFinalStep) {
+      setSubmitError(null);
+      setCurrentStep((previousStep) => previousStep + 1);
+      return;
+    }
+
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      if (!supabase) {
+        throw new Error('The app connection is unavailable. Please refresh and try again.');
       }
+
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+
+      const userId = sessionData.session?.user?.id;
+      if (!userId) {
+        throw new Error('Your sign-in session expired. Please sign in again.');
+      }
+
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          has_completed_onboarding: true,
+          preferred_translation: selectedTranslation,
+          preferred_response_length: 'medium',
+          verse_of_the_day_enabled: true,
+          verse_of_the_day_time: '08:00',
+        })
+        .eq('id', userId)
+        .select('id, has_completed_onboarding')
+        .maybeSingle();
+
+      if (updateError) throw updateError;
+      if (!updatedProfile?.has_completed_onboarding) {
+        throw new Error('Your setup could not be saved. Please try again.');
+      }
+
+      await onComplete();
+    } catch (error: any) {
+      console.error('[Onboarding] Could not complete setup:', error);
+      setSubmitError(error?.message || 'Setup could not be completed. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -101,13 +128,13 @@ export default function OnboardingScreen({ onComplete }: { onComplete: () => voi
       <View style={styles.container}>
         <View style={styles.progressContainer}>
           {STEPS.map((_, index) => (
-            <View 
-              key={index} 
+            <View
+              key={index}
               style={[
-                styles.progressDot, 
+                styles.progressDot,
                 index <= currentStep && styles.progressDotActive,
-                index === currentStep && styles.progressDotCurrent
-              ]} 
+                index === currentStep && styles.progressDotCurrent,
+              ]}
             />
           ))}
         </View>
@@ -123,20 +150,25 @@ export default function OnboardingScreen({ onComplete }: { onComplete: () => voi
         {step.id === 'setup' && (
           <View style={styles.setupWrapper}>
             <View style={styles.translationContainer}>
-              {TRANSLATIONS.map((t) => (
+              {TRANSLATIONS.map((translation) => (
                 <TouchableOpacity
-                  key={t}
+                  key={translation}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: selectedTranslation === translation }}
                   style={[
                     styles.translationButton,
-                    selectedTranslation === t && styles.translationButtonActive
+                    selectedTranslation === translation && styles.translationButtonActive,
                   ]}
-                  onPress={() => setSelectedTranslation(t)}
+                  onPress={() => setSelectedTranslation(translation)}
+                  disabled={isSubmitting}
                 >
-                  <Text style={[
-                    styles.translationText,
-                    selectedTranslation === t && styles.translationTextActive
-                  ]}>
-                    {t}
+                  <Text
+                    style={[
+                      styles.translationText,
+                      selectedTranslation === translation && styles.translationTextActive,
+                    ]}
+                  >
+                    {translation}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -147,20 +179,40 @@ export default function OnboardingScreen({ onComplete }: { onComplete: () => voi
           </View>
         )}
 
+        {submitError && (
+          <Text accessibilityRole="alert" style={styles.errorText}>
+            {submitError}
+          </Text>
+        )}
+
         <View style={styles.footer}>
-          <TouchableOpacity 
-            style={styles.nextButton} 
-            onPress={handleNext}
-            disabled={loading}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={isFinalStep ? 'Get started' : 'Continue'}
+            accessibilityState={{ disabled: isSubmitting, busy: isSubmitting }}
+            style={[styles.nextButton, isSubmitting && styles.nextButtonDisabled]}
+            onPress={() => void handleNext()}
+            disabled={isSubmitting}
           >
-            <Text style={styles.nextButtonText}>
-              {currentStep === STEPS.length - 1 ? 'GET STARTED' : 'CONTINUE'}
-            </Text>
-            <ChevronRight color="#0b1e3d" size={20} />
+            {isSubmitting ? (
+              <>
+                <ActivityIndicator color="#0b1e3d" size="small" />
+                <Text style={[styles.nextButtonText, styles.submittingText]}>SAVING...</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.nextButtonText}>{isFinalStep ? 'GET STARTED' : 'CONTINUE'}</Text>
+                <ChevronRight color="#0b1e3d" size={20} />
+              </>
+            )}
           </TouchableOpacity>
 
-          {currentStep < STEPS.length - 1 && (
-            <TouchableOpacity style={styles.skipButton} onPress={() => setCurrentStep(STEPS.length - 1)}>
+          {!isFinalStep && (
+            <TouchableOpacity
+              accessibilityRole="button"
+              style={styles.skipButton}
+              onPress={() => setCurrentStep(STEPS.length - 1)}
+            >
               <Text style={styles.skipButtonText}>SKIP</Text>
             </TouchableOpacity>
           )}
@@ -284,19 +336,32 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     fontFamily: 'Playfair Display',
   },
+  errorText: {
+    color: '#ffb4b4',
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 8,
+  },
   footer: {
     width: '100%',
     alignItems: 'center',
     marginTop: 20,
   },
   nextButton: {
+    minWidth: 190,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#d4af37',
     paddingHorizontal: 40,
     paddingVertical: 18,
     borderRadius: 40,
     marginBottom: 20,
+  },
+  nextButtonDisabled: {
+    opacity: 0.65,
   },
   nextButtonText: {
     color: '#0b1e3d',
@@ -304,6 +369,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 2,
     marginRight: 8,
+  },
+  submittingText: {
+    marginLeft: 10,
+    marginRight: 0,
   },
   skipButton: {
     padding: 10,
