@@ -4,243 +4,223 @@ import { createClient } from "npm:@supabase/supabase-js@2.26.0";
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+const PRO_PRICE_ID = Deno.env.get("STRIPE_PRICE_ID_PRO") || "price_1TRTQuGDw0P2L0A1MsgZiMeM";
+const OWNER_EMAIL = "alissasmith.apps@gmail.com";
+const PAID_STATUSES = new Set(["active", "trialing"]);
 
-// The project's legacy anon/service_role keys are disabled. Profile writes
-// require a modern secret key (sb_secret_...) stored as a function secret.
 const resolveSecretKey = (): string | null => {
-  const candidates = [
+  for (const candidate of [
     Deno.env.get("SB_SECRET_KEY"),
     Deno.env.get("SUPABASE_SECRET_KEY"),
-  ];
-  for (const candidate of candidates) {
-    if (candidate && candidate.startsWith("sb_secret_")) return candidate;
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+  ]) {
+    if (candidate) return candidate;
   }
-  // Legacy fallback: works only if legacy keys are re-enabled in the dashboard.
-  return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || null;
+  return null;
 };
 
 const SUPABASE_WRITE_KEY = resolveSecretKey();
-
 if (!STRIPE_SECRET_KEY) throw new Error("Missing STRIPE_SECRET_KEY");
 if (!STRIPE_WEBHOOK_SECRET) throw new Error("Missing STRIPE_WEBHOOK_SECRET");
 if (!SUPABASE_URL) throw new Error("Missing SUPABASE_URL");
-if (!SUPABASE_WRITE_KEY) throw new Error("Missing SB_SECRET_KEY / SUPABASE_SERVICE_ROLE_KEY");
-if (!SUPABASE_WRITE_KEY.startsWith("sb_secret_")) {
-  console.warn("[stripe-webhook] Using legacy service_role key. If legacy keys are disabled, profile updates will fail — add an SB_SECRET_KEY function secret.");
-}
+if (!SUPABASE_WRITE_KEY) throw new Error("Missing Supabase write key");
+if (!PRO_PRICE_ID.startsWith("price_")) throw new Error("Missing STRIPE_PRICE_ID_PRO");
 
-const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2023-08-16" });
-
-// Webhook endpoint intentionally does NOT require Authorization/JWT.
-// Requests are authenticated by verifying the Stripe signature below.
+const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" });
 const supabase = createClient(SUPABASE_URL, SUPABASE_WRITE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const corsHeaders = {
-  "Content-Type": "application/json",
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, Stripe-Signature",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+const jsonHeaders = { "Content-Type": "application/json" };
+const json = (body: Record<string, unknown>, status = 200) => new Response(
+  JSON.stringify(body),
+  { status, headers: jsonHeaders },
+);
+
+const getId = (value: string | { id: string } | null | undefined) => (
+  typeof value === "string" ? value : value?.id || null
+);
+
+type ProfileRecord = {
+  id: string;
+  email: string | null;
+  subscription_tier: string | null;
+};
+
+const findProfile = async ({
+  userId,
+  customerId,
+  email,
+}: {
+  userId?: string | null;
+  customerId?: string | null;
+  email?: string | null;
+}): Promise<ProfileRecord | null> => {
+  if (userId) {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, email, subscription_tier")
+      .eq("id", userId)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) return data as ProfileRecord;
+  }
+
+  if (customerId) {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, email, subscription_tier")
+      .eq("stripe_customer_id", customerId)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) return data as ProfileRecord;
+  }
+
+  if (email) {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, email, subscription_tier")
+      .ilike("email", email)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) return data as ProfileRecord;
+  }
+
+  return null;
+};
+
+const getCustomerEmail = async (customerId: string | null): Promise<string | null> => {
+  if (!customerId) return null;
+  try {
+    const customer = await stripe.customers.retrieve(customerId);
+    if ((customer as any).deleted) return null;
+    return (customer as Stripe.Customer).email || null;
+  } catch (error) {
+    console.warn("[stripe-webhook] Unable to retrieve Stripe customer email:", error);
+    return null;
+  }
+};
+
+const ignore = (reason: string) => {
+  console.warn(`[stripe-webhook] Ignored: ${reason}`);
+  return json({ received: true, ignored: true, reason });
+};
+
+const processSubscription = async (
+  subscription: Stripe.Subscription,
+  fallbackEmail: string | null = null,
+) => {
+  const priceIds = subscription.items.data.map((item) => item.price.id);
+  if (!priceIds.includes(PRO_PRICE_ID)) {
+    return ignore(`subscription ${subscription.id} belongs to another app or price`);
+  }
+
+  const customerId = getId(subscription.customer);
+  const userId = subscription.metadata?.userId || subscription.metadata?.user_id || null;
+  const email = fallbackEmail || await getCustomerEmail(customerId);
+  const profile = await findProfile({ userId, customerId, email });
+
+  if (!profile) {
+    return ignore(`no Bible Mood Search profile matches subscription ${subscription.id}`);
+  }
+
+  const isOwner = profile.subscription_tier === "owner"
+    || profile.email?.toLowerCase() === OWNER_EMAIL;
+  const isPaid = PAID_STATUSES.has(subscription.status);
+  const update: Record<string, unknown> = {
+    subscription_status: isPaid || isOwner ? "active" : subscription.status,
+    stripe_customer_id: customerId,
+    stripe_subscription_id: subscription.id,
+    stripe_subscription_status: subscription.status,
+    stripe_price_id: PRO_PRICE_ID,
+  };
+
+  if (typeof subscription.current_period_end === "number") {
+    update.stripe_current_period_end = new Date(subscription.current_period_end * 1000).toISOString();
+  }
+  if (!isOwner) update.subscription_tier = isPaid ? "pro" : "free";
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update(update)
+    .eq("id", profile.id)
+    .select("id, subscription_tier")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error(`Profile ${profile.id} disappeared during subscription update.`);
+
+  console.log(`[stripe-webhook] ${profile.id} -> ${data.subscription_tier}`);
+  return json({ received: true, processed: true, profileId: profile.id, tier: data.subscription_tier });
 };
 
 Deno.serve(async (req: Request) => {
-  // NOTE: Stripe typically won't send OPTIONS, but some environments/proxies do.
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: corsHeaders,
-    });
-  }
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   try {
-    const sig = req.headers.get("stripe-signature");
-    if (!sig) {
-      return new Response(JSON.stringify({ error: "Missing Stripe-Signature header" }), {
-        status: 400,
-        headers: corsHeaders,
-      });
-    }
-
-    const rawBody = new Uint8Array(await req.arrayBuffer());
+    const signature = req.headers.get("stripe-signature");
+    if (!signature) return json({ error: "Missing Stripe-Signature header" }, 400);
 
     let event: Stripe.Event;
     try {
-      event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error("[stripe-webhook] signature verification failed:", message);
-      return new Response(JSON.stringify({ error: "Webhook signature verification failed" }), {
-        status: 400,
-        headers: corsHeaders,
-      });
+      event = await stripe.webhooks.constructEventAsync(await req.text(), signature, STRIPE_WEBHOOK_SECRET);
+    } catch (error) {
+      console.error("[stripe-webhook] Signature verification failed:", error);
+      return json({ error: "Webhook signature verification failed" }, 400);
     }
 
-    console.log("Webhook event type:", event.type);
+    const keyIsLive = STRIPE_SECRET_KEY.startsWith("sk_live_");
+    if (event.livemode !== keyIsLive) {
+      console.error("[stripe-webhook] Stripe mode mismatch.");
+      return json({ error: "Stripe mode mismatch" }, 400);
+    }
 
-    // Helper to update profile subscription fields.
-    // The app reads profiles.subscription_tier — there is no "tier" column.
-    const updateProfileSubscription = async (userId: string, args: {
-      tier: "pro" | "free";
-      customer: string | null;
-      subscription: string | null;
-      subscriptionStatus?: string | null;
-      priceId: string | null;
-    }) => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .update({
-          subscription_tier: args.tier,
-          subscription_status: args.subscriptionStatus || (args.tier === "pro" ? "active" : "canceled"),
-          stripe_customer_id: args.customer,
-          stripe_subscription_id: args.subscription,
-          stripe_subscription_status: args.subscriptionStatus || "active",
-          stripe_price_id: args.priceId,
-        })
-        .eq("id", userId)
-        .select("id");
-
-      console.log("Update result:", data, error);
-
-      if (error) throw error;
-
-      const rowCount = data?.length ?? 0;
-      if (rowCount === 0) {
-        console.error("No rows updated. User not found:", userId);
-      }
-    };
-
-    // Process supported events
     switch (event.type) {
       case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-
-        const userId =
-          session.client_reference_id ||
-          (session.metadata as any)?.userId;
-
-        console.log("Extracted userId:", userId);
-
-        if (!userId) {
-          console.error("No userId found in Stripe session");
-          return new Response(JSON.stringify({ error: "No userId found in Stripe session" }), {
-            status: 400,
-            headers: corsHeaders,
-          });
+        const checkout = event.data.object as Stripe.Checkout.Session;
+        const subscriptionId = getId(checkout.subscription);
+        if (checkout.mode !== "subscription" || !subscriptionId) {
+          return ignore(`checkout ${checkout.id} is not a subscription checkout`);
         }
 
-        await updateProfileSubscription(userId, {
-          tier: "pro",
-          customer: typeof session.customer === "string" ? session.customer : session.customer?.toString() || null,
-          subscription: (session.subscription as string) || null,
-          subscriptionStatus: "active",
-          priceId: (session as any)?.display_items?.[0]?.price?.id || null,
-        });
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        const userId = checkout.client_reference_id || checkout.metadata?.userId || checkout.metadata?.user_id;
+        if (userId && !subscription.metadata?.userId && !subscription.metadata?.user_id) {
+          subscription.metadata = { ...subscription.metadata, userId, user_id: userId };
+        }
 
-        return new Response(JSON.stringify({ ok: true }), { status: 200, headers: corsHeaders });
+        return processSubscription(
+          subscription,
+          checkout.customer_details?.email || checkout.customer_email || null,
+        );
       }
 
       case "customer.subscription.created":
-      case "customer.subscription.updated": {
-        const subscription = event.data.object as Stripe.Subscription;
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted":
+        return processSubscription(event.data.object as Stripe.Subscription);
 
-        const userId = (subscription.metadata as any)?.userId || (subscription as any)?.client_reference_id;
-        console.log("Extracted userId:", userId);
-
-        if (!userId) {
-          console.error("No userId found in Stripe subscription");
-          return new Response(JSON.stringify({ error: "No userId found in Stripe subscription" }), {
-            status: 400,
-            headers: corsHeaders,
-          });
-        }
-
-        const priceId = subscription.items?.data?.[0]?.price?.id || null;
-        const isActive = subscription.status === "active" || subscription.status === "trialing";
-        await updateProfileSubscription(userId, {
-          tier: isActive ? "pro" : "free",
-          customer: typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.toString() || null,
-          subscription: subscription.id,
-          subscriptionStatus: subscription.status || "active",
-          priceId,
-        });
-
-        return new Response(JSON.stringify({ ok: true }), { status: 200, headers: corsHeaders });
-      }
-
-      case "customer.subscription.deleted": {
-        const subscription = event.data.object as Stripe.Subscription;
-
-        const userId = (subscription.metadata as any)?.userId;
-        console.log("Extracted userId:", userId);
-
-        if (!userId) {
-          console.error("No userId found in Stripe subscription");
-          return new Response(JSON.stringify({ error: "No userId found in Stripe subscription" }), {
-            status: 400,
-            headers: corsHeaders,
-          });
-        }
-
-        await updateProfileSubscription(userId, {
-          tier: "free",
-          customer: typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.toString() || null,
-          subscription: subscription.id,
-          subscriptionStatus: "canceled",
-          priceId: subscription.items?.data?.[0]?.price?.id || null,
-        });
-
-        return new Response(JSON.stringify({ ok: true }), { status: 200, headers: corsHeaders });
-      }
-
-      case "invoice.paid": {
+      case "invoice.paid":
+      case "invoice.payment_succeeded": {
         const invoice = event.data.object as Stripe.Invoice;
-
-        const userId = (invoice.metadata as any)?.userId || (invoice as any)?.client_reference_id;
-        console.log("Extracted userId:", userId);
-
-        if (!userId) {
-          // Renewal invoices often lack user metadata; the subscription events
-          // above keep the profile in sync, so acknowledge without failing.
-          console.log("No userId on invoice; relying on subscription events.");
-          return new Response(JSON.stringify({ received: true, ignored: true }), {
-            status: 200,
-            headers: corsHeaders,
-          });
-        }
-
-        const customer = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.toString() || null;
-        const subscriptionId = (invoice.subscription as string) || null;
-        const priceId = (invoice.lines?.data?.[0] as any)?.price?.id || null;
-
-        await updateProfileSubscription(userId, {
-          tier: "pro",
-          customer,
-          subscription: subscriptionId,
-          subscriptionStatus: "active",
-          priceId,
-        });
-
-        return new Response(JSON.stringify({ ok: true }), { status: 200, headers: corsHeaders });
+        const subscriptionId = getId((invoice as any).subscription);
+        if (!subscriptionId) return ignore(`invoice ${invoice.id} has no subscription`);
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        return processSubscription(subscription, invoice.customer_email || null);
       }
+
+      case "invoice.payment_failed":
+        console.warn("[stripe-webhook] Payment failed; waiting for subscription status update.");
+        return json({ received: true, processed: true });
 
       default:
-        // Unhandled event types should still return 200 to Stripe.
-        return new Response(JSON.stringify({ received: true, ignored: true }), {
-          status: 200,
-          headers: corsHeaders,
-        });
+        return ignore(`unsupported event ${event.type}`);
     }
   } catch (error) {
-    console.error("[stripe-webhook] error:", error);
-    const message = error instanceof Error ? error.message : String(error);
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: corsHeaders,
-    });
+    console.error("[stripe-webhook] Processing failed:", error);
+    return json({ error: "Webhook processing failed" }, 500);
   }
 });

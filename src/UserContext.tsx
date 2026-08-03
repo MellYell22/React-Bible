@@ -105,7 +105,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   // Real-time listener for profile changes
   useEffect(() => {
-    if (!session?.user?.id || !isSupabaseConfigured) return;
+    if (!session?.user?.id || session.user.id === 'guest' || !isSupabaseConfigured) return;
 
     const profileSubscription = supabase!
       .channel(`public:profiles:id=eq.${session.user.id}`)
@@ -227,11 +227,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [session?.user?.id]);
 
   const signOut = async () => {
-    if (session?.user?.id !== 'guest') {
-      await supabase!.auth.signOut();
+    try {
+      if (session?.user?.id && session.user.id !== 'guest' && supabase) {
+        const { error } = await supabase.auth.signOut({ scope: 'local' });
+        if (error) console.warn('[UserContext] Supabase sign out warning:', error.message);
+      }
+    } finally {
+      profileFetchInFlightRef.current = null;
+      setSession(null);
+      setProfile(null);
+      setLoading(false);
     }
-    setSession(null);
-    setProfile(null);
   };
 
   return (

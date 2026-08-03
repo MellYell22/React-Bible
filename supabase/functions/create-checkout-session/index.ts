@@ -10,158 +10,129 @@ const corsHeaders = {
 
 const DEFAULT_PRO_PRICE_ID = "price_1TRTQuGDw0P2L0A1MsgZiMeM";
 const TRIAL_PERIOD_DAYS = 7;
-
-// The project's legacy anon/service_role keys are disabled, so auth calls must
-// use a modern publishable key. Publishable keys are safe to embed.
+const OWNER_EMAIL = "alissasmith.apps@gmail.com";
+const PAID_STATUSES = new Set(["active", "trialing"]);
 const FALLBACK_PUBLISHABLE_KEY = "sb_publishable_XpVDXroi6heBFrljTrWGrA__tFu6PTp";
 
+const json = (body: Record<string, unknown>, status = 200) => new Response(
+  JSON.stringify(body),
+  { status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+);
+
 const resolveAuthApiKey = (): string => {
-  const candidates = [
+  for (const candidate of [
     Deno.env.get("SB_PUBLISHABLE_KEY"),
     Deno.env.get("SUPABASE_PUBLISHABLE_KEY"),
-  ];
-  for (const candidate of candidates) {
-    if (candidate && candidate.startsWith("sb_publishable_")) return candidate;
+  ]) {
+    if (candidate?.startsWith("sb_publishable_")) return candidate;
   }
   return FALLBACK_PUBLISHABLE_KEY;
 };
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+const getSafeAppOrigin = (req: Request): string | null => {
+  const configured = Deno.env.get("APP_URL")?.trim().replace(/\/$/, "");
+  if (configured?.startsWith("https://")) return configured;
+
+  const requestOrigin = req.headers.get("origin")?.replace(/\/$/, "");
+  if (requestOrigin?.startsWith("http://localhost:") || requestOrigin?.startsWith("http://127.0.0.1:")) {
+    return requestOrigin;
   }
 
-  if (req.method !== "POST") {
-    return new Response(
-      JSON.stringify({ error: "Method not allowed" }),
-      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
+  return null;
+};
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   try {
-    // Only use the env var if it looks like a real Stripe price ID
-    const envPriceId = Deno.env.get("STRIPE_PRICE_ID_PRO");
-    const proPriceId = (envPriceId && envPriceId.startsWith("price_")) ? envPriceId : DEFAULT_PRO_PRICE_ID;
-    console.log(`[create-checkout-session] Using price ID: ${proPriceId}`);
-
-    let userId: string | undefined = undefined;
-    let userEmail: string | undefined = undefined;
-
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      console.error("[create-checkout-session] Error: Missing Authorization header");
-      return new Response(
-        JSON.stringify({ error: "Unauthorized: Missing auth header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
+    const proPriceId = Deno.env.get("STRIPE_PRICE_ID_PRO") || DEFAULT_PRO_PRICE_ID;
+    const appOrigin = getSafeAppOrigin(req);
+
+    if (!authHeader || !supabaseUrl || !stripeSecretKey || !appOrigin || !proPriceId.startsWith("price_")) {
+      console.error("[create-checkout-session] Missing required server configuration.");
+      return json({ error: "Checkout is temporarily unavailable because billing is not fully configured." }, 500);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const supabase = createClient(supabaseUrl, resolveAuthApiKey(), {
+    const authClient = createClient(supabaseUrl, resolveAuthApiKey(), {
       global: { headers: { Authorization: authHeader } },
     });
-
-    // IMPORTANT: pass the JWT explicitly. In a server context there is no
-    // stored session, so getUser() without an argument always fails with
-    // "Auth session missing" regardless of the token's validity.
     const accessToken = authHeader.replace(/^Bearer\s+/i, "");
-    const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
+    const { data: { user }, error: userError } = await authClient.auth.getUser(accessToken);
 
     if (userError || !user) {
-      console.error(`[create-checkout-session] Auth error or user not found: ${userError?.message}`);
-      return new Response(
-        JSON.stringify({ error: "Unauthorized: Invalid token or user not found" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return json({ error: "Your sign-in session expired. Please sign in again before upgrading." }, 401);
     }
 
-    userId = user.id;
-    userEmail = user.email;
+    const { data: profile, error: profileError } = await authClient
+      .from("profiles")
+      .select("id, email, subscription_tier, stripe_customer_id, stripe_subscription_id, stripe_subscription_status")
+      .eq("id", user.id)
+      .maybeSingle();
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('stripe_customer_id, stripe_subscription_id')
-      .eq('id', userId)
-      .single();
+    if (profileError) throw profileError;
+    if (!profile) return json({ error: "Your account profile is still being created. Please try again in a moment." }, 409);
 
-    const existingCustomerId = profile?.stripe_customer_id;
-    console.log(`[create-checkout-session] Authenticated user: ${userId}, Existing Stripe ID: ${existingCustomerId || 'none'}`);
-
-    const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeSecretKey) {
-      console.error("[create-checkout-session] CRITICAL: STRIPE_SECRET_KEY is not set in Supabase secrets.");
-      return new Response(
-        JSON.stringify({ error: "Server configuration error: Stripe key missing." }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const isOwner = user.email?.toLowerCase() === OWNER_EMAIL || profile.subscription_tier === "owner";
+    const alreadyPaid = profile.subscription_tier === "pro" && PAID_STATUSES.has(profile.stripe_subscription_status);
+    if (isOwner || alreadyPaid) {
+      return json({ error: "This account already has full access." }, 409);
     }
-
-    const isTestMode = stripeSecretKey.startsWith("sk_test_");
-    console.log(`[create-checkout-session] Stripe Mode: ${isTestMode ? "TEST" : "LIVE"}`);
 
     const stripe = new Stripe(stripeSecretKey, {
       apiVersion: "2023-10-16",
       httpClient: Stripe.createFetchHttpClient(),
     });
 
-    const origin = req.headers.get("origin") || Deno.env.get("APP_URL") || "http://localhost:3000";
-    const normalizedOrigin = origin.replace(/\/$/, "");
-    console.log(`[create-checkout-session] Creating Pro checkout for user: ${userId}, price: ${proPriceId}, origin: ${normalizedOrigin}`);
-
-    // Only offer the free trial to customers who have never had a subscription.
-    const hadSubscriptionBefore = !!profile?.stripe_subscription_id;
-
-    try {
-      const sessionOptions: any = {
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            price: proPriceId,
-            quantity: 1,
-          },
-        ],
-        mode: "subscription",
-        subscription_data: {
-          ...(hadSubscriptionBefore ? {} : { trial_period_days: TRIAL_PERIOD_DAYS }),
-          metadata: {
-            userId,
-            user_id: userId,
-          },
-        },
-        success_url: `${normalizedOrigin}/?success=true&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${normalizedOrigin}/?canceled=true&showPricing=true`,
-        client_reference_id: userId,
-        metadata: {
-          userId,
-          user_id: userId,
-        },
-      };
-
-      if (existingCustomerId) {
-        sessionOptions.customer = existingCustomerId;
-      } else if (userEmail) {
-        sessionOptions.customer_email = userEmail;
-      }
-
-      const session = await stripe.checkout.sessions.create(sessionOptions);
-
-      console.log(`[create-checkout-session] Session created successfully: ${session.id}, URL: ${session.url}`);
-      return new Response(
-        JSON.stringify({ url: session.url }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    } catch (stripeError: any) {
-      console.error(`[create-checkout-session] Stripe API Error: ${stripeError.message}`);
-      return new Response(
-        JSON.stringify({ error: `Stripe Error: ${stripeError.message}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const price = await stripe.prices.retrieve(proPriceId);
+    const keyIsLive = stripeSecretKey.startsWith("sk_live_");
+    if (!price.active || price.type !== "recurring" || price.livemode !== keyIsLive) {
+      console.error("[create-checkout-session] Pro price is inactive, non-recurring, or in the wrong Stripe mode.");
+      return json({ error: "The Pro plan is not available right now. Please contact support." }, 500);
     }
+
+    let existingCustomerId: string | null = profile.stripe_customer_id || null;
+    if (existingCustomerId) {
+      try {
+        const customer = await stripe.customers.retrieve(existingCustomerId);
+        if (("deleted" in customer && customer.deleted) || customer.livemode !== keyIsLive) {
+          existingCustomerId = null;
+        }
+      } catch (error: any) {
+        console.warn(`[create-checkout-session] Ignoring stale Stripe customer ${existingCustomerId}: ${error?.message || error}`);
+        existingCustomerId = null;
+      }
+    }
+
+    const hadSubscriptionBefore = Boolean(profile.stripe_subscription_id);
+    const metadata = { userId: user.id, user_id: user.id, app: "bible-mood-search", plan: "pro" };
+    const sessionOptions: Stripe.Checkout.SessionCreateParams = {
+      mode: "subscription",
+      payment_method_types: ["card"],
+      line_items: [{ price: proPriceId, quantity: 1 }],
+      client_reference_id: user.id,
+      metadata,
+      subscription_data: {
+        ...(hadSubscriptionBefore ? {} : { trial_period_days: TRIAL_PERIOD_DAYS }),
+        metadata,
+      },
+      success_url: `${appOrigin}/?success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appOrigin}/?canceled=true&showPricing=true`,
+    };
+
+    if (existingCustomerId) sessionOptions.customer = existingCustomerId;
+    else if (user.email) sessionOptions.customer_email = user.email;
+
+    const checkout = await stripe.checkout.sessions.create(sessionOptions);
+    if (!checkout.url) throw new Error(`Stripe returned checkout ${checkout.id} without a URL.`);
+
+    console.log(`[create-checkout-session] Created ${checkout.id} for user ${user.id}.`);
+    return json({ url: checkout.url });
   } catch (error: any) {
-    console.error(`[create-checkout-session] Unexpected Error: ${error.message}`);
-    return new Response(
-      JSON.stringify({ error: "An unexpected error occurred. Please check server logs." }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.error("[create-checkout-session] Failed:", error?.message || error);
+    return json({ error: "Unable to start checkout right now. Please try again shortly." }, 500);
   }
 });

@@ -62,7 +62,7 @@ export const createCheckoutSession = async () => {
     const response = await fetch(`${supabaseUrl}/functions/v1/create-checkout-session`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({}),
+      body: JSON.stringify({ plan: 'pro' }),
     });
 
     if (!response.ok) {
@@ -73,7 +73,7 @@ export const createCheckoutSession = async () => {
 
     if (data?.url) {
       console.log(`[StripeDebug] Success. Redirecting to: ${data.url}`);
-      window.location.href = data.url;
+      window.location.assign(data.url);
       return;
     } else {
       throw new Error('No checkout URL received from server.');
