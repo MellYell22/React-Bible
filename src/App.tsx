@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { Analytics } from '@vercel/analytics/react';
 import { UserProvider, useUser } from './UserContext';
@@ -45,8 +45,13 @@ const getInitialRoute = (): RouteState => {
 };
 
 function AppShell() {
-  const { session, profile, loading, signOut } = useUser();
+  const { session, profile, loading, refreshProfile, signOut } = useUser();
   const [route, setRoute] = useState<RouteState>(() => getInitialRoute());
+  const [onboardingCompletedLocally, setOnboardingCompletedLocally] = useState(false);
+
+  useEffect(() => {
+    setOnboardingCompletedLocally(false);
+  }, [session?.user?.id]);
 
   const navigation = useMemo(() => ({
     navigate: (name: AppRoute, params?: Record<string, any>) => setRoute({ name, params }),
@@ -70,8 +75,21 @@ function AppShell() {
     return <AuthScreen />;
   }
 
-  if (profile && !profile.has_completed_onboarding) {
-    return <OnboardingScreen onComplete={() => setRoute({ name: 'Home' })} />;
+  if (profile && !profile.has_completed_onboarding && !onboardingCompletedLocally) {
+    return (
+      <OnboardingScreen
+        onComplete={async () => {
+          setOnboardingCompletedLocally(true);
+          setRoute({ name: 'Home' });
+
+          try {
+            await refreshProfile(false);
+          } catch (error) {
+            console.warn('[App] Onboarding was saved, but the refreshed profile was delayed:', error);
+          }
+        }}
+      />
+    );
   }
 
   const screenProps = { navigation, route: { name: route.name, params: route.params || {} } };
