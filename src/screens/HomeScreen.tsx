@@ -1,11 +1,25 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, TextInput, Platform } from 'react-native';
 import { useUser } from '../UserContext';
-
-const GOLD = '#d4af37';
-const SOFT_GOLD = '#f5d77a';
-const NAVY = '#0b1e3d';
-const DARK_NAVY = '#051020';
+import {
+  NAVY,
+  DARK_NAVY,
+  GOLD,
+  SOFT_GOLD,
+  WHITE,
+  gold,
+  surfaces,
+  fonts,
+  fontSize,
+  tracking,
+  radius,
+  spacing,
+  buttons,
+  glow,
+  TOUCH_TARGET,
+  MAX_CONTENT_WIDTH,
+  BOTTOM_NAV_CLEARANCE,
+} from '../theme';
 
 // Mood buttons configuration
 const MOODS = [
@@ -106,6 +120,8 @@ export default function HomeScreen({ navigation }: any) {
             style={[styles.searchSubmit, !emotionalEntry.trim() && styles.searchSubmitDisabled]}
             onPress={handleEmotionalEntrySubmit}
             disabled={!emotionalEntry.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="Send to David"
             activeOpacity={0.75}
           >
             <Text style={styles.searchSubmitText}>TALK</Text>
@@ -115,6 +131,7 @@ export default function HomeScreen({ navigation }: any) {
 
       {/* Mood Selection Section */}
       <View style={styles.moodSection}>
+        <Text style={styles.sectionLabel}>HOW ARE YOU FEELING</Text>
         <View style={styles.moodGrid}>
           {MOODS.map((mood, index) => (
             <TouchableOpacity
@@ -125,6 +142,10 @@ export default function HomeScreen({ navigation }: any) {
                 index >= 3 && styles.moodButtonSecondRow,
               ]}
               onPress={() => handleMoodSelect(mood.key)}
+              accessibilityRole="button"
+              accessibilityLabel={mood.label}
+              accessibilityState={{ selected: selectedMood === mood.key }}
+              activeOpacity={0.75}
             >
               <Text
                 style={[
@@ -149,7 +170,13 @@ export default function HomeScreen({ navigation }: any) {
 
           <Text style={styles.verseReference}>— {currentVerse.reference}</Text>
 
-          <TouchableOpacity onPress={handleReflection} activeOpacity={0.75}>
+          <TouchableOpacity
+            onPress={handleReflection}
+            style={styles.reflectionTap}
+            accessibilityRole="button"
+            accessibilityLabel="Read David's reflection on this verse"
+            activeOpacity={0.75}
+          >
             <Text style={styles.reflectionLink}>TAP FOR DAVID'S REFLECTION</Text>
           </TouchableOpacity>
         </View>
@@ -160,6 +187,8 @@ export default function HomeScreen({ navigation }: any) {
         <TouchableOpacity
           style={styles.talkButton}
           onPress={handleTalkWithDavid}
+          accessibilityRole="button"
+          accessibilityLabel="Talk with David"
           activeOpacity={0.75}
         >
           <Text style={styles.talkButtonText}>TALK WITH DAVID</Text>
@@ -184,40 +213,36 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 18,
-    paddingTop: 34,
-    paddingBottom: 48,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xxl,
+    paddingBottom: BOTTOM_NAV_CLEARANCE,
     alignItems: 'center',
   },
 
   // Primary Emotional Search Section
   searchSection: {
     width: '100%',
+    maxWidth: MAX_CONTENT_WIDTH,
     alignItems: 'center',
-    marginBottom: 36,
+    marginBottom: spacing.section,
   },
 
   searchShell: {
     width: '100%',
-    maxWidth: 520,
     minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.35)',
-    borderRadius: 28,
-    backgroundColor: 'rgba(5, 16, 32, 0.62)',
-    paddingLeft: 22,
-    paddingRight: 6,
-    shadowColor: GOLD,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: Platform.OS === 'web' ? 0.22 : 0.16,
-    shadowRadius: 18,
-    elevation: 4,
+    borderColor: gold.a30,
+    borderRadius: radius.sm,
+    backgroundColor: surfaces.sunken,
+    paddingLeft: spacing.lg,
+    paddingRight: spacing.xs,
+    ...glow,
   },
 
   searchShellFocused: {
-    borderColor: 'rgba(245, 215, 122, 0.82)',
+    borderColor: gold.a70,
     backgroundColor: 'rgba(5, 16, 32, 0.82)',
     shadowOpacity: 0.34,
     shadowRadius: 24,
@@ -225,201 +250,207 @@ const styles = StyleSheet.create({
 
   searchInput: {
     flex: 1,
-    height: 48,
+    minHeight: TOUCH_TARGET,
     color: '#fff8df',
     fontSize: 16,
     fontStyle: 'italic',
-    fontFamily: 'Playfair Display',
+    fontFamily: fonts.display,
     letterSpacing: 0.3,
-    outlineStyle: 'none' as any,
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}),
   },
 
   searchSubmit: {
     minWidth: 70,
-    height: 40,
-    borderRadius: 22,
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(212, 175, 55, 0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(245, 215, 122, 0.9)',
+    backgroundColor: GOLD,
   },
 
   searchSubmitDisabled: {
-    backgroundColor: 'rgba(212, 175, 55, 0.12)',
-    borderColor: 'rgba(212, 175, 55, 0.22)',
+    ...buttons.disabled,
   },
 
   searchSubmitText: {
-    fontSize: 9,
-    fontWeight: '800',
+    fontFamily: fonts.ui,
+    fontSize: fontSize.button,
+    fontWeight: '700',
     color: DARK_NAVY,
-    letterSpacing: 1.3,
+    letterSpacing: tracking.wider,
     textTransform: 'uppercase',
-    fontFamily: 'Cinzel',
   },
 
-  // Mood Section
+  // Section label — matches the reference's field-label treatment
+  sectionLabel: {
+    fontFamily: fonts.ui,
+    fontSize: fontSize.micro,
+    fontWeight: '700',
+    color: gold.a60,
+    letterSpacing: tracking.wider,
+    textTransform: 'uppercase',
+    marginBottom: spacing.md,
+    alignSelf: 'flex-start',
+  },
+
+  // Mood Selection
   moodSection: {
-    marginBottom: 64,
-    alignItems: 'center',
+    width: '100%',
+    maxWidth: MAX_CONTENT_WIDTH,
+    marginBottom: spacing.section,
   },
 
   moodGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 10,
-    maxWidth: 540,
+    gap: spacing.sm,
   },
 
   moodButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderWidth: 1.5,
-    borderColor: 'rgba(212, 175, 55, 0.4)',
-    borderRadius: 20,
-    backgroundColor: 'transparent',
-    marginBottom: 6,
+    flexGrow: 1,
+    flexBasis: '30%',
+    minHeight: TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderWidth: 1,
+    borderColor: gold.a30,
+    borderRadius: radius.sm,
+    backgroundColor: surfaces.input,
   },
+
+  moodButtonSecondRow: {},
 
   moodButtonActive: {
-    backgroundColor: GOLD,
     borderColor: GOLD,
-  },
-
-  moodButtonSecondRow: {
-    marginTop: 8,
+    backgroundColor: gold.a10,
+    ...glow,
   },
 
   moodButtonText: {
-    fontSize: 9,
+    fontFamily: fonts.ui,
+    fontSize: fontSize.tiny,
     fontWeight: '700',
-    color: 'rgba(212, 175, 55, 0.6)',
-    letterSpacing: 1.2,
+    color: gold.a60,
+    letterSpacing: tracking.normal,
     textTransform: 'uppercase',
-    fontFamily: 'Cinzel',
   },
 
   moodButtonTextActive: {
-    color: DARK_NAVY,
+    color: SOFT_GOLD,
   },
 
-  // Verse of the Day Section
+  // Verse of the Day
   verseSection: {
-    marginBottom: 70,
-    alignItems: 'center',
     width: '100%',
+    maxWidth: MAX_CONTENT_WIDTH,
+    marginBottom: spacing.section,
   },
 
   verseBorder: {
-    width: '100%',
-    maxWidth: 500,
-    paddingVertical: 36,
-    paddingHorizontal: 24,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
-    borderRadius: 8,
+    borderColor: gold.a30,
+    borderRadius: radius.sm,
+    backgroundColor: surfaces.input,
+    paddingVertical: spacing.xxl,
+    paddingHorizontal: spacing.xl,
     alignItems: 'center',
-    backgroundColor: 'rgba(5, 16, 32, 0.16)',
   },
 
   verseLabel: {
-    fontSize: 8,
+    fontFamily: fonts.ui,
+    fontSize: fontSize.micro,
     fontWeight: '700',
     color: GOLD,
-    letterSpacing: 1.5,
+    letterSpacing: tracking.wider,
     textTransform: 'uppercase',
-    marginBottom: 4,
-    fontFamily: 'Cinzel',
+    marginBottom: spacing.xs,
   },
 
   verseDate: {
-    fontSize: 7,
-    color: 'rgba(212, 175, 55, 0.5)',
-    letterSpacing: 0.8,
+    fontFamily: fonts.ui,
+    fontSize: fontSize.micro,
+    color: gold.a50,
+    letterSpacing: tracking.normal,
     textTransform: 'uppercase',
-    marginBottom: 20,
-    fontFamily: 'Cinzel',
+    marginBottom: spacing.xl,
   },
 
   verseText: {
+    fontFamily: fonts.display,
     fontSize: 17,
-    color: '#ffffff',
+    lineHeight: 28,
     fontStyle: 'italic',
+    color: WHITE,
     textAlign: 'center',
-    lineHeight: 26,
-    marginBottom: 16,
-    fontFamily: 'Playfair Display',
-    fontWeight: '400',
+    marginBottom: spacing.lg,
   },
 
   verseReference: {
-    fontSize: 9,
-    color: GOLD,
+    fontFamily: fonts.ui,
+    fontSize: fontSize.tiny,
     fontWeight: '700',
-    letterSpacing: 1.2,
+    color: GOLD,
+    letterSpacing: tracking.wide,
     textTransform: 'uppercase',
-    marginBottom: 18,
-    fontFamily: 'Cinzel',
+    marginBottom: spacing.xl,
+  },
+
+  reflectionTap: {
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
   },
 
   reflectionLink: {
-    fontSize: 8,
-    color: 'rgba(212, 175, 55, 0.6)',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    fontFamily: fonts.ui,
+    fontSize: fontSize.tiny,
     fontWeight: '600',
-    fontFamily: 'Cinzel',
+    color: gold.a50,
+    letterSpacing: tracking.tight,
+    textTransform: 'uppercase',
   },
 
-  // Action Section
+  // Talk with David
   actionSection: {
+    width: '100%',
+    maxWidth: MAX_CONTENT_WIDTH,
     alignItems: 'center',
-    marginBottom: 62,
+    marginBottom: spacing.section,
   },
 
   talkButton: {
-    paddingHorizontal: 34,
-    paddingVertical: 13,
-    borderWidth: 1.5,
-    borderColor: GOLD,
-    borderRadius: 4,
-    backgroundColor: 'rgba(5, 16, 32, 0.18)',
-    marginBottom: 14,
+    ...buttons.secondary,
+    width: '100%',
   },
 
   talkButtonText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: GOLD,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    fontFamily: 'Cinzel',
+    ...buttons.secondaryText,
   },
 
   actionSubtitle: {
-    fontSize: 7.5,
-    color: 'rgba(212, 175, 55, 0.5)',
-    letterSpacing: 0.8,
+    fontFamily: fonts.ui,
+    fontSize: fontSize.micro,
+    color: gold.a50,
+    letterSpacing: tracking.normal,
     textTransform: 'uppercase',
-    fontWeight: '600',
-    fontFamily: 'Cinzel',
+    textAlign: 'center',
+    marginTop: spacing.md,
   },
 
   // Footer
   footer: {
+    width: '100%',
     alignItems: 'center',
-    marginTop: 'auto',
-    paddingBottom: 16,
   },
 
   footerText: {
-    fontSize: 7,
-    color: 'rgba(212, 175, 55, 0.3)',
-    letterSpacing: 1.2,
+    fontFamily: fonts.ui,
+    fontSize: fontSize.micro,
+    color: gold.a30,
+    letterSpacing: tracking.wider,
     textTransform: 'uppercase',
-    fontWeight: '700',
-    fontFamily: 'Cinzel',
   },
 });
