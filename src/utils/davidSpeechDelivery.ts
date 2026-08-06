@@ -49,7 +49,9 @@ const softenPunctuationForTts = (text: string): string => {
   t = t.replace(/\.{4,}/g, '...');
   t = t.replace(/,{2,}/g, ',');
   t = t.replace(/\s+,/g, ',');
-  t = t.replace(/([.!?])(?=[^\s.!?])/g, '$1 ');
+  // Space out run-together sentences, but never wedge a space between a
+  // terminator and its closing quote ("...anything.'" must stay intact).
+  t = t.replace(/([.!?])(?=[^\s.!?'"’”)])/g, '$1 ');
 
   return restoreDecimalPoints(t);
 };
@@ -89,19 +91,77 @@ const addTinyNaturalBreaths = (text: string): string => {
   return t;
 };
 
-const lightlyShortenRunOn = (text: string): string => {
-  const sentenceMatches = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g);
+/**
+ * Splits into sentences without cutting a Scripture quote in half.
+ * Closing quotes stay attached to the sentence they belong to, so
+ * "'Do not be anxious about anything.'" never becomes "anything. '".
+ */
+const SENTENCE_RE = /[^.!?]+[.!?]+['"’”)]*|[^.!?]+$/g;
 
-  // Allow up to three complete sentences so David's follow-up question is
-  // never chopped off; only truly run-on replies get trimmed.
-  if (!sentenceMatches || sentenceMatches.length <= 3) {
+/** Terminators tolerate a trailing quote: `...with you?"` is still a question. */
+const ENDS_WITH_QUESTION = /\?['"’”)]*\s*$/;
+const ENDS_SENTENCE = /[.!?]['"’”)]*\s*$/;
+
+const splitSentences = (text: string): string[] =>
+  text.match(SENTENCE_RE) ?? [];
+
+/**
+ * The one-breath rule, enforced client-side: at most three sentences, and
+ * nothing after the first question — David asks once, then stops and waits.
+ */
+const enforceOneBreath = (text: string): string => {
+  const sentenceMatches = splitSentences(text);
+
+  if (sentenceMatches.length <= 1) {
     return text;
   }
 
-  const firstThree = sentenceMatches.slice(0, 3).join(' ').trim();
+  const kept: string[] = [];
 
-  return firstThree.length >= 28 ? firstThree : text;
+  for (const raw of sentenceMatches) {
+    const sentence = raw.trim();
+    if (!sentence) continue;
+
+    kept.push(sentence);
+
+    // One gentle question per reply — never two in a row.
+    if (ENDS_WITH_QUESTION.test(sentence)) break;
+
+    if (kept.length >= 3) break;
+  }
+
+  // If the reply was cut off mid-thought, drop the fragment rather than
+  // speaking half a sentence aloud.
+  if (kept.length > 1 && !ENDS_SENTENCE.test(kept[kept.length - 1])) {
+    kept.pop();
+  }
+
+  const trimmed = kept.join(' ').trim();
+
+  // Never trade a usable reply for an unusably short fragment.
+  return trimmed.length >= 20 ? trimmed : text;
 };
+
+/**
+ * Cues David is never allowed to make: "Ah—", "Um—", "Uh—", "Oh oh oh",
+ * "Checking...". These read as hesitation or as a machine stalling.
+ */
+const BANNED_CUE_RE =
+  /^\s*(?:(?:ah|um|uh|er|oh)\s*[—–-]+\s*|(?:oh[\s,]+){2,}oh[\s,]*|checking\s*\.{2,}\s*)/gi;
+
+/** Stacked filler ("mm, hmm, ah...") never sounds human. Keep the first cue only. */
+const collapseStackedFiller = (text: string): string =>
+  text
+    .replace(BANNED_CUE_RE, '')
+    // Drop any cue that is immediately followed by another cue.
+    .replace(
+      /\b(mm+|hmm+|hm|ah|uh|um|er|oh)\b[\s,.!—–-]*(?=\b(?:mm+|hmm+|hm|ah|uh|um|er|oh)\b)/gi,
+      '',
+    )
+    .replace(BANNED_CUE_RE, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s,.!—–-]+/, '')
+    .trim();
 
 function preparePlainSpeechText(text: string): string {
   let t = text.trim();
@@ -133,7 +193,9 @@ export function humanizeForTts(
 
   let t = preparePlainSpeechText(text);
 
-  t = lightlyShortenRunOn(t);
+  t = collapseStackedFiller(t);
+
+  t = enforceOneBreath(t);
 
   t = t.replace(/\bI am\b/g, "I'm");
   t = t.replace(/\bYou are\b/g, "You're");
