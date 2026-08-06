@@ -79,11 +79,17 @@ Deno.serve(async (req) => {
     // ---- premium check + free-tier daily limit (server enforced) ----
     const { data: profile } = await supabase
       .from("profiles")
-      .select("subscription_tier")
+      .select("subscription_tier, role")
       .eq("id", user.id)
       .maybeSingle();
 
-    const isPremium = profile?.subscription_tier === "pro" || profile?.subscription_tier === "plus";
+    // Owner lives in profiles.role — subscription_tier is constrained to
+    // free | plus | pro, so owners must be recognised here or they get
+    // throttled by the free daily limit like anyone else.
+    const isOwner = profile?.role === "owner" || profile?.subscription_tier === "owner";
+    const isPremium = isOwner
+      || profile?.subscription_tier === "pro"
+      || profile?.subscription_tier === "plus";
 
     if (!isPremium) {
       const startOfDay = new Date();

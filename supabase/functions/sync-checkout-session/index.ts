@@ -8,10 +8,23 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const DEFAULT_PRO_PRICE_ID = "price_1TRTQuGDw0P2L0A1MsgZiMeM";
 const OWNER_EMAIL = "alissasmith.apps@gmail.com";
 const FALLBACK_PUBLISHABLE_KEY = "sb_publishable_XpVDXroi6heBFrljTrWGrA__tFu6PTp";
 const PAID_STATUSES = new Set(["active", "trialing"]);
+
+type PaidTier = "plus" | "pro";
+const isValidPrice = (v: string | null | undefined): v is string => typeof v === "string" && v.startsWith("price_");
+
+const getConfiguredTierPrices = (): { plus: string | null; pro: string | null } => ({
+  plus: (() => { const v = Deno.env.get("STRIPE_PRICE_ID_PLUS")?.trim(); return isValidPrice(v) ? v : null; })(),
+  pro: (() => { const v = Deno.env.get("STRIPE_PRICE_ID_PRO")?.trim(); return isValidPrice(v) ? v : null; })(),
+});
+
+const matchTier = (priceIds: string[], prices: { plus: string | null; pro: string | null }): PaidTier | null => {
+  if (prices.pro && priceIds.includes(prices.pro)) return "pro";
+  if (prices.plus && priceIds.includes(prices.plus)) return "plus";
+  return null;
+};
 
 const json = (body: Record<string, unknown>, status = 200) => new Response(
   JSON.stringify(body),
@@ -51,9 +64,9 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
-    const proPriceId = Deno.env.get("STRIPE_PRICE_ID_PRO") || DEFAULT_PRO_PRICE_ID;
+    const tierPrices = getConfiguredTierPrices();
 
-    if (!authHeader || !supabaseUrl || !stripeSecretKey || !proPriceId.startsWith("price_")) {
+    if (!authHeader || !supabaseUrl || !stripeSecretKey || (!tierPrices.plus && !tierPrices.pro)) {
       return json({ error: "Unable to verify checkout because billing is not fully configured." }, 500);
     }
 
@@ -95,31 +108,36 @@ serve(async (req) => {
 
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
     const priceIds = subscription.items.data.map((item) => item.price.id);
-    if (!PAID_STATUSES.has(subscription.status) || !priceIds.includes(proPriceId)) {
-      return json({ error: "This checkout did not create an active Bible Mood Search Pro subscription." }, 409);
+    const matchedTier = matchTier(priceIds, tierPrices);
+    if (!PAID_STATUSES.has(subscription.status) || !matchedTier) {
+      return json({ error: "This checkout did not create an active Bible Mood Search subscription." }, 409);
     }
 
     const writeKey = resolveSecretKey();
     const writeClient = writeKey ? createClient(supabaseUrl, writeKey) : authClient;
     const { data: existingProfile, error: readError } = await writeClient
       .from("profiles")
-      .select("id, email, subscription_tier")
+      .select("id, email, role, subscription_tier")
       .eq("id", user.id)
       .maybeSingle();
 
     if (readError) throw readError;
     if (!existingProfile) return json({ error: "We could not find a profile for this account." }, 404);
 
-    const preserveOwner = user.email?.toLowerCase() === OWNER_EMAIL || existingProfile.subscription_tier === "owner";
+    // Owner lives in profiles.role — subscription_tier is constrained to
+    // free | plus | pro by the database, so it can never hold "owner".
+    const preserveOwner = user.email?.toLowerCase() === OWNER_EMAIL
+      || existingProfile.role === "owner"
+      || existingProfile.subscription_tier === "owner";
     const update: Record<string, unknown> = {
       subscription_status: "active",
       stripe_customer_id: getId(checkout.customer),
       stripe_subscription_id: subscription.id,
       stripe_subscription_status: subscription.status,
-      stripe_price_id: proPriceId,
+      stripe_price_id: priceIds[0] || null,
       stripe_current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
     };
-    if (!preserveOwner) update.subscription_tier = "pro";
+    if (!preserveOwner) update.subscription_tier = matchedTier;
 
     const { data: profile, error: updateError } = await writeClient
       .from("profiles")

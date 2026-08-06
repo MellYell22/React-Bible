@@ -1,8 +1,9 @@
-import { DEFAULT_PRO_PRICE_ID, stripeModeFromSecretKey } from './subscriptionState.js';
+import { stripeModeFromSecretKey } from './subscriptionState.js';
 
 type Environment = Record<string, string | undefined>;
 
 const isConfigured = (value: string | undefined) => Boolean(value?.trim());
+const isValidPriceId = (value: string | undefined) => Boolean(value?.trim().startsWith('price_'));
 
 export const getLaunchHealth = (env: Environment) => {
   const core = {
@@ -20,7 +21,9 @@ export const getLaunchHealth = (env: Environment) => {
     SUPABASE_WRITE_KEY: isConfigured(
       env.SB_SECRET_KEY || env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY,
     ),
-    STRIPE_PRICE_ID_PRO: isConfigured(env.STRIPE_PRICE_ID_PRO || DEFAULT_PRO_PRICE_ID),
+    // A tier is only "configured" if it holds a REAL price id. No dead fallback.
+    STRIPE_PRICE_ID_PRO: isValidPriceId(env.STRIPE_PRICE_ID_PRO),
+    STRIPE_PRICE_ID_PLUS: isValidPriceId(env.STRIPE_PRICE_ID_PLUS),
   };
 
   const optional = {
@@ -41,7 +44,6 @@ export const getLaunchHealth = (env: Environment) => {
       configured: billing,
       ready: billingReady,
       stripeMode: stripeModeFromSecretKey(env.STRIPE_SECRET_KEY),
-      usesDefaultProPriceId: !isConfigured(env.STRIPE_PRICE_ID_PRO),
     },
     optional,
   };

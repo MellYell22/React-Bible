@@ -35,9 +35,15 @@ const getFunctionErrorMessage = async (response: Response, fallback: string) => 
   return errorData.error || errorData.message || fallback;
 };
 
-export const createCheckoutSession = async () => {
-  console.log('[StripeDebug] Initiating Pro checkout.');
-  
+export type CheckoutPlan = 'plus' | 'pro';
+
+export const createCheckoutSession = async (plan: CheckoutPlan = 'pro') => {
+  if (plan !== 'plus' && plan !== 'pro') {
+    throw new Error('Invalid subscription plan selected.');
+  }
+
+  console.log(`[StripeDebug] Initiating ${plan} checkout.`);
+
   if (!supabase) {
     throw new Error('Supabase is not configured');
   }
@@ -57,12 +63,12 @@ export const createCheckoutSession = async () => {
       console.log(`[StripeDebug] Frontend Mode: ${publishableKey.startsWith('pk_test_') ? 'TEST' : 'LIVE'}`);
     }
 
-    console.log('[StripeDebug] Sending authenticated Pro checkout request.');
-    
+    console.log(`[StripeDebug] Sending authenticated ${plan} checkout request.`);
+
     const response = await fetch(`${supabaseUrl}/functions/v1/create-checkout-session`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ plan: 'pro' }),
+      body: JSON.stringify({ plan }),
     });
 
     if (!response.ok) {

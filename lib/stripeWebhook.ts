@@ -4,8 +4,10 @@ import {
   deriveSubscriptionTier,
   getStripeId,
   getSubscriptionPriceIds,
-  isExpectedPrice,
+  matchTierByPriceIds,
 } from './subscriptionState.js';
+
+type TierPrices = { plus?: string | null; pro?: string | null };
 
 type Logger = Pick<Console, 'log' | 'warn' | 'error'>;
 
@@ -32,8 +34,19 @@ type ProcessStripeEventOptions = {
   event: Stripe.Event;
   stripe: Stripe;
   supabase: SupabaseClient;
-  proPriceId: string;
+  // Configured paid-tier prices. `proPriceId` is still accepted for backward
+  // compatibility and is treated as tierPrices.pro when tierPrices is absent.
+  tierPrices?: TierPrices;
+  proPriceId?: string;
   logger?: Logger;
+};
+
+const normalizeTierPrices = (
+  tierPrices?: TierPrices,
+  proPriceId?: string,
+): TierPrices => {
+  if (tierPrices && (tierPrices.plus || tierPrices.pro)) return tierPrices;
+  return { pro: proPriceId || null };
 };
 
 const getCustomerEmail = async (stripe: Stripe, customerId: string | null, logger: Logger) => {
@@ -107,7 +120,7 @@ const saveSubscription = async (
   profile: ProfileRecord,
   customerId: string | null,
   subscription: Stripe.Subscription,
-  proPriceId: string,
+  tierPrices: TierPrices,
   logger: Logger,
 ): Promise<StripeWebhookResult> => {
   const priceIds = getSubscriptionPriceIds(subscription);
@@ -115,9 +128,9 @@ const saveSubscription = async (
     currentTier: profile.subscription_tier,
     status: subscription.status,
     priceIds,
-    expectedPriceId: proPriceId,
+    tierPrices,
   });
-  const hasPaidAccess = nextTier === 'pro' || nextTier === 'owner';
+  const hasPaidAccess = nextTier === 'pro' || nextTier === 'plus' || nextTier === 'owner';
   const periodEnd = typeof (subscription as any).current_period_end === 'number'
     ? new Date((subscription as any).current_period_end * 1000).toISOString()
     : null;
@@ -174,12 +187,12 @@ const processSubscription = async (
   stripe: Stripe,
   supabase: SupabaseClient,
   subscription: Stripe.Subscription,
-  proPriceId: string,
+  tierPrices: TierPrices,
   logger: Logger,
   fallbackEmail: string | null = null,
 ) => {
   const priceIds = getSubscriptionPriceIds(subscription);
-  if (!isExpectedPrice(priceIds, proPriceId)) {
+  if (!matchTierByPriceIds(priceIds, tierPrices)) {
     return ignore(
       logger,
       `subscription ${subscription.id} uses a different app price (${priceIds.join(', ') || 'none'})`,
@@ -202,16 +215,18 @@ const processSubscription = async (
   }
 
   logger.log(`[Stripe Webhook] Matched subscription ${subscription.id} by ${lookup.matchedBy}.`);
-  return saveSubscription(supabase, lookup.profile, customerId, subscription, proPriceId, logger);
+  return saveSubscription(supabase, lookup.profile, customerId, subscription, tierPrices, logger);
 };
 
 export const processStripeEvent = async ({
   event,
   stripe,
   supabase,
+  tierPrices: tierPricesInput,
   proPriceId,
   logger = console,
 }: ProcessStripeEventOptions): Promise<StripeWebhookResult> => {
+  const tierPrices = normalizeTierPrices(tierPricesInput, proPriceId);
   switch (event.type) {
     case 'checkout.session.completed': {
       const checkout = event.data.object as Stripe.Checkout.Session;
@@ -236,7 +251,7 @@ export const processStripeEvent = async ({
         stripe,
         supabase,
         subscription,
-        proPriceId,
+        tierPrices,
         logger,
         checkout.customer_details?.email || checkout.customer_email || null,
       );
@@ -249,7 +264,7 @@ export const processStripeEvent = async ({
         stripe,
         supabase,
         event.data.object as Stripe.Subscription,
-        proPriceId,
+        tierPrices,
         logger,
       );
 
@@ -264,7 +279,7 @@ export const processStripeEvent = async ({
         stripe,
         supabase,
         subscription,
-        proPriceId,
+        tierPrices,
         logger,
         invoice.customer_email || null,
       );

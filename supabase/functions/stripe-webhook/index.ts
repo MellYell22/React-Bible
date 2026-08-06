@@ -4,9 +4,20 @@ import { createClient } from "npm:@supabase/supabase-js@2.26.0";
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-const PRO_PRICE_ID = Deno.env.get("STRIPE_PRICE_ID_PRO") || "price_1TRTQuGDw0P2L0A1MsgZiMeM";
+const PLUS_PRICE_ID = Deno.env.get("STRIPE_PRICE_ID_PLUS")?.trim() || null;
+const PRO_PRICE_ID = Deno.env.get("STRIPE_PRICE_ID_PRO")?.trim() || null;
 const OWNER_EMAIL = "alissasmith.apps@gmail.com";
 const PAID_STATUSES = new Set(["active", "trialing"]);
+
+type PaidTier = "plus" | "pro";
+const isValidPrice = (v: string | null): v is string => typeof v === "string" && v.startsWith("price_");
+
+// Returns the app tier for a set of subscription price IDs, or null if none match.
+const matchTier = (priceIds: string[]): PaidTier | null => {
+  if (isValidPrice(PRO_PRICE_ID) && priceIds.includes(PRO_PRICE_ID)) return "pro";
+  if (isValidPrice(PLUS_PRICE_ID) && priceIds.includes(PLUS_PRICE_ID)) return "plus";
+  return null;
+};
 
 const resolveSecretKey = (): string | null => {
   for (const candidate of [
@@ -24,7 +35,9 @@ if (!STRIPE_SECRET_KEY) throw new Error("Missing STRIPE_SECRET_KEY");
 if (!STRIPE_WEBHOOK_SECRET) throw new Error("Missing STRIPE_WEBHOOK_SECRET");
 if (!SUPABASE_URL) throw new Error("Missing SUPABASE_URL");
 if (!SUPABASE_WRITE_KEY) throw new Error("Missing Supabase write key");
-if (!PRO_PRICE_ID.startsWith("price_")) throw new Error("Missing STRIPE_PRICE_ID_PRO");
+if (!isValidPrice(PLUS_PRICE_ID) && !isValidPrice(PRO_PRICE_ID)) {
+  throw new Error("Missing STRIPE_PRICE_ID_PLUS / STRIPE_PRICE_ID_PRO");
+}
 
 const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" });
 const supabase = createClient(SUPABASE_URL, SUPABASE_WRITE_KEY, {
@@ -44,8 +57,18 @@ const getId = (value: string | { id: string } | null | undefined) => (
 type ProfileRecord = {
   id: string;
   email: string | null;
+  role: string | null;
   subscription_tier: string | null;
 };
+
+// Owner lives in profiles.role — subscription_tier is constrained to
+// free | plus | pro by the database, so it can never hold "owner".
+const PROFILE_COLUMNS = "id, email, role, subscription_tier";
+
+const isOwnerProfile = (profile: Pick<ProfileRecord, "email" | "role" | "subscription_tier">) =>
+  profile.role === "owner"
+  || profile.subscription_tier === "owner"
+  || profile.email?.toLowerCase() === OWNER_EMAIL;
 
 const findProfile = async ({
   userId,
@@ -59,7 +82,7 @@ const findProfile = async ({
   if (userId) {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, email, subscription_tier")
+      .select(PROFILE_COLUMNS)
       .eq("id", userId)
       .limit(1)
       .maybeSingle();
@@ -70,7 +93,7 @@ const findProfile = async ({
   if (customerId) {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, email, subscription_tier")
+      .select(PROFILE_COLUMNS)
       .eq("stripe_customer_id", customerId)
       .limit(1)
       .maybeSingle();
@@ -81,7 +104,7 @@ const findProfile = async ({
   if (email) {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, email, subscription_tier")
+      .select(PROFILE_COLUMNS)
       .ilike("email", email)
       .limit(1)
       .maybeSingle();
@@ -114,7 +137,8 @@ const processSubscription = async (
   fallbackEmail: string | null = null,
 ) => {
   const priceIds = subscription.items.data.map((item) => item.price.id);
-  if (!priceIds.includes(PRO_PRICE_ID)) {
+  const matchedTier = matchTier(priceIds);
+  if (!matchedTier) {
     return ignore(`subscription ${subscription.id} belongs to another app or price`);
   }
 
@@ -127,21 +151,20 @@ const processSubscription = async (
     return ignore(`no Bible Mood Search profile matches subscription ${subscription.id}`);
   }
 
-  const isOwner = profile.subscription_tier === "owner"
-    || profile.email?.toLowerCase() === OWNER_EMAIL;
+  const isOwner = isOwnerProfile(profile);
   const isPaid = PAID_STATUSES.has(subscription.status);
   const update: Record<string, unknown> = {
     subscription_status: isPaid || isOwner ? "active" : subscription.status,
     stripe_customer_id: customerId,
     stripe_subscription_id: subscription.id,
     stripe_subscription_status: subscription.status,
-    stripe_price_id: PRO_PRICE_ID,
+    stripe_price_id: priceIds[0] || null,
   };
 
   if (typeof subscription.current_period_end === "number") {
     update.stripe_current_period_end = new Date(subscription.current_period_end * 1000).toISOString();
   }
-  if (!isOwner) update.subscription_tier = isPaid ? "pro" : "free";
+  if (!isOwner) update.subscription_tier = isPaid ? matchedTier : "free";
 
   const { data, error } = await supabase
     .from("profiles")

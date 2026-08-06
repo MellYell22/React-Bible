@@ -8,10 +8,24 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const DEFAULT_PRO_PRICE_ID = "price_1TRTQuGDw0P2L0A1MsgZiMeM";
 const TRIAL_PERIOD_DAYS = 7;
 const OWNER_EMAIL = "alissasmith.apps@gmail.com";
 const PAID_STATUSES = new Set(["active", "trialing"]);
+
+const PRICE_ENV_BY_PLAN = { plus: "STRIPE_PRICE_ID_PLUS", pro: "STRIPE_PRICE_ID_PRO" } as const;
+type CheckoutPlan = keyof typeof PRICE_ENV_BY_PLAN;
+
+const getPlanLabel = (plan: CheckoutPlan) => (plan === "plus" ? "Bible Plus" : "Bible Pro");
+
+const parsePlan = (value: unknown): CheckoutPlan => {
+  if (value === "plus" || value === "pro") return value;
+  throw new Error(`INVALID_PLAN:${String(value)}`);
+};
+
+const resolvePriceIdForPlan = (plan: CheckoutPlan): string | null => {
+  const raw = Deno.env.get(PRICE_ENV_BY_PLAN[plan])?.trim();
+  return raw && raw.startsWith("price_") ? raw : null;
+};
 const FALLBACK_PUBLISHABLE_KEY = "sb_publishable_XpVDXroi6heBFrljTrWGrA__tFu6PTp";
 
 const json = (body: Record<string, unknown>, status = 200) => new Response(
@@ -49,12 +63,25 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
-    const proPriceId = Deno.env.get("STRIPE_PRICE_ID_PRO") || DEFAULT_PRO_PRICE_ID;
     const appOrigin = getSafeAppOrigin(req);
 
-    if (!authHeader || !supabaseUrl || !stripeSecretKey || !appOrigin || !proPriceId.startsWith("price_")) {
+    if (!authHeader || !supabaseUrl || !stripeSecretKey || !appOrigin) {
       console.error("[create-checkout-session] Missing required server configuration.");
       return json({ error: "Checkout is temporarily unavailable because billing is not fully configured." }, 500);
+    }
+
+    let requestedPlan: CheckoutPlan;
+    try {
+      const body = await req.json().catch(() => ({}));
+      requestedPlan = parsePlan(body?.plan ?? "pro");
+    } catch {
+      return json({ error: "Invalid subscription plan requested." }, 400);
+    }
+
+    const selectedPriceId = resolvePriceIdForPlan(requestedPlan);
+    if (!selectedPriceId) {
+      console.error(`[create-checkout-session] ${PRICE_ENV_BY_PLAN[requestedPlan]} is not configured with a valid price id.`);
+      return json({ error: `Checkout is temporarily unavailable because ${getPlanLabel(requestedPlan)} billing is not configured.` }, 500);
     }
 
     const authClient = createClient(supabaseUrl, resolveAuthApiKey(), {
@@ -77,9 +104,13 @@ serve(async (req) => {
     if (!profile) return json({ error: "Your account profile is still being created. Please try again in a moment." }, 409);
 
     const isOwner = user.email?.toLowerCase() === OWNER_EMAIL || profile.subscription_tier === "owner";
-    const alreadyPaid = profile.subscription_tier === "pro" && PAID_STATUSES.has(profile.stripe_subscription_status);
-    if (isOwner || alreadyPaid) {
+    const alreadyOnThisPlan = profile.subscription_tier === requestedPlan
+      && PAID_STATUSES.has(profile.stripe_subscription_status);
+    if (isOwner) {
       return json({ error: "This account already has full access." }, 409);
+    }
+    if (alreadyOnThisPlan) {
+      return json({ error: `This account is already subscribed to ${getPlanLabel(requestedPlan)}.` }, 409);
     }
 
     const stripe = new Stripe(stripeSecretKey, {
@@ -87,11 +118,11 @@ serve(async (req) => {
       httpClient: Stripe.createFetchHttpClient(),
     });
 
-    const price = await stripe.prices.retrieve(proPriceId);
+    const price = await stripe.prices.retrieve(selectedPriceId);
     const keyIsLive = stripeSecretKey.startsWith("sk_live_");
-    if (!price.active || price.type !== "recurring" || price.livemode !== keyIsLive) {
-      console.error("[create-checkout-session] Pro price is inactive, non-recurring, or in the wrong Stripe mode.");
-      return json({ error: "The Pro plan is not available right now. Please contact support." }, 500);
+    if (!price.active || price.type !== "recurring" || price.recurring?.interval !== "month" || price.livemode !== keyIsLive) {
+      console.error(`[create-checkout-session] ${getPlanLabel(requestedPlan)} price is inactive, non-recurring/non-monthly, or in the wrong Stripe mode.`);
+      return json({ error: `The ${getPlanLabel(requestedPlan)} plan is not available right now. Please contact support.` }, 500);
     }
 
     let existingCustomerId: string | null = profile.stripe_customer_id || null;
@@ -108,19 +139,19 @@ serve(async (req) => {
     }
 
     const hadSubscriptionBefore = Boolean(profile.stripe_subscription_id);
-    const metadata = { userId: user.id, user_id: user.id, app: "bible-mood-search", plan: "pro" };
+    const metadata = { userId: user.id, user_id: user.id, app: "bible-mood-search", plan: requestedPlan };
     const sessionOptions: Stripe.Checkout.SessionCreateParams = {
       mode: "subscription",
       payment_method_types: ["card"],
-      line_items: [{ price: proPriceId, quantity: 1 }],
+      line_items: [{ price: selectedPriceId, quantity: 1 }],
       client_reference_id: user.id,
       metadata,
       subscription_data: {
         ...(hadSubscriptionBefore ? {} : { trial_period_days: TRIAL_PERIOD_DAYS }),
         metadata,
       },
-      success_url: `${appOrigin}/?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appOrigin}/?canceled=true&showPricing=true`,
+      success_url: `${appOrigin}/?success=true&plan=${requestedPlan}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appOrigin}/?canceled=true&showPricing=true&plan=${requestedPlan}`,
     };
 
     if (existingCustomerId) sessionOptions.customer = existingCustomerId;
@@ -129,7 +160,7 @@ serve(async (req) => {
     const checkout = await stripe.checkout.sessions.create(sessionOptions);
     if (!checkout.url) throw new Error(`Stripe returned checkout ${checkout.id} without a URL.`);
 
-    console.log(`[create-checkout-session] Created ${checkout.id} for user ${user.id}.`);
+    console.log(`[create-checkout-session] Created ${checkout.id} (${requestedPlan}) for user ${user.id}.`);
     return json({ url: checkout.url });
   } catch (error: any) {
     console.error("[create-checkout-session] Failed:", error?.message || error);

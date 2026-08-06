@@ -1,4 +1,4 @@
-export type SubscriptionTier = 'free' | 'pro' | 'owner';
+export type SubscriptionTier = 'free' | 'plus' | 'pro' | 'owner';
 
 export type BibleTranslation = 'KJV' | 'NIV' | 'ESV' | 'NKJV' | 'NASB' | 'NLT' | 'CSB' | 'AMP' | 'MSG';
 
@@ -7,6 +7,8 @@ export type ResponseLength = 'short' | 'medium' | 'long';
 export interface Profile {
   id: string;
   email: string;
+  /** profiles.role — 'user' | 'owner'. Owner is stored here, never in subscription_tier. */
+  role?: 'user' | 'owner';
   subscription_tier: SubscriptionTier;
   created_at: string;
   has_completed_onboarding: boolean;

@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
-import { DEFAULT_PRO_PRICE_ID, stripeModeFromSecretKey } from '../lib/subscriptionState.js';
+import { getConfiguredTierPrices, stripeModeFromSecretKey } from '../lib/subscriptionState.js';
 import { processStripeEvent } from '../lib/stripeWebhook.js';
 
 export const config = {
@@ -64,12 +64,17 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Stripe mode mismatch' });
     }
 
-    const proPriceId = process.env.STRIPE_PRICE_ID_PRO || DEFAULT_PRO_PRICE_ID;
+    const tierPrices = getConfiguredTierPrices(process.env);
+    if (!tierPrices.plus && !tierPrices.pro) {
+      console.error('[Stripe Webhook] No STRIPE_PRICE_ID_PLUS/PRO configured; cannot map subscriptions.');
+      return res.status(500).json({ error: 'Billing prices are not configured' });
+    }
+
     const result = await processStripeEvent({
       event,
       stripe,
       supabase: getSupabase(),
-      proPriceId,
+      tierPrices,
     });
 
     return res.status(200).json({ received: true, ...result });

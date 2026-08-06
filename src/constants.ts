@@ -10,23 +10,37 @@ export const PLANS = {
     priceId: null,
     features: [
       'Daily Verse of the Day',
-      'Basic Mood Search (3/day)',
-      'Short AI Reflections',
+      '5 chats a day with David',
+      '1 reflection a day',
+    ],
+  },
+  PLUS: {
+    id: 'plus',
+    name: 'Bible Plus',
+    price: '$9.99',
+    interval: 'mo',
+    // No dead fallback: unset env means Plus checkout is unavailable, by design.
+    priceId: import.meta.env.VITE_STRIPE_PRICE_ID_PLUS || null,
+    features: [
+      'Unlimited text chat with David',
+      'Expanded daily reflections',
+      'Saved favorites & bookmarks',
+      'Chat history sync',
+      'Ad-free experience',
     ],
   },
   PRO: {
     id: 'pro',
     name: "David's Voice Pro",
-    price: '$9.99',
+    price: '$19.99',
     interval: 'mo',
-    priceId: import.meta.env.VITE_STRIPE_PRICE_ID_PRO || 'price_1TRTQuGDw0P2L0A1MsgZiMeM',
+    // No dead fallback: unset env means Pro checkout is unavailable, by design.
+    priceId: import.meta.env.VITE_STRIPE_PRICE_ID_PRO || null,
     features: [
-      'Unlimited AI chat with David',
-      'Live voice chat with David',
-      'Saved favorites & bookmarks',
-      'Chat history sync',
+      'Everything in Bible Plus',
+      "1 hour of David's voice each month",
       'Deeper scripture reflections',
-      'Ad-free experience',
+      'Priority responses',
     ],
   },
 };

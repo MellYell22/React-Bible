@@ -199,10 +199,13 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
     console.log(`[StripeDebug] Upgrade button clicked: ${tierId}`);
     
     try {
-      if (!plan || plan.id !== 'pro') {
+      if (!plan || (plan.id !== 'pro' && plan.id !== 'plus')) {
         throw new Error(`The ${tierId} plan is not available for checkout.`);
       }
-      await createCheckoutSession();
+      if (!plan.priceId) {
+        throw new Error(`${plan.name} isn't available for checkout yet. Please try again later.`);
+      }
+      await createCheckoutSession(plan.id as 'plus' | 'pro');
     } catch (error: any) {
       console.error(`[StripeDebug] Upgrade error: ${error.message}`);
       setStatusMessage({ text: error.message, type: 'error' });
