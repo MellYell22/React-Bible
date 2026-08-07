@@ -60,22 +60,38 @@ export default function AuthScreen() {
     setLoading(true);
     try {
       if (isSignUp) {
-        const { data, error } = await supabase.auth.signUp({ email, password });
+        const emailRedirectTo =
+          typeof window !== 'undefined'
+            ? `${window.location.origin}`
+            : 'https://www.mybibleaicompanion.com';
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo },
+        });
         if (error) throw error;
 
-        if (data.user) {
+        // When email confirmation is ON, signUp returns a user but NO session.
+        // Inserting into `profiles` here would run as an anon user and fail
+        // silently under RLS. Only create the profile row when we already have
+        // an authenticated session (confirmation OFF / auto-login).
+        if (data.user && data.session) {
           await supabase.from('profiles').insert([
-            { 
-              id: data.user.id, 
-              email: data.user.email, 
+            {
+              id: data.user.id,
+              email: data.user.email,
               subscription_tier: 'free',
               has_completed_onboarding: false,
-              preferred_translation: preferredTranslation
+              preferred_translation: preferredTranslation,
             },
           ]);
         }
 
-        alert('Check your email for confirmation!');
+        // Only tell the user to check email if confirmation is actually pending
+        // (i.e. no active session was returned). Otherwise they're already in.
+        if (!data.session) {
+          alert('Check your email to confirm your account, then sign in.');
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
