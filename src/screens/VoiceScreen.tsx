@@ -20,11 +20,15 @@ import { getVoiceSessionGreeting } from '../constants/persona';
 
 const IDLE_VOICE_LEVELS = [0.18, 0.26, 0.2, 0.3, 0.22, 0.34, 0.24, 0.31, 0.2];
 
-const SPEECH_VOLUME_THRESHOLD = 0.16;
+// Keep the listener sensitive enough for normal laptop/phone microphones.
+// The previous threshold could leave the recorder running forever on quieter mics,
+// which made David appear to ignore the user after his greeting.
+const SPEECH_VOLUME_THRESHOLD = 0.08;
 /** Voiced audio must persist this long (cumulative) before it counts as the user
  * actually speaking — a stray TV syllable or clatter no longer arms the recorder. */
-const SPEECH_SUSTAIN_MS = 280;
-const SILENCE_STOP_MS = 850;
+const SPEECH_SUSTAIN_MS = 180;
+// Give natural pauses a little more room so David does not cut the user off mid-thought.
+const SILENCE_STOP_MS = 1100;
 const MIN_RECORDING_MS = 700;
 const HARD_MAX_RECORDING_MS = 45000;
 
@@ -123,9 +127,11 @@ const isMeaningfulUserText = (value: string): boolean => {
 
   if (junkPatterns.some(pattern => pattern.test(lowered))) return false;
 
-  const words = text.split(/\s+/).filter(Boolean);
+  // One meaningful word is enough in a live conversation. Requiring two words
+  // caused perfectly valid replies such as "hello", "sad", and "help" to be
+  // discarded, which made David look unresponsive.
   const letters = text.replace(/[^a-zA-Z]/g, '');
-  return words.length >= 2 && letters.length >= 4;
+  return letters.length >= 2;
 };
 
 export default function VoiceScreen() {
@@ -146,7 +152,6 @@ export default function VoiceScreen() {
   const requestIdRef = useRef(0);
   const listenSessionIdRef = useRef(0);
   const processingRef = useRef(false);
-
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const currentAudioUrlRef = useRef<string | null>(null);
   const audioStopResolverRef = useRef<(() => void) | null>(null);
@@ -816,7 +821,6 @@ export default function VoiceScreen() {
         liveVoice: true,
         signal: chatController.signal,
       });
-
       if (chatAbortControllerRef.current === chatController) {
         clearAbortController(chatAbortControllerRef);
       }
