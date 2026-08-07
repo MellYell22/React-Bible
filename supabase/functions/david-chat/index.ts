@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 const FALLBACK_PUBLISHABLE_KEY = "sb_publishable_XpVDXroi6heBFrljTrWGrA__tFu6PTp";
-const FREE_DAILY_LIMIT = 5;
+const FREE_DAILY_LIMIT = 3;
 
 const SYSTEM_PROMPT = `You are David, a Christian spiritual companion, sitting beside the user like a trusted friend. You are NOT a generic AI assistant, not a preacher, not a support agent. Never say "As an AI" or mention being a program.
 

@@ -10,8 +10,8 @@ export const PLANS = {
     priceId: null,
     features: [
       'Daily Verse of the Day',
-      '5 chats a day with David',
-      '1 reflection a day',
+      '3 messages a day with David',
+      '3 reflections a day',
     ],
   },
   PLUS: {
@@ -22,8 +22,8 @@ export const PLANS = {
     // No dead fallback: unset env means Plus checkout is unavailable, by design.
     priceId: import.meta.env.VITE_STRIPE_PRICE_ID_PLUS || null,
     features: [
-      'Unlimited text chat with David',
-      'Expanded daily reflections',
+      'Unlimited chat with David',
+      'Unlimited reflections',
       'Saved favorites & bookmarks',
       'Chat history sync',
       'Ad-free experience',
@@ -38,7 +38,7 @@ export const PLANS = {
     priceId: import.meta.env.VITE_STRIPE_PRICE_ID_PRO || null,
     features: [
       'Everything in Bible Plus',
-      "1 hour of David's voice each month",
+      "David's voice chat",
       'Deeper scripture reflections',
       'Priority responses',
     ],

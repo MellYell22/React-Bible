@@ -8,7 +8,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const TRIAL_PERIOD_DAYS = 7;
 const OWNER_EMAIL = "alissasmith.apps@gmail.com";
 const PAID_STATUSES = new Set(["active", "trialing"]);
 
@@ -138,7 +137,6 @@ serve(async (req) => {
       }
     }
 
-    const hadSubscriptionBefore = Boolean(profile.stripe_subscription_id);
     const metadata = { userId: user.id, user_id: user.id, app: "bible-mood-search", plan: requestedPlan };
     const sessionOptions: Stripe.Checkout.SessionCreateParams = {
       mode: "subscription",
@@ -146,10 +144,8 @@ serve(async (req) => {
       line_items: [{ price: selectedPriceId, quantity: 1 }],
       client_reference_id: user.id,
       metadata,
-      subscription_data: {
-        ...(hadSubscriptionBefore ? {} : { trial_period_days: TRIAL_PERIOD_DAYS }),
-        metadata,
-      },
+      // No free trial — subscriptions bill immediately.
+      subscription_data: { metadata },
       success_url: `${appOrigin}/?success=true&plan=${requestedPlan}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appOrigin}/?canceled=true&showPricing=true&plan=${requestedPlan}`,
     };
