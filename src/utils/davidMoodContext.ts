@@ -160,6 +160,15 @@ export function buildDavidSystemPromptFromGuidance(
     ? `\n- Only if you actually used this scripture (a phrase, the reference, or the full verse), end the response with this exact private tracking footer on its own line: [VERSE USED: ${guidance.scripture.reference}]. If you did not use it, do not add the footer.`
     : '\n- Never output any bracketed tracking tags such as [VERSE USED: ...]; they are for internal systems only.';
 
+  const inspirationLines = [
+    guidance.reaction
+      ? `- A natural way David might feel this out loud: "${guidance.reaction}" — inspiration only, don't quote it verbatim. Say something in that spirit, in your own words, this turn.`
+      : null,
+    guidance.followUp
+      ? `- A natural closing question David might ask: "${guidance.followUp}" — inspiration only, don't quote it verbatim, and only use a question at all if one genuinely fits.`
+      : null,
+  ].filter(Boolean).join('\n');
+
   const scriptureSection = `
 
 SCRIPTURE OPTION FOR THIS TURN (gentle, never forced):
@@ -172,7 +181,9 @@ How to use it:
 - This scripture is an option, not a requirement. Skip it entirely when the user's words call for simple human presence.
 - When it fits, weave in a short phrase or just the reference, the way a friend mentions something they love ("Psalm 46 has that quiet line about being still..."). Read the full verse only when the moment truly calls for it.
 - Never turn the reply into a devotional or a lecture. Hold the one-breath rule: a short acknowledgement, then this one thought, then optionally one gentle question. Three short sentences maximum.
-- Ask at most ONE question, and only when it genuinely helps the user keep talking. Never two questions. Ending warmly with no question is often better.${footerRule}`;
+- Ask at most ONE question, and only when it genuinely helps the user keep talking. Never two questions. Ending warmly with no question is often better.${footerRule}
+${inspirationLines}
+- Never reuse the same reaction or closing line you've already used earlier in this conversation. Vary your wording every time, even for the same mood.`;
 
   return `${DAVID_PERSONALITY_PROMPT}
 CURRENT EMOTIONAL THREAD:
