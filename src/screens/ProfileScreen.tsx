@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { supabase } from '../services/supabase';
-import { LogOut, CheckCircle2, AlertCircle, Lock, Star, Bookmark, Trash2, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { LogOut, CheckCircle2, AlertCircle, Lock, Star, Bookmark, Trash2, Check, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Settings } from 'lucide-react';
 import { createCheckoutSession, syncCheckoutSession } from '../services/stripe';
 import { OWNER_EMAIL, hasProAccess } from '../utils/tier';
 import { PLANS } from '../constants';
@@ -19,6 +19,29 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
   const [loadingSaved, setLoadingSaved] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isActivating, setIsActivating] = useState(false);
+
+  /**
+   * Which panel of the account area is showing. Local state, not a route —
+   * the bottom navigation and App.tsx routing are deliberately untouched.
+   */
+  type ProfileSection = 'main' | 'preferences' | 'subscription' | 'saved';
+  const [section, setSection] = useState<ProfileSection>('main');
+  /** Plans stay collapsed until the user asks to see them. */
+  const [showOtherPlans, setShowOtherPlans] = useState(false);
+
+  const openSection = (next: ProfileSection) => {
+    setSection(next);
+    // Saved content loads on demand, exactly as the old tab did.
+    setShowSavedScriptures(next === 'saved');
+    scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+  };
+
+  const backToProfile = () => {
+    setSection('main');
+    setShowSavedScriptures(false);
+    setShowOtherPlans(false);
+    scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+  };
   const hasHandledRedirect = useRef(false);
   const pollingInterval = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -256,25 +279,48 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
         </View>
       </View>
 
-      <View style={styles.tabContainer}>
-        <TouchableOpacity 
-          style={[styles.tab, !showSavedScriptures && styles.tabActive]} 
-          onPress={() => setShowSavedScriptures(false)}
-        >
-          <Text style={[styles.tabText, !showSavedScriptures && styles.tabTextActive]}>SETTINGS</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, showSavedScriptures && styles.tabActive]} 
-          onPress={() => setShowSavedScriptures(true)}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Bookmark size={12} color={showSavedScriptures ? '#d4af37' : 'rgba(212, 175, 55, 0.4)'} />
-            <Text style={[styles.tabText, showSavedScriptures && styles.tabTextActive]}>SAVED</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+      {/* ── Main account menu ───────────────────────────────── */}
+      {section === 'main' && (
+        <View style={styles.menuList}>
+          {([
+            { key: 'preferences', icon: <Settings size={18} color="#d4af37" />, title: 'AI Preferences', subtitle: 'Response length, verse of the day' },
+            { key: 'subscription', icon: <Star size={18} color="#d4af37" />, title: 'Subscription & Benefits', subtitle: profile?.email === OWNER_EMAIL ? 'Owner — full access' : `${(profile?.subscription_tier || 'free').toUpperCase()} plan` },
+            { key: 'saved', icon: <Bookmark size={18} color="#d4af37" />, title: 'Saved Content', subtitle: 'Verses, bookmarks and reflections' },
+          ] as const).map((row) => (
+            <TouchableOpacity
+              key={row.key}
+              style={styles.menuRow}
+              onPress={() => openSection(row.key as ProfileSection)}
+              accessibilityRole="button"
+              accessibilityLabel={`${row.title}. ${row.subtitle}`}
+              activeOpacity={0.75}
+            >
+              <View style={styles.menuIcon}>{row.icon}</View>
+              <View style={styles.menuTextWrap}>
+                <Text style={styles.menuTitle}>{row.title}</Text>
+                <Text style={styles.menuSubtitle}>{row.subtitle}</Text>
+              </View>
+              <ChevronRight size={18} color="rgba(212, 175, 55, 0.5)" />
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
-      {showSavedScriptures ? (
+      {/* ── Back bar for every secondary panel ──────────────── */}
+      {section !== 'main' && (
+        <TouchableOpacity
+          style={styles.backRow}
+          onPress={backToProfile}
+          accessibilityRole="button"
+          accessibilityLabel="Back to profile"
+          activeOpacity={0.75}
+        >
+          <ChevronLeft size={18} color="#d4af37" />
+          <Text style={styles.backText}>PROFILE</Text>
+        </TouchableOpacity>
+      )}
+
+      {section === 'saved' ? (
         <View style={styles.savedSection}>
           <View style={styles.savedHeader}>
             <Text style={styles.sectionTitle}>My Saved Scriptures</Text>
@@ -360,6 +406,7 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
         </View>
       )}
 
+      {section === 'preferences' && (<>
       <Text style={styles.sectionTitle}>AI Preferences</Text>
       <View style={styles.settingsCard}>
         <Text style={styles.settingsLabel}>Response Length</Text>
@@ -428,6 +475,18 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
         )}
       </View>
 
+      <TouchableOpacity
+        style={styles.doneButton}
+        onPress={backToProfile}
+        accessibilityRole="button"
+        accessibilityLabel="Done, back to profile"
+        activeOpacity={0.8}
+      >
+        <Text style={styles.doneButtonText}>DONE</Text>
+      </TouchableOpacity>
+      </>)}
+
+      {section === 'subscription' && (<>
       <Text style={[styles.sectionTitle, { paddingLeft: 44 }]}>Your Benefits</Text>
       <View style={[styles.benefitsSummary, { paddingLeft: 16 }]}>
         <View style={styles.benefitItem}>
@@ -456,17 +515,34 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
         )}
       </View>
 
+      <TouchableOpacity
+        style={styles.viewPlansButton}
+        onPress={() => setShowOtherPlans(!showOtherPlans)}
+        accessibilityRole="button"
+        accessibilityLabel={showOtherPlans ? 'Hide other plans' : 'View other plans'}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.viewPlansText}>
+          {showOtherPlans ? 'HIDE OTHER PLANS' : 'VIEW OTHER PLANS'}
+        </Text>
+        {showOtherPlans
+          ? <ChevronUp size={14} color="#d4af37" />
+          : <ChevronDown size={14} color="#d4af37" />}
+      </TouchableOpacity>
+
+      {showOtherPlans && (
       <Text style={styles.sectionTitle} onLayout={(e) => {
         // Fallback for measurement if needed
       }} ref={pricingRef}>Subscription Plans</Text>
-      
-      {Object.values(PLANS).map((plan) => {
+      )}
+
+      {showOtherPlans && Object.values(PLANS).map((plan) => {
         const currentTier = profile?.subscription_tier || 'free';
         const isOwner = profile?.email === OWNER_EMAIL;
         const isCurrentPlan = currentTier === plan.id;
-        
-        // Tier hierarchy: free < pro < owner
-        const tierOrder = ['free', 'pro', 'owner'];
+
+        // Tier hierarchy: free < plus < pro < owner
+        const tierOrder = ['free', 'plus', 'pro', 'owner'];
         const currentTierIndex = tierOrder.indexOf(isOwner ? 'owner' : currentTier);
         const planTierIndex = tierOrder.indexOf(plan.id);
         
@@ -557,13 +633,21 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
           </View>
         );
       })}
+      </>)}
     </>
   )}
 
-  <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <LogOut color="#EF4444" size={20} />
-        <Text style={styles.logoutText}>Logout</Text>
-      </TouchableOpacity>
+  {section === 'main' && (
+    <TouchableOpacity
+      style={styles.logoutButton}
+      onPress={handleLogout}
+      accessibilityRole="button"
+      accessibilityLabel="Log out"
+    >
+      <LogOut color="#EF4444" size={20} />
+      <Text style={styles.logoutText}>Logout</Text>
+    </TouchableOpacity>
+  )}
     </ScrollView>
   );
 }
@@ -778,6 +862,107 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontFamily: 'Playfair Display',
   },
+  /* ── Account menu rows ───────────────────────────────── */
+  menuList: {
+    marginTop: 8,
+    marginBottom: 28,
+    gap: 12,
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    minHeight: 72,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    backgroundColor: 'rgba(5, 16, 32, 0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+    borderRadius: 4,
+  },
+  menuIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+  },
+  menuTextWrap: { flex: 1 },
+  menuTitle: {
+    fontFamily: 'Cinzel',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#d4af37',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 3,
+  },
+  menuSubtitle: {
+    fontFamily: 'Playfair Display',
+    fontSize: 13,
+    lineHeight: 19,
+    color: 'rgba(255, 255, 255, 0.55)',
+  },
+
+  /* ── Back bar on secondary panels ────────────────────── */
+  backRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 44,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+    paddingRight: 12,
+  },
+  backText: {
+    fontFamily: 'Cinzel',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#d4af37',
+    letterSpacing: 1.5,
+  },
+
+  /* ── Done / View other plans ─────────────────────────── */
+  doneButton: {
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: 'rgba(212, 175, 55, 0.5)',
+  },
+  doneButtonText: {
+    fontFamily: 'Cinzel',
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(212, 175, 55, 0.7)',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  viewPlansButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 44,
+    marginTop: 20,
+    marginBottom: 8,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+  },
+  viewPlansText: {
+    fontFamily: 'Cinzel',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#d4af37',
+    letterSpacing: 1.5,
+  },
+
   toggleSwitch: {
     width: 44,
     height: 24,
