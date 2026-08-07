@@ -1219,11 +1219,14 @@ export default function VoiceScreen() {
 const styles = StyleSheet.create({
   outerContainer: {
     flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
     backgroundColor: '#0b1e3d',
     position: 'relative',
   },
   scrollArea: {
     flex: 1,
+    minHeight: 0,
   },
   container: {
     minHeight: '100%',
@@ -1335,10 +1338,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   statusContainer: {
+    width: '100%',
+    maxWidth: 520,
+    minHeight: 66,
     marginBottom: 24,
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'rgba(5, 16, 32, 0.5)',
     borderWidth: 1,
     borderColor: 'rgba(212, 175, 55, 0.3)',

@@ -151,12 +151,15 @@ const styles = StyleSheet.create({
   },
   appShell: {
     flex: 1,
-    minHeight: Platform.OS === 'web' ? ('100vh' as any) : undefined,
+    height: Platform.OS === 'web' ? ('100dvh' as any) : undefined,
+    minHeight: 0,
+    overflow: 'hidden',
     backgroundColor: '#0b1e3d',
   },
   screenWrap: {
     flex: 1,
     minHeight: 0,
+    overflow: 'hidden',
   },
   tabBar: {
     flexDirection: 'row',

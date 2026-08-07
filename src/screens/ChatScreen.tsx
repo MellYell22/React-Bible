@@ -282,6 +282,8 @@ export default function ChatScreen({ navigation, route }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
     backgroundColor: 'transparent',
   },
   header: {
@@ -330,6 +332,7 @@ const styles = StyleSheet.create({
   },
   chatContainer: {
     flex: 1,
+    minHeight: 0,
   },
   chatContent: {
     paddingHorizontal: 16,

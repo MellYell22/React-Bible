@@ -108,6 +108,8 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
     backgroundColor: 'transparent',
     position: 'relative',
   },
@@ -182,6 +184,7 @@ const styles = StyleSheet.create({
   },
   main: {
     flex: 1,
+    minHeight: 0,
   },
   mainContent: {
     maxWidth: 900,
