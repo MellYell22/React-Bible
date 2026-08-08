@@ -143,22 +143,19 @@ const enforceOneBreath = (text: string): string => {
 };
 
 /**
- * Cues David is never allowed to make: "Ah—", "Um—", "Uh—", "Oh oh oh",
- * "Checking...". These read as hesitation or as a machine stalling.
+ * Single natural cues — "Ah—", "Um—", "Uh—", "Oh" — are allowed through.
+ * They read as someone thinking, which is warmer than a clean recital.
+ *
+ * What is still collapsed is *stacked* filler ("mm, hmm, ah...") — that is
+ * the thing that sounds like a machine buffering, not a person pausing.
  */
-const BANNED_CUE_RE =
-  /^\s*(?:(?:ah|um|uh|er|oh)\s*[—–-]+\s*|(?:oh[\s,]+){2,}oh[\s,]*|checking\s*\.{2,}\s*)/gi;
-
-/** Stacked filler ("mm, hmm, ah...") never sounds human. Keep the first cue only. */
 const collapseStackedFiller = (text: string): string =>
   text
-    .replace(BANNED_CUE_RE, '')
     // Drop any cue that is immediately followed by another cue.
     .replace(
       /\b(mm+|hmm+|hm|ah|uh|um|er|oh)\b[\s,.!—–-]*(?=\b(?:mm+|hmm+|hm|ah|uh|um|er|oh)\b)/gi,
       '',
     )
-    .replace(BANNED_CUE_RE, '')
     .replace(/\s+/g, ' ')
     .replace(/^[\s,.!—–-]+/, '')
     .trim();
