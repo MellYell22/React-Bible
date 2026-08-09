@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { Search, MessageCircle, Mic, BookOpen, ChevronRight, Check } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { BibleTranslation } from '../types';
@@ -17,44 +24,41 @@ const STEPS = [
     id: 'mood',
     title: 'Mood Search',
     subtitle: 'Scripture for every emotion',
-    description: 'Find comfort, joy, or strength by searching for verses that match exactly how you feel right now.',
+    description: 'Find comfort, joy, or strength by searching for verses that match how you feel right now.',
     icon: Search,
   },
   {
     id: 'chat',
     title: 'Meet David',
-    subtitle: 'Your Biblical Companion',
-    description: 'Chat with David, our AI companion trained to provide compassionate, scripture-based encouragement.',
+    subtitle: 'Text chat is free',
+    description: 'Message David anytime for calm, scripture-based encouragement. Text chat is available without the voice upgrade.',
     icon: MessageCircle,
   },
   {
     id: 'voice',
     title: 'Voice with David',
-    subtitle: 'Immersive Dialogue',
-    description: 'Experience real-time spiritual conversations with a warm, thoughtful voice that listens and responds.',
+    subtitle: 'Optional Pro voice',
+    description: 'If you want a spoken conversation, David also has a live voice experience. Voice is optional — text chat always remains available.',
     icon: Mic,
   },
   {
     id: 'setup',
     title: 'Initial Setup',
-    subtitle: 'Personalize your experience',
-    description: 'Choose your preferred Bible translation to begin your journey.',
+    subtitle: 'Choose your Bible translation',
+    description: 'Pick the translation you prefer. These translation choices are not locked behind a paid tier.',
     icon: Check,
   },
 ];
 
-const TRANSLATIONS: BibleTranslation[] = ['KJV', 'NIV', 'ESV', 'NKJV', 'NASB', 'NLT', 'CSB', 'AMP', 'MSG'];
+// Keep launch onboarding focused on the three translations the app is actively
+// presenting to users. More translations can be added later once a licensed
+// Bible-text source is connected and verified.
+const TRANSLATIONS: BibleTranslation[] = ['KJV', 'NKJV', 'NIV'];
 
-const TRANSLATION_DETAILS: Record<BibleTranslation, string> = {
-  KJV: 'King James Version - Classic and poetic.',
-  NIV: 'New International Version - Modern and readable.',
-  ESV: 'English Standard Version - Word-for-word accuracy.',
-  NKJV: 'New King James Version - Modernized classic.',
-  NASB: 'New American Standard Bible - Highly literal.',
-  NLT: 'New Living Translation - Easy to understand.',
-  CSB: 'Christian Standard Bible - Optimal blend of accuracy and readability.',
-  AMP: 'Amplified Bible - Expanded meanings for deeper study.',
-  MSG: 'The Message - Contemporary paraphrase.',
+const TRANSLATION_DETAILS: Partial<Record<BibleTranslation, string>> = {
+  KJV: 'King James Version — classic, traditional language.',
+  NKJV: 'New King James Version — classic style with more modern wording.',
+  NIV: 'New International Version — modern and easy to read.',
 };
 
 type OnboardingScreenProps = {
@@ -124,117 +128,143 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
   };
 
   return (
-    <FullScreenBackground center>
-      <View style={styles.container}>
-        <View style={styles.progressContainer}>
-          {STEPS.map((_, index) => (
-            <View
-              key={index}
-              style={[
-                styles.progressDot,
-                index <= currentStep && styles.progressDotActive,
-                index === currentStep && styles.progressDotCurrent,
-              ]}
-            />
-          ))}
-        </View>
-
-        <View style={styles.iconContainer}>
-          <Icon color="#d4af37" size={64} strokeWidth={1.5} />
-        </View>
-
-        <Text style={styles.title}>{step.title}</Text>
-        <Text style={styles.subtitle}>{step.subtitle}</Text>
-        <Text style={styles.description}>{step.description}</Text>
-
-        {step.id === 'setup' && (
-          <View style={styles.setupWrapper}>
-            <View style={styles.translationContainer}>
-              {TRANSLATIONS.map((translation) => (
-                <TouchableOpacity
-                  key={translation}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: selectedTranslation === translation }}
-                  style={[
-                    styles.translationButton,
-                    selectedTranslation === translation && styles.translationButtonActive,
-                  ]}
-                  onPress={() => setSelectedTranslation(translation)}
-                  disabled={isSubmitting}
-                >
-                  <Text
-                    style={[
-                      styles.translationText,
-                      selectedTranslation === translation && styles.translationTextActive,
-                    ]}
-                  >
-                    {translation}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={styles.detailCard}>
-              <Text style={styles.detailText}>{TRANSLATION_DETAILS[selectedTranslation]}</Text>
-            </View>
+    <FullScreenBackground center={false}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.mainContent}>
+          <View style={styles.progressContainer}>
+            {STEPS.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.progressDot,
+                  index <= currentStep && styles.progressDotActive,
+                  index === currentStep && styles.progressDotCurrent,
+                ]}
+              />
+            ))}
           </View>
-        )}
 
-        {submitError && (
-          <Text accessibilityRole="alert" style={styles.errorText}>
-            {submitError}
-          </Text>
-        )}
+          <View style={styles.iconContainer}>
+            <Icon color="#d4af37" size={54} strokeWidth={1.5} />
+          </View>
 
-        <View style={styles.footer}>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel={isFinalStep ? 'Get started' : 'Continue'}
-            accessibilityState={{ disabled: isSubmitting, busy: isSubmitting }}
-            style={[styles.nextButton, isSubmitting && styles.nextButtonDisabled]}
-            onPress={() => void handleNext()}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <>
-                <ActivityIndicator color="#0b1e3d" size="small" />
-                <Text style={[styles.nextButtonText, styles.submittingText]}>SAVING...</Text>
-              </>
-            ) : (
-              <>
-                <Text style={styles.nextButtonText}>{isFinalStep ? 'GET STARTED' : 'CONTINUE'}</Text>
-                <ChevronRight color="#0b1e3d" size={20} />
-              </>
-            )}
-          </TouchableOpacity>
+          <Text style={styles.title}>{step.title}</Text>
+          <Text style={styles.subtitle}>{step.subtitle}</Text>
+          <Text style={styles.description}>{step.description}</Text>
 
-          {!isFinalStep && (
+          {step.id === 'setup' && (
+            <View style={styles.setupWrapper}>
+              <View style={styles.translationContainer}>
+                {TRANSLATIONS.map((translation) => (
+                  <TouchableOpacity
+                    key={translation}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: selectedTranslation === translation }}
+                    style={[
+                      styles.translationButton,
+                      selectedTranslation === translation && styles.translationButtonActive,
+                    ]}
+                    onPress={() => setSelectedTranslation(translation)}
+                    disabled={isSubmitting}
+                  >
+                    <Text
+                      style={[
+                        styles.translationText,
+                        selectedTranslation === translation && styles.translationTextActive,
+                      ]}
+                    >
+                      {translation}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.detailCard}>
+                <Text style={styles.detailText}>
+                  {TRANSLATION_DETAILS[selectedTranslation] || selectedTranslation}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {submitError && (
+            <Text accessibilityRole="alert" style={styles.errorText}>
+              {submitError}
+            </Text>
+          )}
+
+          <View style={styles.footer}>
             <TouchableOpacity
               accessibilityRole="button"
-              style={styles.skipButton}
-              onPress={() => setCurrentStep(STEPS.length - 1)}
+              accessibilityLabel={isFinalStep ? 'Get started' : 'Continue'}
+              accessibilityState={{ disabled: isSubmitting, busy: isSubmitting }}
+              style={[styles.nextButton, isSubmitting && styles.nextButtonDisabled]}
+              onPress={() => void handleNext()}
+              disabled={isSubmitting}
             >
-              <Text style={styles.skipButtonText}>SKIP</Text>
+              {isSubmitting ? (
+                <>
+                  <ActivityIndicator color="#0b1e3d" size="small" />
+                  <Text style={[styles.nextButtonText, styles.submittingText]}>SAVING...</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.nextButtonText}>{isFinalStep ? 'GET STARTED' : 'CONTINUE'}</Text>
+                  <ChevronRight color="#0b1e3d" size={20} />
+                </>
+              )}
             </TouchableOpacity>
-          )}
+
+            {!isFinalStep && (
+              <TouchableOpacity
+                accessibilityRole="button"
+                style={styles.skipButton}
+                onPress={() => setCurrentStep(STEPS.length - 1)}
+              >
+                <Text style={styles.skipButtonText}>SKIP</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
-        <View style={styles.appFooter}>
-          <Text style={styles.appFooterText}>CREATED BY AA DESIGNS</Text>
-        </View>
-      </View>
+        {isFinalStep && (
+          <View style={styles.appFooter}>
+            <Text style={styles.appFooterText}>CREATED BY AA DESIGNS</Text>
+          </View>
+        )}
+      </ScrollView>
     </FullScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scroll: {
+    flex: 1,
     width: '100%',
-    paddingHorizontal: 30,
+  },
+  container: {
+    flexGrow: 1,
+    minHeight: '100%',
+    width: '100%',
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 10,
     alignItems: 'center',
+  },
+  mainContent: {
+    width: '100%',
+    maxWidth: 520,
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   progressContainer: {
     flexDirection: 'row',
-    marginBottom: 60,
+    marginBottom: 32,
   },
   progressDot: {
     width: 6,
@@ -251,55 +281,57 @@ const styles = StyleSheet.create({
     width: 20,
   },
   iconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 98,
+    height: 98,
+    borderRadius: 49,
     backgroundColor: 'rgba(212, 175, 55, 0.05)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 24,
     borderWidth: 1,
     borderColor: 'rgba(212, 175, 55, 0.1)',
   },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     color: '#d4af37',
     fontFamily: 'Playfair Display',
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   subtitle: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#f5d77a',
     fontFamily: 'Cinzel',
-    letterSpacing: 4,
+    letterSpacing: 3,
     textTransform: 'uppercase',
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 20,
     opacity: 0.8,
   },
   description: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.7)',
+    maxWidth: 440,
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.72)',
     textAlign: 'center',
-    lineHeight: 26,
-    marginBottom: 40,
+    lineHeight: 23,
+    marginBottom: 28,
     fontFamily: 'Playfair Display',
-    fontStyle: 'italic',
   },
   translationContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    marginBottom: 40,
+    marginBottom: 18,
   },
   translationButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    minWidth: 82,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(212, 175, 55, 0.3)',
     margin: 6,
+    alignItems: 'center',
     backgroundColor: 'rgba(212, 175, 55, 0.02)',
   },
   translationButtonActive: {
@@ -318,22 +350,23 @@ const styles = StyleSheet.create({
   setupWrapper: {
     width: '100%',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 10,
   },
   detailCard: {
     backgroundColor: 'rgba(212, 175, 55, 0.05)',
-    padding: 15,
-    borderRadius: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(212, 175, 55, 0.1)',
     width: '100%',
-    marginTop: 10,
+    maxWidth: 430,
   },
   detailText: {
     color: '#f5d77a',
     fontSize: 13,
+    lineHeight: 19,
     textAlign: 'center',
-    fontStyle: 'italic',
     fontFamily: 'Playfair Display',
   },
   errorText: {
@@ -347,7 +380,7 @@ const styles = StyleSheet.create({
   footer: {
     width: '100%',
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 14,
   },
   nextButton: {
     minWidth: 190,
@@ -355,17 +388,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#d4af37',
-    paddingHorizontal: 40,
-    paddingVertical: 18,
-    borderRadius: 40,
-    marginBottom: 20,
+    paddingHorizontal: 36,
+    paddingVertical: 15,
+    borderRadius: 32,
+    marginBottom: 10,
   },
   nextButtonDisabled: {
     opacity: 0.65,
   },
   nextButtonText: {
     color: '#0b1e3d',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
     letterSpacing: 2,
     marginRight: 8,
@@ -375,7 +408,8 @@ const styles = StyleSheet.create({
     marginRight: 0,
   },
   skipButton: {
-    padding: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
   skipButtonText: {
     color: 'rgba(212, 175, 55, 0.5)',
@@ -384,8 +418,9 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   appFooter: {
-    marginTop: 40,
-    paddingBottom: 20,
+    marginTop: 'auto',
+    paddingTop: 18,
+    paddingBottom: 2,
     alignItems: 'center',
   },
   appFooterText: {
