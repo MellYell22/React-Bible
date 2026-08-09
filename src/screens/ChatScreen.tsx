@@ -1,5 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+} from 'react-native';
 import { Send, PhoneCall, ThumbsUp, ThumbsDown, Volume2, Square } from 'lucide-react';
 import { getChatResponseStream, generateSpeech, ChatHistoryMessage } from '../services/ai';
 import { ChatMessage } from '../types';
@@ -10,7 +20,6 @@ import { DAVID_CHAT_GREETINGS } from '../constants/persona';
 export default function ChatScreen({ navigation, route }: any) {
   const { profile } = useUser();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
@@ -21,7 +30,7 @@ export default function ChatScreen({ navigation, route }: any) {
   const submitMessage = async (
     rawText: string,
     baseMessages: ChatMessage[] = messages,
-    clearComposer: boolean = true
+    clearComposer: boolean = true,
   ) => {
     const trimmedInput = rawText.trim();
     if (!trimmedInput || loading) return;
@@ -30,47 +39,53 @@ export default function ChatScreen({ navigation, route }: any) {
     const nextMessages = [...baseMessages, userMessage];
     const modelMessageIndex = nextMessages.length;
 
-    setMessages([...nextMessages, { role: 'assistant', content: "David is reflecting…" }]);
+    setMessages([...nextMessages, { role: 'assistant', content: 'David is reflecting…' }]);
     if (clearComposer) setInput('');
     setLoading(true);
 
     try {
       const history: ChatHistoryMessage[] = baseMessages.map(msg => ({
         role: msg.role === 'user' ? 'user' : 'assistant',
-        content: msg.content
+        content: msg.content,
       }));
       history.push({ role: 'user', content: userMessage.content });
 
-
-      // Natural delay (1-2 seconds) before response starts
       await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
 
-      // Clear thinking indicator and start streaming response
       setMessages(prev => {
         const newMessages = [...prev];
-        newMessages[modelMessageIndex] = { role: 'assistant', content: "" };
+        newMessages[modelMessageIndex] = { role: 'assistant', content: '' };
         return newMessages;
       });
 
-      const response = await getChatResponseStream(history, (fullText) => {
-        setMessages(prev => {
-          const newMessages = [...prev];
-          newMessages[modelMessageIndex] = { role: 'assistant', content: fullText };
-          return newMessages;
-        });
-      }, profile?.preferred_response_length || 'medium', undefined, { userId: profile?.id || null });
+      const response = await getChatResponseStream(
+        history,
+        (fullText) => {
+          setMessages(prev => {
+            const newMessages = [...prev];
+            newMessages[modelMessageIndex] = { role: 'assistant', content: fullText };
+            return newMessages;
+          });
+        },
+        profile?.preferred_response_length || 'medium',
+        undefined,
+        { userId: profile?.id || null },
+      );
 
       if (!response) {
         setMessages(prev => {
           const newMessages = [...prev];
-          newMessages[modelMessageIndex] = { role: 'assistant', content: "Something didn't come through clearly. Try saying that again, a little slower." };
+          newMessages[modelMessageIndex] = {
+            role: 'assistant',
+            content: "Something didn't come through clearly. Try saying that again, a little slower.",
+          };
           return newMessages;
         });
       }
     } catch (error: any) {
-      console.error("Chat Error:", error);
+      console.error('Chat Error:', error);
       let errorMessage = "I'm having a bit of trouble connecting right now. Let's try again in a moment.";
-      if (error?.message?.includes("quota") || error?.message?.includes("rate limit")) {
+      if (error?.message?.includes('quota') || error?.message?.includes('rate limit')) {
         errorMessage = "I need a short breather — a lot of people are talking with me right now. Try me again in a few minutes.";
       }
       setMessages(prev => {
@@ -95,7 +110,7 @@ export default function ChatScreen({ navigation, route }: any) {
     if (initialPrompt) {
       if (initialPromptHandledRef.current === initialPromptKey) return;
       initialPromptHandledRef.current = initialPromptKey;
-      submitMessage(initialPrompt, [], false);
+      void submitMessage(initialPrompt, [], false);
       return;
     }
 
@@ -139,13 +154,16 @@ export default function ChatScreen({ navigation, route }: any) {
       stopSpeaking();
       return;
     }
+
     stopSpeaking();
     setSpeakingIndex(index);
+
     try {
-      // generateSpeech returns a blob URL — use HTML Audio directly
       const audioUrl = await generateSpeech(text);
       if (audioUrl) {
         const audio = new Audio(audioUrl);
+        // Keep optional read-aloud calm and below normal media volume.
+        audio.volume = 0.55;
         currentAudioRef.current = audio;
         audio.onended = () => {
           setSpeakingIndex(null);
@@ -165,7 +183,7 @@ export default function ChatScreen({ navigation, route }: any) {
         setSpeakingIndex(null);
       }
     } catch (error) {
-      console.error("Speech error:", error);
+      console.error('Speech error:', error);
       setSpeakingIndex(null);
     }
   };
@@ -184,14 +202,15 @@ export default function ChatScreen({ navigation, route }: any) {
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>David</Text>
         </View>
-        <Text style={styles.headerSubtitle}>AI Spiritual Companion</Text>
+        <Text style={styles.headerSubtitle}>Free text chat</Text>
         <TouchableOpacity
           style={styles.headerCallButton}
           onPress={() => navigation.navigate('Voice')}
           accessibilityRole="button"
-          accessibilityLabel="Start voice call with David"
+          accessibilityLabel="Open David's Pro voice"
         >
-          <PhoneCall color="#ffffff" size={16} />
+          <PhoneCall color="#d4af37" size={14} />
+          <Text style={styles.headerCallText}>VOICE · PRO</Text>
         </TouchableOpacity>
       </View>
 
@@ -199,54 +218,68 @@ export default function ChatScreen({ navigation, route }: any) {
         ref={scrollViewRef}
         style={styles.chatContainer}
         contentContainerStyle={styles.chatContent}
+        keyboardShouldPersistTaps="handled"
       >
-        {messages.map((msg, index) => (
-          <View
-            key={index}
-            style={[
-              styles.messageBubble,
-              msg.role === 'user' ? styles.userBubble : styles.modelBubble
-            ]}
-          >
-            <Text style={[
-              styles.messageText,
-              msg.role === 'user' ? styles.userText : styles.modelText
-            ]}>
-              {msg.content}
-            </Text>
-            {msg.role === 'assistant' && (
-              <View style={styles.feedbackContainer}>
-                <TouchableOpacity
-                  onPress={() => speakMessage(index, msg.content)}
-                  style={styles.feedbackButton}
-                >
-                  {speakingIndex === index ? (
-                    <Square size={14} color="#d4af37" fill="#d4af37" />
-                  ) : (
-                    <Volume2 size={14} color="rgba(212, 175, 55, 0.6)" />
-                  )}
-                </TouchableOpacity>
-                <View style={{ flex: 1 }} />
-                <TouchableOpacity onPress={() => handleFeedback(index, 'up')} style={styles.feedbackButton}>
-                  <ThumbsUp
-                    size={14}
-                    color={msg.feedback === 'up' ? '#d4af37' : 'rgba(212, 175, 55, 0.4)'}
-                    fill={msg.feedback === 'up' ? '#d4af37' : 'transparent'}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleFeedback(index, 'down')} style={styles.feedbackButton}>
-                  <ThumbsDown
-                    size={14}
-                    color={msg.feedback === 'down' ? '#ef4444' : 'rgba(212, 175, 55, 0.4)'}
-                    fill={msg.feedback === 'down' ? '#ef4444' : 'transparent'}
-                  />
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        ))}
+        {messages.map((msg, index) => {
+          const isUser = msg.role === 'user';
+          return (
+            <View
+              key={index}
+              style={[
+                styles.messageBlock,
+                isUser ? styles.userMessageBlock : styles.modelMessageBlock,
+              ]}
+            >
+              <Text style={[styles.messageAuthor, isUser && styles.userAuthor]}>
+                {isUser ? 'YOU' : 'DAVID'}
+              </Text>
+              <Text
+                style={[
+                  styles.messageText,
+                  isUser ? styles.userText : styles.modelText,
+                ]}
+              >
+                {msg.content}
+              </Text>
+
+              {msg.role === 'assistant' && (
+                <View style={styles.feedbackContainer}>
+                  <TouchableOpacity
+                    onPress={() => speakMessage(index, msg.content)}
+                    style={styles.feedbackButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={speakingIndex === index ? 'Stop reading' : 'Read David message aloud'}
+                  >
+                    {speakingIndex === index ? (
+                      <Square size={14} color="#d4af37" fill="#d4af37" />
+                    ) : (
+                      <Volume2 size={14} color="rgba(212, 175, 55, 0.6)" />
+                    )}
+                  </TouchableOpacity>
+                  <View style={{ flex: 1 }} />
+                  <TouchableOpacity onPress={() => handleFeedback(index, 'up')} style={styles.feedbackButton}>
+                    <ThumbsUp
+                      size={14}
+                      color={msg.feedback === 'up' ? '#d4af37' : 'rgba(212, 175, 55, 0.4)'}
+                      fill={msg.feedback === 'up' ? '#d4af37' : 'transparent'}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleFeedback(index, 'down')} style={styles.feedbackButton}>
+                    <ThumbsDown
+                      size={14}
+                      color={msg.feedback === 'down' ? '#ef4444' : 'rgba(212, 175, 55, 0.4)'}
+                      fill={msg.feedback === 'down' ? '#ef4444' : 'transparent'}
+                    />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          );
+        })}
+
         {loading && (
-          <View style={[styles.messageBubble, styles.modelBubble]}>
+          <View style={[styles.messageBlock, styles.modelMessageBlock]}>
+            <Text style={styles.messageAuthor}>DAVID</Text>
             <ActivityIndicator color="#d4af37" size="small" />
           </View>
         )}
@@ -256,14 +289,17 @@ export default function ChatScreen({ navigation, route }: any) {
         <TextInput
           style={styles.input}
           placeholder="Type your message..."
+          placeholderTextColor="rgba(255, 255, 255, 0.4)"
           value={input}
           onChangeText={setInput}
           multiline
           blurOnSubmit={false}
+          returnKeyType="send"
+          onSubmitEditing={handleSend}
           onKeyPress={(e: any) => {
             if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
-              e.preventDefault();
-              handleSend();
+              e.preventDefault?.();
+              void handleSend();
             }
           }}
         />
@@ -271,8 +307,10 @@ export default function ChatScreen({ navigation, route }: any) {
           style={[styles.sendButton, (!input.trim() || loading) && styles.sendButtonDisabled]}
           onPress={handleSend}
           disabled={loading || !input.trim()}
+          accessibilityRole="button"
+          accessibilityLabel="Send message"
         >
-          <Send color="#fff" size={20} opacity={(!input.trim() || loading) ? 0.5 : 1} />
+          <Send color="#051020" size={20} opacity={(!input.trim() || loading) ? 0.5 : 1} />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -293,7 +331,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0b1e3d',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(212, 175, 55, 0.3)',
+    borderBottomColor: 'rgba(212, 175, 55, 0.22)',
     position: 'relative',
   },
   headerTitle: {
@@ -319,61 +357,75 @@ const styles = StyleSheet.create({
   },
   headerCallButton: {
     position: 'absolute',
-    top: 36,
-    right: 18,
-    width: 40,
-    height: 40,
+    top: 34,
+    right: 14,
+    minHeight: 40,
+    paddingHorizontal: 10,
     borderRadius: 4,
+    flexDirection: 'row',
+    gap: 6,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.5)',
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    borderColor: 'rgba(212, 175, 55, 0.45)',
+    backgroundColor: 'rgba(212, 175, 55, 0.06)',
+  },
+  headerCallText: {
+    fontFamily: 'Cinzel',
+    color: '#d4af37',
+    fontSize: 7,
+    fontWeight: '700',
+    letterSpacing: 0.8,
   },
   chatContainer: {
     flex: 1,
     minHeight: 0,
   },
   chatContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 28,
   },
-  messageBubble: {
-    maxWidth: '85%',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 4,
-    marginBottom: 10,
+  messageBlock: {
+    width: '100%',
+    marginBottom: 24,
   },
-  userBubble: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#d4af37',
+  userMessageBlock: {
+    alignItems: 'flex-end',
   },
-  modelBubble: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(5, 16, 32, 0.5)',
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.3)',
+  modelMessageBlock: {
+    alignItems: 'flex-start',
+  },
+  messageAuthor: {
+    fontFamily: 'Cinzel',
+    fontSize: 8,
+    fontWeight: '700',
+    color: 'rgba(212, 175, 55, 0.56)',
+    letterSpacing: 1.4,
+    marginBottom: 6,
+  },
+  userAuthor: {
+    color: 'rgba(245, 215, 122, 0.72)',
   },
   messageText: {
+    maxWidth: '90%',
     fontFamily: 'Playfair Display',
-    fontSize: 15,
-    lineHeight: 24,
+    fontSize: 16,
+    lineHeight: 26,
   },
   userText: {
-    color: '#051020',
+    color: '#f5d77a',
+    textAlign: 'right',
   },
   modelText: {
     color: '#ffffff',
+    textAlign: 'left',
   },
   feedbackContainer: {
+    width: '90%',
     flexDirection: 'row',
     marginTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(212, 175, 55, 0.15)',
-    paddingTop: 8,
-    justifyContent: 'flex-end',
+    alignItems: 'center',
   },
   feedbackButton: {
     marginLeft: 10,
