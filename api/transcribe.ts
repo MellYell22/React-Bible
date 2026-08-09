@@ -15,9 +15,13 @@ const JUNK_TRANSCRIPT_PATTERNS = [
 
 const NOISE_TRANSCRIPT_PATTERNS = [
   /^(a+h*|u+h*m*|hmm*|mm+|mhm+|uh+h*|oh+h*)[.!?\s]*$/i,
-  /^(cough|coughing|\*cough\*|clears? throat|sniff|sneeze|burp|yawn)[.!?\s]*$/i,
-  /^(breathing|inhales?|exhales?|sigh|sighs)[.!?\s]*$/i,
+  /^(cough|coughing|\*cough\*|sniff|sniffle|sniffling|sneeze|sneezing|achoo|burp|burping|yawn|yawning|ahem)[.!?\s]*$/i,
+  /^(laugh|laughing|laughter|ha(?:\s+ha)+|giggle|giggling|chuckle|chuckling)[.!?\s]*$/i,
+  /^(clears? throat|clearing throat|throat clear|throat clearing)[.!?\s]*$/i,
+  /^(breathing|breath|inhales?|exhales?|sigh|sighs|sighing|hiccup|hiccups|hiccuping)[.!?\s]*$/i,
+  /^(background noise|room noise|noise|static)[.!?\s]*$/i,
   /^\[.*\]$/,
+  /^\(.*\)$/,
 ];
 
 const MIN_MEANINGFUL_WORDS = 2;
@@ -155,11 +159,14 @@ export default async function handler(req: any, res: any) {
     // Create a File-like object from the buffer
     const audioFile = new File([audioBuffer], audioFilename, { type: mimeType });
 
+    const transcriptionPrompt =
+      'Spiritual conversation in English. Transcribe only clear intentional spoken words from the user. Ignore silence, coughing, sniffing, sneezing, laughing, throat clearing, sighing, breathing, filler sounds, music, television, and other background noise.';
+
     console.log('[API Request] OpenAI audio.transcriptions.create', {
       model: 'whisper-1',
       language: 'en',
       responseFormat: 'verbose_json',
-      prompt: 'Spiritual conversation in English.',
+      prompt: transcriptionPrompt,
       temperature: 0,
       filename: audioFilename,
       mimeType,
@@ -173,8 +180,7 @@ export default async function handler(req: any, res: any) {
       // audio (TV, music, distant conversation) that Whisper transcribes as
       // fluent English but was never directed at David.
       response_format: 'verbose_json',
-      // Neutral prompt reduces conversational hallucinations on non-speech audio
-      prompt: 'Spiritual conversation in English.',
+      prompt: transcriptionPrompt,
       temperature: 0,
     });
 
@@ -190,7 +196,7 @@ export default async function handler(req: any, res: any) {
       const confident = segments.filter((segment) => {
         const noSpeechProb = typeof segment.no_speech_prob === 'number' ? segment.no_speech_prob : 0;
         const avgLogprob = typeof segment.avg_logprob === 'number' ? segment.avg_logprob : 0;
-        return noSpeechProb < 0.5 && avgLogprob > -1.0;
+        return noSpeechProb < 0.4 && avgLogprob > -0.85;
       });
       const dropped = segments.length - confident.length;
       if (dropped > 0) {
