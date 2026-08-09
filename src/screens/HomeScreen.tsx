@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
+  ActivityIndicator,
+  Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
-  TouchableOpacity,
-  RefreshControl,
+  Text,
   TextInput,
-  Platform,
-  ActivityIndicator,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from 'react-native';
 import { useUser } from '../UserContext';
 import { getVerseOfTheDay } from '../services/ai';
@@ -42,9 +43,6 @@ const MOODS = [
   { key: 'HOPEFUL', label: 'HOPEFUL' },
 ];
 
-// Public-domain KJV fallbacks keep the card useful if the daily API is
-// temporarily unavailable. The chosen fallback is deterministic by calendar
-// day, so it still changes each day instead of staying stuck forever.
 const DAILY_FALLBACKS: Scripture[] = [
   {
     verse: 'The Lord is my shepherd; I shall not want.',
@@ -98,6 +96,7 @@ const getFallbackVerseForDay = (dayKey: string): Scripture => {
 
 export default function HomeScreen({ navigation }: any) {
   const { profile } = useUser();
+  const { height: viewportHeight } = useWindowDimensions();
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [emotionalEntry, setEmotionalEntry] = useState('');
@@ -109,6 +108,10 @@ export default function HomeScreen({ navigation }: any) {
 
   const translation = profile?.preferred_translation || 'KJV';
   const voiceIncluded = hasProAccess(profile);
+
+  // This intentionally moves the whole Home experience lower on taller screens.
+  // It stays smaller on short mobile screens so the page does not feel cramped.
+  const contentTopPadding = Math.max(110, Math.min(190, Math.round(viewportHeight * 0.2)));
 
   const loadDailyVerse = React.useCallback(async () => {
     setVerseLoading(true);
@@ -133,22 +136,22 @@ export default function HomeScreen({ navigation }: any) {
     void loadDailyVerse();
   }, [loadDailyVerse]);
 
-  // If someone leaves the app open overnight, update the card shortly after the
-  // calendar day changes instead of requiring a full reload.
   React.useEffect(() => {
     const timer = setInterval(() => {
       const currentDay = getLocalDayKey();
-      setDayKey((previousDay) => previousDay === currentDay ? previousDay : currentDay);
+      setDayKey(previousDay => (previousDay === currentDay ? previousDay : currentDay));
     }, 60_000);
 
     return () => clearInterval(timer);
   }, []);
 
-  const formattedDate = new Date().toLocaleDateString(undefined, {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  }).toUpperCase();
+  const formattedDate = new Date()
+    .toLocaleDateString(undefined, {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    })
+    .toUpperCase();
 
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
@@ -176,13 +179,8 @@ export default function HomeScreen({ navigation }: any) {
     });
   };
 
-  const handleChatWithDavid = () => {
-    navigation.navigate('Chat');
-  };
-
-  const handleTalkWithDavid = () => {
-    navigation.navigate('Voice');
-  };
+  const handleChatWithDavid = () => navigation.navigate('Chat');
+  const handleTalkWithDavid = () => navigation.navigate('Voice');
 
   const handleReflection = () => {
     navigation.navigate('Reflection', {
@@ -195,125 +193,131 @@ export default function HomeScreen({ navigation }: any) {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[styles.scrollContent, { paddingTop: contentTopPadding }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       keyboardShouldPersistTaps="handled"
     >
-      <View style={styles.searchSection}>
-        <Text style={styles.freeChatLabel}>TEXT CHAT WITH DAVID · FREE</Text>
-        <View style={[styles.searchShell, searchFocused && styles.searchShellFocused]}>
-          <TextInput
-            value={emotionalEntry}
-            onChangeText={setEmotionalEntry}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setSearchFocused(false)}
-            onSubmitEditing={handleEmotionalEntrySubmit}
-            placeholder="I am feeling…"
-            placeholderTextColor="rgba(245, 215, 122, 0.46)"
-            returnKeyType="send"
-            style={styles.searchInput}
-            multiline={false}
-            accessibilityLabel="Tell David how you are feeling"
-          />
+      <View style={styles.contentStack}>
+        <View style={styles.searchSection}>
+          <Text style={styles.freeChatLabel}>TEXT CHAT WITH DAVID · FREE</Text>
+          <View style={[styles.searchShell, searchFocused && styles.searchShellFocused]}>
+            <TextInput
+              value={emotionalEntry}
+              onChangeText={setEmotionalEntry}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+              onSubmitEditing={handleEmotionalEntrySubmit}
+              placeholder="I am feeling…"
+              placeholderTextColor="rgba(245, 215, 122, 0.46)"
+              returnKeyType="send"
+              style={styles.searchInput}
+              multiline={false}
+              accessibilityLabel="Tell David how you are feeling"
+            />
+            <TouchableOpacity
+              style={[styles.searchSubmit, !emotionalEntry.trim() && styles.searchSubmitDisabled]}
+              onPress={handleEmotionalEntrySubmit}
+              disabled={!emotionalEntry.trim()}
+              accessibilityRole="button"
+              accessibilityLabel="Send to David"
+              activeOpacity={0.75}
+            >
+              <Text style={styles.searchSubmitText}>SEND</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.moodSection}>
+          <Text style={styles.sectionLabel}>HOW ARE YOU FEELING</Text>
+          <View style={styles.moodGrid}>
+            {MOODS.map((mood, index) => (
+              <TouchableOpacity
+                key={mood.key}
+                style={[
+                  styles.moodButton,
+                  selectedMood === mood.key && styles.moodButtonActive,
+                  index >= 3 && styles.moodButtonSecondRow,
+                ]}
+                onPress={() => handleMoodSelect(mood.key)}
+                accessibilityRole="button"
+                accessibilityLabel={mood.label}
+                accessibilityState={{ selected: selectedMood === mood.key }}
+                activeOpacity={0.75}
+              >
+                <Text
+                  style={[
+                    styles.moodButtonText,
+                    selectedMood === mood.key && styles.moodButtonTextActive,
+                  ]}
+                >
+                  {mood.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.verseSection}>
+          <View style={styles.verseBorder}>
+            <Text style={styles.verseLabel}>VERSE OF THE DAY</Text>
+            <Text style={styles.verseDate}>{formattedDate}</Text>
+
+            {verseLoading ? (
+              <View style={styles.verseLoading}>
+                <ActivityIndicator color={GOLD} size="small" />
+                <Text style={styles.verseLoadingText}>Finding today's verse…</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.verseText}>“{dailyVerse.verse}”</Text>
+                <Text style={styles.verseReference}>— {dailyVerse.reference}</Text>
+                {verseError && (
+                  <Text style={styles.verseFallbackText}>Showing today's offline verse.</Text>
+                )}
+                <TouchableOpacity
+                  onPress={handleReflection}
+                  style={styles.reflectionTap}
+                  accessibilityRole="button"
+                  accessibilityLabel="Read David's reflection on this verse"
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.reflectionLink}>TAP FOR DAVID'S REFLECTION</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.actionSection}>
+          <Text style={styles.actionHeading}>CHOOSE HOW TO TALK WITH DAVID</Text>
+          <Text style={styles.actionExplainer}>Text chat is free. Live voice is optional and Pro.</Text>
+
           <TouchableOpacity
-            style={[styles.searchSubmit, !emotionalEntry.trim() && styles.searchSubmitDisabled]}
-            onPress={handleEmotionalEntrySubmit}
-            disabled={!emotionalEntry.trim()}
+            style={styles.chatButton}
+            onPress={handleChatWithDavid}
             accessibilityRole="button"
-            accessibilityLabel="Send to David"
+            accessibilityLabel="Chat with David for free"
             activeOpacity={0.75}
           >
-            <Text style={styles.searchSubmitText}>SEND</Text>
+            <Text style={styles.chatButtonText}>CHAT WITH DAVID</Text>
+            <Text style={styles.freeBadge}>FREE</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.talkButton}
+            onPress={handleTalkWithDavid}
+            accessibilityRole="button"
+            accessibilityLabel="Voice with David"
+            activeOpacity={0.75}
+          >
+            <Text style={styles.talkButtonText}>VOICE WITH DAVID</Text>
+            <Text style={styles.proBadge}>{voiceIncluded ? 'INCLUDED' : 'PRO'}</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      <View style={styles.moodSection}>
-        <Text style={styles.sectionLabel}>HOW ARE YOU FEELING</Text>
-        <View style={styles.moodGrid}>
-          {MOODS.map((mood, index) => (
-            <TouchableOpacity
-              key={mood.key}
-              style={[
-                styles.moodButton,
-                selectedMood === mood.key && styles.moodButtonActive,
-                index >= 3 && styles.moodButtonSecondRow,
-              ]}
-              onPress={() => handleMoodSelect(mood.key)}
-              accessibilityRole="button"
-              accessibilityLabel={mood.label}
-              accessibilityState={{ selected: selectedMood === mood.key }}
-              activeOpacity={0.75}
-            >
-              <Text
-                style={[
-                  styles.moodButtonText,
-                  selectedMood === mood.key && styles.moodButtonTextActive,
-                ]}
-              >
-                {mood.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.verseSection}>
-        <View style={styles.verseBorder}>
-          <Text style={styles.verseLabel}>VERSE OF THE DAY</Text>
-          <Text style={styles.verseDate}>{formattedDate}</Text>
-
-          {verseLoading ? (
-            <View style={styles.verseLoading}>
-              <ActivityIndicator color={GOLD} size="small" />
-              <Text style={styles.verseLoadingText}>Finding today's verse…</Text>
-            </View>
-          ) : (
-            <>
-              <Text style={styles.verseText}>“{dailyVerse.verse}”</Text>
-              <Text style={styles.verseReference}>— {dailyVerse.reference}</Text>
-              {verseError && (
-                <Text style={styles.verseFallbackText}>Showing today's offline verse.</Text>
-              )}
-              <TouchableOpacity
-                onPress={handleReflection}
-                style={styles.reflectionTap}
-                accessibilityRole="button"
-                accessibilityLabel="Read David's reflection on this verse"
-                activeOpacity={0.75}
-              >
-                <Text style={styles.reflectionLink}>TAP FOR DAVID'S REFLECTION</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </View>
-
-      <View style={styles.actionSection}>
-        <Text style={styles.actionHeading}>CHOOSE HOW TO TALK WITH DAVID</Text>
-        <Text style={styles.actionExplainer}>Text chat is free. Live voice is optional and Pro.</Text>
-
-        <TouchableOpacity
-          style={styles.chatButton}
-          onPress={handleChatWithDavid}
-          accessibilityRole="button"
-          accessibilityLabel="Chat with David for free"
-          activeOpacity={0.75}
-        >
-          <Text style={styles.chatButtonText}>CHAT WITH DAVID</Text>
-          <Text style={styles.freeBadge}>FREE</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.talkButton}
-          onPress={handleTalkWithDavid}
-          accessibilityRole="button"
-          accessibilityLabel="Voice with David"
-          activeOpacity={0.75}
-        >
-          <Text style={styles.talkButtonText}>VOICE WITH DAVID</Text>
-          <Text style={styles.proBadge}>{voiceIncluded ? 'INCLUDED' : 'PRO'}</Text>
-        </TouchableOpacity>
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>CREATED BY AA DESIGNS</Text>
       </View>
     </ScrollView>
   );
@@ -328,8 +332,12 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xxl + 44,
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.sm,
+    alignItems: 'center',
+  },
+
+  contentStack: {
+    width: '100%',
     alignItems: 'center',
   },
 
@@ -558,7 +566,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MAX_CONTENT_WIDTH,
     alignItems: 'center',
-    marginBottom: spacing.section,
+    marginBottom: spacing.lg,
   },
 
   actionHeading: {
@@ -619,5 +627,21 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: GOLD,
     letterSpacing: tracking.normal,
+  },
+
+  footer: {
+    width: '100%',
+    marginTop: 'auto',
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.md,
+    alignItems: 'center',
+  },
+
+  footerText: {
+    fontFamily: fonts.ui,
+    fontSize: fontSize.micro,
+    color: gold.a30,
+    letterSpacing: tracking.wider,
+    textTransform: 'uppercase',
   },
 });
