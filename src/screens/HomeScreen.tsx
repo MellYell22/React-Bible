@@ -18,7 +18,6 @@ import {
   glow,
   TOUCH_TARGET,
   MAX_CONTENT_WIDTH,
-  BOTTOM_NAV_CLEARANCE,
 } from '../theme';
 
 // Mood buttons configuration
@@ -214,8 +213,8 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xxl,
-    paddingBottom: BOTTOM_NAV_CLEARANCE,
+    paddingTop: spacing.xxl + 44,
+    paddingBottom: spacing.xxl,
     alignItems: 'center',
   },
 
