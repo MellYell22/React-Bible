@@ -24,8 +24,11 @@ const NOISE_TRANSCRIPT_PATTERNS = [
   /^\(.*\)$/,
 ];
 
-const MIN_MEANINGFUL_WORDS = 2;
-const MIN_MEANINGFUL_LETTERS = 8;
+// One intentional word such as "sad", "help", "yes", or "scared" is a real
+// voice turn. Noise is rejected by the explicit patterns and confidence checks
+// instead of by requiring two words.
+const MIN_MEANINGFUL_WORDS = 1;
+const MIN_MEANINGFUL_LETTERS = 3;
 const MIN_AUDIO_BYTES = 5000;
 
 function previewLogText(value: string, maxLength = 180): string {
@@ -37,7 +40,7 @@ function isJunkTranscript(normalized: string): boolean {
   if (JUNK_TRANSCRIPT_PATTERNS.some(re => re.test(normalized))) return true;
   if (NOISE_TRANSCRIPT_PATTERNS.some(re => re.test(normalized))) return true;
   const words = normalized.split(/\s+/).filter(Boolean);
-  if (words.length === 1 && words[0].length <= 4) return true;
+  if (words.length === 1 && words[0].replace(/[^a-z]/gi, '').length < 3) return true;
   return false;
 }
 
