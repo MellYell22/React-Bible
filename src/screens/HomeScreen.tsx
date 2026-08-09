@@ -1,6 +1,19 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, TextInput, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  RefreshControl,
+  TextInput,
+  Platform,
+  ActivityIndicator,
+} from 'react-native';
 import { useUser } from '../UserContext';
+import { getVerseOfTheDay } from '../services/ai';
+import { Scripture } from '../types';
+import { hasProAccess } from '../utils/tier';
 import {
   NAVY,
   DARK_NAVY,
@@ -20,7 +33,6 @@ import {
   MAX_CONTENT_WIDTH,
 } from '../theme';
 
-// Mood buttons configuration
 const MOODS = [
   { key: 'SAD', label: 'SAD' },
   { key: 'ANXIOUS', label: 'ANXIOUS' },
@@ -30,42 +42,122 @@ const MOODS = [
   { key: 'HOPEFUL', label: 'HOPEFUL' },
 ];
 
-// Sample verses of the day
-const VERSES_OF_THE_DAY = [
+// Public-domain KJV fallbacks keep the card useful if the daily API is
+// temporarily unavailable. The chosen fallback is deterministic by calendar
+// day, so it still changes each day instead of staying stuck forever.
+const DAILY_FALLBACKS: Scripture[] = [
   {
-    text: '"Whoever dwells in the shelter of the Most High will rest in the shadow of the Almighty."',
-    reference: 'PSALM 91:1',
-    date: 'MONDAY, MARCH 2',
+    verse: 'The Lord is my shepherd; I shall not want.',
+    reference: 'Psalm 23:1',
+    explanation: 'A quiet reminder that you do not have to carry today by yourself.',
   },
   {
-    text: '"For I know the plans I have for you, declares the Lord, plans for welfare and not for evil, to give you a future and a hope."',
-    reference: 'JEREMIAH 29:11',
-    date: 'TUESDAY, MARCH 3',
+    verse: 'Be still, and know that I am God.',
+    reference: 'Psalm 46:10',
+    explanation: 'You are allowed to slow down and let the moment be quieter than the worry.',
   },
   {
-    text: '"Cast all your anxiety on him because he cares for you."',
-    reference: '1 PETER 5:7',
-    date: 'WEDNESDAY, MARCH 4',
+    verse: 'Casting all your care upon him; for he careth for you.',
+    reference: '1 Peter 5:7',
+    explanation: 'What weighs on you matters to God; you do not have to hide it.',
+  },
+  {
+    verse: 'Weeping may endure for a night, but joy cometh in the morning.',
+    reference: 'Psalm 30:5',
+    explanation: 'Hard seasons are real, but they are not promised the final word.',
+  },
+  {
+    verse: 'I can do all things through Christ which strengtheneth me.',
+    reference: 'Philippians 4:13',
+    explanation: 'Strength does not have to mean doing everything alone.',
+  },
+  {
+    verse: 'The Lord is nigh unto them that are of a broken heart.',
+    reference: 'Psalm 34:18',
+    explanation: 'Pain does not make you distant from God; Scripture says he draws near to it.',
+  },
+  {
+    verse: 'This is the day which the Lord hath made; we will rejoice and be glad in it.',
+    reference: 'Psalm 118:24',
+    explanation: 'Today is worth meeting as its own day, without asking it to be yesterday or tomorrow.',
   },
 ];
+
+const getLocalDayKey = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = `${now.getMonth() + 1}`.padStart(2, '0');
+  const day = `${now.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getFallbackVerseForDay = (dayKey: string): Scripture => {
+  const dayNumber = Math.floor(new Date(`${dayKey}T00:00:00`).getTime() / 86_400_000);
+  return DAILY_FALLBACKS[Math.abs(dayNumber) % DAILY_FALLBACKS.length];
+};
 
 export default function HomeScreen({ navigation }: any) {
   const { profile } = useUser();
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [verseIndex, setVerseIndex] = useState(0);
   const [emotionalEntry, setEmotionalEntry] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [dayKey, setDayKey] = useState(getLocalDayKey);
+  const [dailyVerse, setDailyVerse] = useState<Scripture>(() => getFallbackVerseForDay(getLocalDayKey()));
+  const [verseLoading, setVerseLoading] = useState(true);
+  const [verseError, setVerseError] = useState(false);
 
-  const currentVerse = VERSES_OF_THE_DAY[verseIndex];
+  const translation = profile?.preferred_translation || 'KJV';
+  const voiceIncluded = hasProAccess(profile);
 
-  const onRefresh = React.useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => {
-      setRefreshing(false);
-      setVerseIndex((prev) => (prev + 1) % VERSES_OF_THE_DAY.length);
-    }, 1000);
+  const loadDailyVerse = React.useCallback(async () => {
+    setVerseLoading(true);
+    setVerseError(false);
+
+    try {
+      const verse = await getVerseOfTheDay(translation);
+      if (!verse?.verse || !verse?.reference) {
+        throw new Error('Verse of the day response was incomplete.');
+      }
+      setDailyVerse(verse);
+    } catch (error) {
+      console.error('[Home] Verse of the day could not load:', error);
+      setDailyVerse(getFallbackVerseForDay(dayKey));
+      setVerseError(true);
+    } finally {
+      setVerseLoading(false);
+    }
+  }, [translation, dayKey]);
+
+  React.useEffect(() => {
+    void loadDailyVerse();
+  }, [loadDailyVerse]);
+
+  // If someone leaves the app open overnight, update the card shortly after the
+  // calendar day changes instead of requiring a full reload.
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      const currentDay = getLocalDayKey();
+      setDayKey((previousDay) => previousDay === currentDay ? previousDay : currentDay);
+    }, 60_000);
+
+    return () => clearInterval(timer);
   }, []);
+
+  const formattedDate = new Date().toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  }).toUpperCase();
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadDailyVerse();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadDailyVerse]);
 
   const handleMoodSelect = (mood: string) => {
     setSelectedMood(mood);
@@ -84,12 +176,20 @@ export default function HomeScreen({ navigation }: any) {
     });
   };
 
+  const handleChatWithDavid = () => {
+    navigation.navigate('Chat');
+  };
+
   const handleTalkWithDavid = () => {
     navigation.navigate('Voice');
   };
 
   const handleReflection = () => {
-    navigation.navigate('Reflection');
+    navigation.navigate('Reflection', {
+      verse: dailyVerse.verse,
+      reference: dailyVerse.reference,
+      explanation: dailyVerse.explanation,
+    });
   };
 
   return (
@@ -99,8 +199,8 @@ export default function HomeScreen({ navigation }: any) {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       keyboardShouldPersistTaps="handled"
     >
-      {/* Primary Emotional Entry Section */}
       <View style={styles.searchSection}>
+        <Text style={styles.freeChatLabel}>TEXT CHAT WITH DAVID · FREE</Text>
         <View style={[styles.searchShell, searchFocused && styles.searchShellFocused]}>
           <TextInput
             value={emotionalEntry}
@@ -128,7 +228,6 @@ export default function HomeScreen({ navigation }: any) {
         </View>
       </View>
 
-      {/* Mood Selection Section */}
       <View style={styles.moodSection}>
         <Text style={styles.sectionLabel}>HOW ARE YOU FEELING</Text>
         <View style={styles.moodGrid}>
@@ -159,46 +258,62 @@ export default function HomeScreen({ navigation }: any) {
         </View>
       </View>
 
-      {/* Verse of the Day Section */}
       <View style={styles.verseSection}>
         <View style={styles.verseBorder}>
           <Text style={styles.verseLabel}>VERSE OF THE DAY</Text>
-          <Text style={styles.verseDate}>{currentVerse.date}</Text>
+          <Text style={styles.verseDate}>{formattedDate}</Text>
 
-          <Text style={styles.verseText}>{currentVerse.text}</Text>
-
-          <Text style={styles.verseReference}>— {currentVerse.reference}</Text>
-
-          <TouchableOpacity
-            onPress={handleReflection}
-            style={styles.reflectionTap}
-            accessibilityRole="button"
-            accessibilityLabel="Read David's reflection on this verse"
-            activeOpacity={0.75}
-          >
-            <Text style={styles.reflectionLink}>TAP FOR DAVID'S REFLECTION</Text>
-          </TouchableOpacity>
+          {verseLoading ? (
+            <View style={styles.verseLoading}>
+              <ActivityIndicator color={GOLD} size="small" />
+              <Text style={styles.verseLoadingText}>Finding today's verse…</Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.verseText}>“{dailyVerse.verse}”</Text>
+              <Text style={styles.verseReference}>— {dailyVerse.reference}</Text>
+              {verseError && (
+                <Text style={styles.verseFallbackText}>Showing today's offline verse.</Text>
+              )}
+              <TouchableOpacity
+                onPress={handleReflection}
+                style={styles.reflectionTap}
+                accessibilityRole="button"
+                accessibilityLabel="Read David's reflection on this verse"
+                activeOpacity={0.75}
+              >
+                <Text style={styles.reflectionLink}>TAP FOR DAVID'S REFLECTION</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
 
-      {/* Talk with David Section */}
       <View style={styles.actionSection}>
+        <Text style={styles.actionHeading}>CHOOSE HOW TO TALK WITH DAVID</Text>
+        <Text style={styles.actionExplainer}>Text chat is free. Live voice is optional and Pro.</Text>
+
+        <TouchableOpacity
+          style={styles.chatButton}
+          onPress={handleChatWithDavid}
+          accessibilityRole="button"
+          accessibilityLabel="Chat with David for free"
+          activeOpacity={0.75}
+        >
+          <Text style={styles.chatButtonText}>CHAT WITH DAVID</Text>
+          <Text style={styles.freeBadge}>FREE</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.talkButton}
           onPress={handleTalkWithDavid}
           accessibilityRole="button"
-          accessibilityLabel="Talk with David"
+          accessibilityLabel="Voice with David"
           activeOpacity={0.75}
         >
-          <Text style={styles.talkButtonText}>TALK WITH DAVID</Text>
+          <Text style={styles.talkButtonText}>VOICE WITH DAVID</Text>
+          <Text style={styles.proBadge}>{voiceIncluded ? 'INCLUDED' : 'PRO'}</Text>
         </TouchableOpacity>
-
-        <Text style={styles.actionSubtitle}>PERSONAL DIALOGUE WITH YOUR BIBLICAL COMPANION</Text>
-      </View>
-
-      {/* Footer */}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>CREATED BY AA DESIGNS</Text>
       </View>
     </ScrollView>
   );
@@ -218,12 +333,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  // Primary Emotional Search Section
   searchSection: {
     width: '100%',
     maxWidth: MAX_CONTENT_WIDTH,
     alignItems: 'center',
     marginBottom: spacing.section,
+  },
+
+  freeChatLabel: {
+    alignSelf: 'flex-start',
+    marginBottom: spacing.sm,
+    fontFamily: fonts.ui,
+    fontSize: fontSize.micro,
+    fontWeight: '700',
+    color: GOLD,
+    letterSpacing: tracking.wider,
+    textTransform: 'uppercase',
   },
 
   searchShell: {
@@ -281,7 +406,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 
-  // Section label — matches the reference's field-label treatment
   sectionLabel: {
     fontFamily: fonts.ui,
     fontSize: fontSize.micro,
@@ -293,7 +417,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
 
-  // Mood Selection
   moodSection: {
     width: '100%',
     maxWidth: MAX_CONTENT_WIDTH,
@@ -341,7 +464,6 @@ const styles = StyleSheet.create({
     color: SOFT_GOLD,
   },
 
-  // Verse of the Day
   verseSection: {
     width: '100%',
     maxWidth: MAX_CONTENT_WIDTH,
@@ -377,6 +499,19 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
 
+  verseLoading: {
+    minHeight: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+  },
+
+  verseLoadingText: {
+    fontFamily: fonts.display,
+    color: gold.a60,
+    fontSize: 13,
+  },
+
   verseText: {
     fontFamily: fonts.display,
     fontSize: 17,
@@ -394,7 +529,14 @@ const styles = StyleSheet.create({
     color: GOLD,
     letterSpacing: tracking.wide,
     textTransform: 'uppercase',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.md,
+  },
+
+  verseFallbackText: {
+    fontFamily: fonts.display,
+    color: gold.a40,
+    fontSize: 11,
+    marginBottom: spacing.md,
   },
 
   reflectionTap: {
@@ -412,7 +554,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 
-  // Talk with David
   actionSection: {
     width: '100%',
     maxWidth: MAX_CONTENT_WIDTH,
@@ -420,36 +561,63 @@ const styles = StyleSheet.create({
     marginBottom: spacing.section,
   },
 
+  actionHeading: {
+    alignSelf: 'flex-start',
+    fontFamily: fonts.ui,
+    fontSize: fontSize.micro,
+    fontWeight: '700',
+    color: GOLD,
+    letterSpacing: tracking.wider,
+    textTransform: 'uppercase',
+  },
+
+  actionExplainer: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
+    fontFamily: fonts.display,
+    fontSize: 13,
+    color: gold.a50,
+  },
+
+  chatButton: {
+    ...buttons.primary,
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+
+  chatButtonText: {
+    ...buttons.primaryText,
+  },
+
   talkButton: {
     ...buttons.secondary,
     width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
   },
 
   talkButtonText: {
     ...buttons.secondaryText,
   },
 
-  actionSubtitle: {
+  freeBadge: {
     fontFamily: fonts.ui,
     fontSize: fontSize.micro,
-    color: gold.a50,
+    fontWeight: '800',
+    color: DARK_NAVY,
     letterSpacing: tracking.normal,
-    textTransform: 'uppercase',
-    textAlign: 'center',
-    marginTop: spacing.md,
   },
 
-  // Footer
-  footer: {
-    width: '100%',
-    alignItems: 'center',
-  },
-
-  footerText: {
+  proBadge: {
     fontFamily: fonts.ui,
     fontSize: fontSize.micro,
-    color: gold.a30,
-    letterSpacing: tracking.wider,
-    textTransform: 'uppercase',
+    fontWeight: '800',
+    color: GOLD,
+    letterSpacing: tracking.normal,
   },
 });
