@@ -92,13 +92,13 @@ export default async function handler(req: any, res: any) {
       text: cleanText,
       model_id: ELEVENLABS_MODEL,
       voice_settings: {
-        // Lower stability allows natural variation instead of a locked,
-        // read-aloud cadence. Similarity stays strong enough to keep David's
-        // identity. Style exaggeration is zero to avoid extra artifacts.
-        stability: 0.56,
+        // Calm, unhurried delivery: a little more stable than before, noticeably
+        // slower, no style exaggeration, and no speaker boost intensity.
+        stability: 0.64,
         similarity_boost: 0.82,
-        speed: 0.98,
+        speed: 0.86,
         style: 0.0,
+        use_speaker_boost: false,
       },
     };
 
