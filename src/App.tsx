@@ -1,5 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Platform,
+  ActivityIndicator,
+  useWindowDimensions,
+} from 'react-native';
 import { Analytics } from '@vercel/analytics/react';
 import { UserProvider, useUser } from './UserContext';
 import AuthScreen from './screens/AuthScreen';
@@ -19,14 +27,22 @@ type RouteState = {
   params?: Record<string, any>;
 };
 
+const NAV_ITEMS: AppRoute[] = ['Home', 'Mood', 'Chat', 'Voice', 'Bible', 'Profile'];
+const DESKTOP_NAV_BREAKPOINT = 768;
+
 const getInitialRoute = (): RouteState => {
   if (typeof window === 'undefined') {
     return { name: 'Home' };
   }
 
   const params = new URLSearchParams(window.location.search);
-  const isStripeSuccess = params.get('success') === 'true' || params.has('session_id') || window.location.pathname.includes('payment-success');
-  const isStripeCanceled = params.get('canceled') === 'true' || window.location.pathname.includes('pricing');
+  const isStripeSuccess =
+    params.get('success') === 'true' ||
+    params.has('session_id') ||
+    window.location.pathname.includes('payment-success');
+  const isStripeCanceled =
+    params.get('canceled') === 'true' ||
+    window.location.pathname.includes('pricing');
 
   if (isStripeSuccess || isStripeCanceled) {
     return {
@@ -46,21 +62,28 @@ const getInitialRoute = (): RouteState => {
 
 function AppShell() {
   const { session, profile, loading, refreshProfile, signOut } = useUser();
+  const { width } = useWindowDimensions();
   const [route, setRoute] = useState<RouteState>(() => getInitialRoute());
   const [onboardingCompletedLocally, setOnboardingCompletedLocally] = useState(false);
+
+  const isDesktopWeb = Platform.OS === 'web' && width >= DESKTOP_NAV_BREAKPOINT;
 
   useEffect(() => {
     setOnboardingCompletedLocally(false);
   }, [session?.user?.id]);
 
-  const navigation = useMemo(() => ({
-    navigate: (name: AppRoute, params?: Record<string, any>) => setRoute({ name, params }),
-    goBack: () => setRoute({ name: 'Home' }),
-    setParams: (params?: Record<string, any>) => setRoute((current) => ({
-      ...current,
-      params: { ...(current.params || {}), ...(params || {}) },
-    })),
-  }), []);
+  const navigation = useMemo(
+    () => ({
+      navigate: (name: AppRoute, params?: Record<string, any>) => setRoute({ name, params }),
+      goBack: () => setRoute({ name: 'Home' }),
+      setParams: (params?: Record<string, any>) =>
+        setRoute((current) => ({
+          ...current,
+          params: { ...(current.params || {}), ...(params || {}) },
+        })),
+    }),
+    [],
+  );
 
   if (loading) {
     return (
@@ -94,8 +117,34 @@ function AppShell() {
 
   const screenProps = { navigation, route: { name: route.name, params: route.params || {} } };
 
+  const navigationBar = (
+    <View style={[styles.tabBar, isDesktopWeb ? styles.desktopTabBar : styles.mobileTabBar]}>
+      {NAV_ITEMS.map((item) => (
+        <TouchableOpacity
+          key={item}
+          style={styles.tabButton}
+          onPress={() => setRoute({ name: item })}
+          accessibilityRole="button"
+          accessibilityState={{ selected: route.name === item }}
+        >
+          <Text style={[styles.tabText, route.name === item && styles.tabTextActive]}>{item}</Text>
+        </TouchableOpacity>
+      ))}
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Log out"
+        style={[styles.tabButton, styles.logoutButton]}
+        onPress={() => void signOut()}
+      >
+        <Text style={styles.logoutText}>Log out</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <View style={styles.appShell}>
+      {isDesktopWeb && navigationBar}
+
       <View style={styles.screenWrap}>
         {route.name === 'Home' && <HomeScreen navigation={navigation} />}
         {route.name === 'Mood' && <MoodScreen {...screenProps} />}
@@ -106,21 +155,7 @@ function AppShell() {
         {route.name === 'Profile' && <ProfileScreen {...screenProps} />}
       </View>
 
-      <View style={styles.tabBar}>
-        {(['Home', 'Mood', 'Chat', 'Voice', 'Bible', 'Profile'] as AppRoute[]).map((item) => (
-          <TouchableOpacity key={item} style={styles.tabButton} onPress={() => setRoute({ name: item })}>
-            <Text style={[styles.tabText, route.name === item && styles.tabTextActive]}>{item}</Text>
-          </TouchableOpacity>
-        ))}
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="Log out"
-          style={[styles.tabButton, styles.logoutButton]}
-          onPress={() => void signOut()}
-        >
-          <Text style={styles.logoutText}>Log out</Text>
-        </TouchableOpacity>
-      </View>
+      {!isDesktopWeb && navigationBar}
     </View>
   );
 }
@@ -163,13 +198,21 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#051020',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(212, 175, 55, 0.25)',
     paddingVertical: 10,
     paddingHorizontal: 8,
+  },
+  desktopTabBar: {
+    flexWrap: 'nowrap',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(212, 175, 55, 0.25)',
+  },
+  mobileTabBar: {
+    flexWrap: 'wrap',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(212, 175, 55, 0.25)',
   },
   tabButton: {
     paddingHorizontal: 10,
