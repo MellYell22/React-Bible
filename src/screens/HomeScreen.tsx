@@ -123,7 +123,7 @@ export default function HomeScreen({ navigation }: any) {
             accessibilityLabel="Send to David"
             activeOpacity={0.75}
           >
-            <Text style={styles.searchSubmitText}>TALK</Text>
+            <Text style={styles.searchSubmitText}>SEND</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
   },
 
   searchSubmit: {
-    minWidth: 70,
+    minWidth: 82,
     minHeight: 40,
     paddingHorizontal: spacing.md,
     borderRadius: radius.sm,
