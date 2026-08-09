@@ -26,7 +26,9 @@ const FAST_OUTPUT_FORMATS = new Set([
   'mp3_44100_64',
   'mp3_44100_96',
 ]);
-const DEFAULT_OUTPUT_FORMAT = 'mp3_22050_32';
+// 44.1kHz / 64kbps is still light enough for live web playback but avoids the
+// thin, telephone-like quality the 22.05kHz / 32kbps default can introduce.
+const DEFAULT_OUTPUT_FORMAT = 'mp3_44100_64';
 const requestedOutputFormat = (process.env.ELEVENLABS_OUTPUT_FORMAT || '').trim();
 const ELEVENLABS_OUTPUT_FORMAT = FAST_OUTPUT_FORMATS.has(requestedOutputFormat)
   ? requestedOutputFormat
@@ -92,13 +94,15 @@ export default async function handler(req: any, res: any) {
       text: cleanText,
       model_id: ELEVENLABS_MODEL,
       voice_settings: {
-        // Calm, unhurried delivery: a little more stable than before, noticeably
-        // slower, no style exaggeration, and no speaker boost intensity.
-        stability: 0.64,
-        similarity_boost: 0.82,
+        // Calm and close: steady enough to avoid a shouted/read-aloud cadence,
+        // slow enough to feel unhurried, and speaker boost enabled so the voice
+        // feels present rather than distant. Playback volume is handled in the
+        // client so presence does not turn into loudness.
+        stability: 0.68,
+        similarity_boost: 0.88,
         speed: 0.86,
         style: 0.0,
-        use_speaker_boost: false,
+        use_speaker_boost: true,
       },
     };
 
