@@ -23,10 +23,10 @@ const IDLE_VOICE_LEVELS = [0.18, 0.26, 0.2, 0.3, 0.22, 0.34, 0.24, 0.31, 0.2];
 // Keep the listener sensitive enough for normal laptop/phone microphones.
 // The previous threshold could leave the recorder running forever on quieter mics,
 // which made David appear to ignore the user after his greeting.
-const SPEECH_VOLUME_THRESHOLD = 0.08;
+const SPEECH_VOLUME_THRESHOLD = 0.09;
 /** Voiced audio must persist this long (cumulative) before it counts as the user
  * actually speaking — a stray TV syllable or clatter no longer arms the recorder. */
-const SPEECH_SUSTAIN_MS = 180;
+const SPEECH_SUSTAIN_MS = 300;
 // Give natural pauses a little more room so David does not cut the user off mid-thought.
 const SILENCE_STOP_MS = 1100;
 const MIN_RECORDING_MS = 700;
@@ -123,6 +123,10 @@ const isMeaningfulUserText = (value: string): boolean => {
     /^[\s.…,!?*-]+$/,
     /^(okay|ok|um+|uh+|hmm+|mm+|mhm+|ah+|oh+|bye|goodbye)[.!?\s]*$/i,
     /^(music|applause|\[silence\]|\[music\]|\[inaudible\])$/i,
+    /^(cough|coughing|sniff|sniffle|sniffling|sneeze|sneezing|achoo|ahem|yawn|yawning)[.!?\s]*$/i,
+    /^(laugh|laughing|laughter|giggle|giggling|chuckle|chuckling)[.!?\s]*$/i,
+    /^(clear(?:s|ed|ing)? throat|throat clear(?:ing)?|sigh|sighing|breath|breathing|inhale|exhale)[.!?\s]*$/i,
+    /^(background noise|room noise|noise|static|television|tv)[.!?\s]*$/i,
   ];
 
   if (junkPatterns.some(pattern => pattern.test(lowered))) return false;
@@ -550,8 +554,18 @@ export default function VoiceScreen() {
           return;
         }
 
+        // Silence is not a turn. If the user never produced sustained speech,
+        // do not send room tone, a cough, or a random sound to transcription.
+        // Just keep listening quietly until the user actually speaks.
+        if (!speechDetectedRef.current) {
+          setError(null);
+          setPhase('listening');
+          void startListening({ conversationId: localConversationId });
+          return;
+        }
+
         if (!chunks.length) {
-          setError("David couldn't hear enough audio. Try speaking again.");
+          setError(null);
           setPhase('listening');
           void startListening({ conversationId: localConversationId });
           return;
@@ -579,11 +593,11 @@ export default function VoiceScreen() {
           }
 
           const transcript = normalizeTranscript(result.transcript);
-          if (!isMeaningfulUserText(transcript)) {
-            const reason = result.reason === 'audio_too_small'
-              ? 'Try speaking a little longer before stopping.'
-              : 'David could not catch enough words yet. Try again.';
-            setError(reason);
+          if (result.rejected || !isMeaningfulUserText(transcript)) {
+            // Nonverbal sounds and low-confidence transcripts are ignored.
+            // David should never answer a cough, sniffle, laugh, throat-clear,
+            // silence, or background noise as if the user spoke to him.
+            setError(null);
             setPhase('listening');
             void startListening({ conversationId: localConversationId });
             return;
@@ -653,10 +667,35 @@ export default function VoiceScreen() {
       const preparedText = prepareDavidTtsPayload(text, {
         isGreeting: options.isGreeting,
       }).speechText;
-      const audioUrl = await generateSpeech(preparedText, {
+
+      const requestDavidAudio = () => generateSpeech(preparedText, {
         alreadyPrepared: true,
         signal: speechController.signal,
       });
+
+      let audioUrl: string | null;
+      try {
+        audioUrl = await requestDavidAudio();
+      } catch (firstError: any) {
+        const firstMessage = `${firstError?.message || firstError || ''}`;
+        const looksLikeTemporaryNetworkFailure =
+          /load failed|failed to fetch|network|networkerror|connection/i.test(firstMessage);
+
+        if (!looksLikeTemporaryNetworkFailure || speechController.signal.aborted) {
+          throw firstError;
+        }
+
+        // Safari/Chrome can occasionally throw a one-off network "Load failed"
+        // while the local/serverless route is waking up. Retry once before
+        // surfacing an error to the user.
+        await new Promise(resolve => setTimeout(resolve, 450));
+        if (speechController.signal.aborted) {
+          const abortError = new Error('Request was cancelled.');
+          abortError.name = 'AbortError';
+          throw abortError;
+        }
+        audioUrl = await requestDavidAudio();
+      }
 
       if (speechAbortControllerRef.current === speechController) {
         clearAbortController(speechAbortControllerRef);
@@ -703,6 +742,10 @@ export default function VoiceScreen() {
         currentAudioUrlRef.current = audioUrl;
         audioStopResolverRef.current = finish;
         audio.preload = 'auto';
+        // Keep David present and close without sounding like he is shouting.
+        // Do this only for David's voice instead of globally changing every
+        // audio element in the app.
+        audio.volume = 0.82;
         audio.onended = finish;
         audio.onerror = () => {
           finish();
@@ -733,7 +776,11 @@ export default function VoiceScreen() {
 
       // Speech failed — still show the text so the response is not lost.
       options.onPlaybackStart?.();
-      setError(err?.message || 'David had trouble speaking that response.');
+      const message = `${err?.message || ''}`;
+      const friendlyMessage = /load failed|failed to fetch|network|networkerror|connection/i.test(message)
+        ? "David's voice connection had a brief problem. Tap Start Conversation and try again."
+        : message || 'David had trouble speaking that response.';
+      setError(friendlyMessage);
       setPhase('error');
     } finally {
       if (speechAbortControllerRef.current === speechController) {
