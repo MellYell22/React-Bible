@@ -10,16 +10,8 @@ export type HumanizeOptions = {
   alreadyPrepared?: boolean;
 };
 
-const TRAILING_PAUSE_MARKS = /[\s,;:-]+$/;
-
 const SCRIPTED_MARKUP_RE =
-  /\[(?:soft\s+breath|breath|inhale|exhale|sigh|pause)\]|\((?:soft\s+breath|breath|inhale|exhale|sigh|pause)\)|\*(?:soft\s+breath|breath|inhale|exhale|sigh|pause)\*/gi;
-
-const ACKNOWLEDGEMENT_PERIOD_RE =
-  /\b(I hear you|I'm with you|I am with you|That feels heavy|That's a lot|That is a lot|I get that|I understand)\.\s+/gi;
-
-const FILLER_PERIOD_RE =
-  /\b(mm+|hmm+|hm+|yeah|hey|okay|alright|you know|i mean|well)\.\s+/gi;
+  /\[(?:soft\s+breath|breath|inhale|exhale|sigh|pause|gentle\s+pause|thoughtful\s+pause|soft\s+chuckle|chuckle|laughs?)\]|\((?:soft\s+breath|breath|inhale|exhale|sigh|pause|gentle\s+pause|thoughtful\s+pause|soft\s+chuckle|chuckle|laughs?)\)|\*(?:soft\s+breath|breath|inhale|exhale|sigh|pause|gentle\s+pause|thoughtful\s+pause|soft\s+chuckle|chuckle|laughs?)\*/gi;
 
 const DECIMAL_PLACEHOLDER = '__DAVID_DECIMAL_POINT__';
 
@@ -39,184 +31,137 @@ const joinLineBreaksConversationally = (text: string): string => {
   return lines.length <= 1 ? text : lines.join(' ');
 };
 
-const softenPunctuationForTts = (text: string): string => {
+const normalizeQuotesAndSpacing = (text: string): string => {
   let t = protectDecimalPoints(text);
 
-  t = t.replace(/[\u201c\u201d]/g, '"').replace(/[\u2018\u2019]/g, "'");
-  t = t.replace(/\s*[\u2013\u2014]\s*/g, ', ');
-  t = t.replace(/\s*[;:]+\s*/g, ', ');
-  t = t.replace(/\s+-\s+/g, ', ');
-  t = t.replace(/\.{4,}/g, '...');
-  t = t.replace(/,{2,}/g, ',');
-  t = t.replace(/\s+,/g, ',');
-  // Space out run-together sentences, but never wedge a space between a
-  // terminator and its closing quote ("...anything.'" must stay intact).
-  t = t.replace(/([.!?])(?=[^\s.!?'"’”)])/g, '$1 ');
+  t = t
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.!?;:])/g, '$1')
+    .replace(/([.!?])(?=[^\s.!?'"’”)])/g, '$1 ')
+    .trim();
 
   return restoreDecimalPoints(t);
 };
 
-const softenShortInternalStops = (text: string): string => {
-  let t = protectDecimalPoints(text);
+const collapseStackedFiller = (text: string): string =>
+  text
+    .replace(
+      /\b(mm+|hmm+|hm|ah|uh|um|er|oh)\b[\s,.!—–-]*(?=\b(?:mm+|hmm+|hm|ah|uh|um|er|oh)\b)/gi,
+      '',
+    )
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s,.!—–-]+/, '')
+    .trim();
 
-  t = t.replace(FILLER_PERIOD_RE, (_match, filler: string) => `${filler}, `);
-
-  t = t.replace(
-    ACKNOWLEDGEMENT_PERIOD_RE,
-    (_match, phrase: string) => `${phrase}, `,
-  );
-
-  t = t.replace(
-    /^([^.!?]{2,34})\.\s+(?=[A-Z"'])/u,
-    (_match, leadIn: string) => {
-      const wordCount = leadIn.trim().split(/\s+/).filter(Boolean).length;
-
-      return wordCount <= 5 ? `${leadIn}, ` : `${leadIn}. `;
-    },
-  );
-
-  return restoreDecimalPoints(t);
-};
-
-const addTinyNaturalBreaths = (text: string): string => {
-  let t = text;
-
-  t = t.replace(/\bI'm David, I'm\b/g, "I'm David, and I'm");
-  t = t.replace(/\bI'm David\.\s+/g, "I'm David, ");
-  t = t.replace(
-    /\b(I'm with you|I hear you|That's a lot|That sounds heavy),\s+/gi,
-    '$1, ',
-  );
-
-  return t;
-};
-
-/**
- * Splits into sentences without cutting a Scripture quote in half.
- * Closing quotes stay attached to the sentence they belong to, so
- * "'Do not be anxious about anything.'" never becomes "anything. '".
- */
 const SENTENCE_RE = /[^.!?]+[.!?]+['"’”)]*|[^.!?]+$/g;
-
-/** Terminators tolerate a trailing quote: `...with you?"` is still a question. */
 const ENDS_WITH_QUESTION = /\?['"’”)]*\s*$/;
 const ENDS_SENTENCE = /[.!?]['"’”)]*\s*$/;
 
 const splitSentences = (text: string): string[] =>
   text.match(SENTENCE_RE) ?? [];
 
-/**
- * The one-breath rule, enforced client-side: at most three sentences, and
- * nothing after the first question — David asks once, then stops and waits.
- */
 const enforceOneBreath = (text: string): string => {
-  const sentenceMatches = splitSentences(text);
-
-  if (sentenceMatches.length <= 1) {
-    return text;
-  }
+  const sentences = splitSentences(text);
+  if (sentences.length <= 1) return text;
 
   const kept: string[] = [];
 
-  for (const raw of sentenceMatches) {
+  for (const raw of sentences) {
     const sentence = raw.trim();
     if (!sentence) continue;
 
     kept.push(sentence);
 
-    // One gentle question per reply — never two in a row.
     if (ENDS_WITH_QUESTION.test(sentence)) break;
-
     if (kept.length >= 3) break;
   }
 
-  // If the reply was cut off mid-thought, drop the fragment rather than
-  // speaking half a sentence aloud.
   if (kept.length > 1 && !ENDS_SENTENCE.test(kept[kept.length - 1])) {
     kept.pop();
   }
 
   const trimmed = kept.join(' ').trim();
-
-  // Never trade a usable reply for an unusably short fragment.
   return trimmed.length >= 20 ? trimmed : text;
 };
 
-/**
- * Cues David is never allowed to make: "Ah—", "Um—", "Uh—", "Oh oh oh",
- * "Checking...". These read as hesitation or as a machine stalling.
- */
-const BANNED_CUE_RE =
-  /^\s*(?:(?:ah|um|uh|er|oh)\s*[—–-]+\s*|(?:oh[\s,]+){2,}oh[\s,]*|checking\s*\.{2,}\s*)/gi;
-
-/** Stacked filler ("mm, hmm, ah...") never sounds human. Keep the first cue only. */
-const collapseStackedFiller = (text: string): string =>
+const applyContractions = (text: string): string =>
   text
-    .replace(BANNED_CUE_RE, '')
-    // Drop any cue that is immediately followed by another cue.
-    .replace(
-      /\b(mm+|hmm+|hm|ah|uh|um|er|oh)\b[\s,.!—–-]*(?=\b(?:mm+|hmm+|hm|ah|uh|um|er|oh)\b)/gi,
-      '',
-    )
-    .replace(BANNED_CUE_RE, '')
-    .replace(/\s+/g, ' ')
-    .replace(/^[\s,.!—–-]+/, '')
-    .trim();
+    .replace(/\bI am\b/g, "I'm")
+    .replace(/\bYou are\b/g, "You're")
+    .replace(/\bIt is\b/g, "It's")
+    .replace(/\bThat is\b/g, "That's")
+    .replace(/\bWe are\b/g, "We're")
+    .replace(/\bThey are\b/g, "They're");
 
-function preparePlainSpeechText(text: string): string {
+const preparePlainText = (text: string): string => {
   let t = text.trim();
 
   t = t.replace(SCRIPTED_MARKUP_RE, '');
-
   t = joinLineBreaksConversationally(t);
-
-  t = t.replace(/!{2,}/g, '!');
-
-  t = t.replace(/\s+/g, ' ');
-
-  t = t.replace(/\s+([,.!?])/g, '$1');
-
-  t = softenPunctuationForTts(t);
-
-  t = softenShortInternalStops(t);
-
-  t = addTinyNaturalBreaths(t);
+  t = normalizeQuotesAndSpacing(t);
+  t = collapseStackedFiller(t);
+  t = applyContractions(t);
 
   return t.trim();
-}
+};
 
+/**
+ * Display text stays readable and natural. We do not inject artificial pauses
+ * into the text the user sees on screen.
+ */
 export function humanizeForTts(
   text: string,
   options: HumanizeOptions = {},
 ): string {
   if (!text) return '';
+  if (options.skipHumanize) return text.trim();
 
-  let t = preparePlainSpeechText(text);
-
-  t = collapseStackedFiller(t);
-
-  t = enforceOneBreath(t);
-
-  t = t.replace(/\bI am\b/g, "I'm");
-  t = t.replace(/\bYou are\b/g, "You're");
-  t = t.replace(/\bIt is\b/g, "It's");
-  t = t.replace(/\bThat is\b/g, "That's");
-  t = t.replace(/\bWe are\b/g, "We're");
-  t = t.replace(/\bThey are\b/g, "They're");
-
-  return t.trim();
+  const prepared = preparePlainText(text);
+  return enforceOneBreath(prepared).trim();
 }
 
+/**
+ * David's spoken delivery follows COMPLETE THOUGHTS, not a word-count rule.
+ *
+ * Important:
+ * - Never insert periods every one or two words.
+ * - Never split a grammatical phrase just to manufacture a pause.
+ * - Ellipses are normalized into a clean sentence stop because repeated dots
+ *   often make ElevenLabs sound hesitant or robotic.
+ * - Dashes and semicolons become light commas so the voice can keep flowing.
+ * - Existing sentence endings remain the main pacing signal.
+ */
 export function sanitizeForDavidSpeech(text: string): string {
   if (!text) return '';
 
-  let t = preparePlainSpeechText(text);
+  let t = preparePlainText(text);
+  t = protectDecimalPoints(t);
 
-  // Ellipses make ElevenLabs insert long breathing pauses; keep the beat short.
-  t = t.replace(/\s*\.{3}\s*/g, ', ');
-  t = t.replace(/,\s*,+/g, ',');
+  // Long/stacked punctuation creates exaggerated or nervous delivery.
+  t = t.replace(/\s*\.{2,}\s*/g, '. ');
+  t = t.replace(/!{2,}/g, '!');
+  t = t.replace(/\?{2,}/g, '?');
 
-  t = t.replace(TRAILING_PAUSE_MARKS, '');
+  // Keep internal pauses light and conversational.
+  t = t.replace(/\s*[—–]\s*/g, ', ');
+  t = t.replace(/\s*[;:]+\s*/g, ', ');
+  t = t.replace(/,{2,}/g, ',');
+
+  // A few common greeting shapes sound much more natural when "I'm David"
+  // is allowed to land as one complete thought.
+  t = t.replace(/\bHey,\s*I'm David,\s*/gi, "Hey, I'm David. ");
+  t = t.replace(/\bHey\s+I'm David,\s*/gi, "Hey, I'm David. ");
+
+  // Clean punctuation spacing without creating new pauses inside phrases.
+  t = t
+    .replace(/\s+([,.!?])/g, '$1')
+    .replace(/([.!?])(?=[^\s.!?'"’”)])/g, '$1 ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  t = restoreDecimalPoints(t);
 
   return t.trim();
 }
@@ -226,8 +171,9 @@ export function prepareDavidTtsPayload(
   options: HumanizeOptions = {},
 ): PrepareTtsResult {
   const displayText = humanizeForTts(text, options);
-
-  const speechText = sanitizeForDavidSpeech(displayText);
+  const speechText = options.alreadyPrepared
+    ? sanitizeForDavidSpeech(text)
+    : sanitizeForDavidSpeech(displayText);
 
   return {
     displayText,
@@ -243,21 +189,13 @@ export function preSpeechThinkingDelay(text = ''): Promise<void> {
       text,
     );
 
-  const base = emotionalCue ? 610 : 390;
-
-  const lengthAdjustment =
-    wordCount <= 10 ? 230 : wordCount >= 35 ? -30 : 90;
-
-  const jitter = Math.floor(Math.random() * 220);
-
-  const delayMs = Math.max(
-    340,
-    Math.min(1050, base + lengthAdjustment + jitter),
-  );
+  const base = emotionalCue ? 520 : 320;
+  const lengthAdjustment = wordCount <= 10 ? 120 : wordCount >= 35 ? -20 : 60;
+  const jitter = Math.floor(Math.random() * 140);
+  const delayMs = Math.max(260, Math.min(820, base + lengthAdjustment + jitter));
 
   return new Promise(resolve => setTimeout(resolve, delayMs));
 }
 
-export const enhanceSpeechDelivery = (text: string): string => {
-  return sanitizeForDavidSpeech(humanizeForTts(text));
-};
+export const enhanceSpeechDelivery = (text: string): string =>
+  sanitizeForDavidSpeech(humanizeForTts(text));
