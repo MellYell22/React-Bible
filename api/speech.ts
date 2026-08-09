@@ -1,8 +1,7 @@
 const DAVID_ELEVENLABS_VOICE_ID = 'nPczCjzI2devNBz1zQrb';
 const ELEVENLABS_TTS_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
 
-// Live voice must stay on a low-latency model. An env var can pick between
-// fast models, but it can never silently downgrade David to a slow one.
+// Live voice stays on a low-latency model suitable for conversation.
 const FAST_ELEVENLABS_MODELS = new Set([
   'eleven_flash_v2_5',
   'eleven_flash_v2',
@@ -14,11 +13,13 @@ const requestedModel = (process.env.ELEVENLABS_MODEL || '').trim();
 const ELEVENLABS_MODEL = FAST_ELEVENLABS_MODELS.has(requestedModel)
   ? requestedModel
   : DEFAULT_ELEVENLABS_MODEL;
+
 if (requestedModel && ELEVENLABS_MODEL !== requestedModel) {
-  console.warn(`[Speech] Ignoring ELEVENLABS_MODEL="${requestedModel}" — not a fast live-voice model. Using ${DEFAULT_ELEVENLABS_MODEL}.`);
+  console.warn(
+    `[Speech] Ignoring ELEVENLABS_MODEL="${requestedModel}" — not a fast live-voice model. Using ${DEFAULT_ELEVENLABS_MODEL}.`,
+  );
 }
 
-// Lightweight mp3 formats only, so web playback can start quickly.
 const FAST_OUTPUT_FORMATS = new Set([
   'mp3_22050_32',
   'mp3_44100_32',
@@ -30,11 +31,14 @@ const requestedOutputFormat = (process.env.ELEVENLABS_OUTPUT_FORMAT || '').trim(
 const ELEVENLABS_OUTPUT_FORMAT = FAST_OUTPUT_FORMATS.has(requestedOutputFormat)
   ? requestedOutputFormat
   : DEFAULT_OUTPUT_FORMAT;
+
 if (requestedOutputFormat && ELEVENLABS_OUTPUT_FORMAT !== requestedOutputFormat) {
-  console.warn(`[Speech] Ignoring ELEVENLABS_OUTPUT_FORMAT="${requestedOutputFormat}" — not a lightweight web format. Using ${DEFAULT_OUTPUT_FORMAT}.`);
+  console.warn(
+    `[Speech] Ignoring ELEVENLABS_OUTPUT_FORMAT="${requestedOutputFormat}" — not a lightweight web format. Using ${DEFAULT_OUTPUT_FORMAT}.`,
+  );
 }
 
-import { humanizeForTts } from '../src/utils/davidSpeechDelivery.js';
+import { sanitizeForDavidSpeech } from '../src/utils/davidSpeechDelivery.js';
 
 function previewLogText(value: string, maxLength = 180): string {
   return value.replace(/\s+/g, ' ').trim().slice(0, maxLength);
@@ -42,7 +46,7 @@ function previewLogText(value: string, maxLength = 180): string {
 
 function cleanTranscript(text: string): string {
   return text
-    .replace(/``` *?```/g, ' ')
+    .replace(/```[\s\S]*?```/g, ' ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -54,7 +58,9 @@ export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   const { text } = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
 
@@ -62,8 +68,9 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'Missing text' });
   }
 
-  let cleanText = cleanTranscript(text);
-  cleanText = humanizeForTts(cleanText);
+  // Keep one source of truth for David's pacing. This sanitizer is
+  // intentionally idempotent: it never inserts periods on a word-count rule.
+  const cleanText = sanitizeForDavidSpeech(cleanTranscript(text));
 
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
@@ -77,17 +84,21 @@ export default async function handler(req: any, res: any) {
   const voiceId = process.env.ELEVENLABS_VOICE_ID || DAVID_ELEVENLABS_VOICE_ID;
 
   try {
-    const speechUrl = `${ELEVENLABS_TTS_URL}/${voiceId}?output_format=${encodeURIComponent(ELEVENLABS_OUTPUT_FORMAT)}`;
+    const speechUrl = `${ELEVENLABS_TTS_URL}/${voiceId}?output_format=${encodeURIComponent(
+      ELEVENLABS_OUTPUT_FORMAT,
+    )}`;
 
     const requestPayload = {
       text: cleanText,
       model_id: ELEVENLABS_MODEL,
       voice_settings: {
-        stability: 0.72,
-        similarity_boost: 0.88,
-        // David should feel calm and unhurried. 1.0 was audibly too fast.
-        speed: 0.86,
-        style: 0.35,
+        // Lower stability allows natural variation instead of a locked,
+        // read-aloud cadence. Similarity stays strong enough to keep David's
+        // identity. Style exaggeration is zero to avoid extra artifacts.
+        stability: 0.56,
+        similarity_boost: 0.82,
+        speed: 0.98,
+        style: 0.0,
       },
     };
 
@@ -106,7 +117,7 @@ export default async function handler(req: any, res: any) {
       headers: {
         'xi-api-key': apiKey,
         'Content-Type': 'application/json',
-        'Accept': 'audio/mpeg',
+        Accept: 'audio/mpeg',
       },
       body: JSON.stringify(requestPayload),
     });
@@ -135,6 +146,7 @@ export default async function handler(req: any, res: any) {
 
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+
     console.log('[API Response] ElevenLabs text-to-speech', {
       ok: true,
       status: response.status,
