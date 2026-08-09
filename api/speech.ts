@@ -85,7 +85,8 @@ export default async function handler(req: any, res: any) {
       voice_settings: {
         stability: 0.72,
         similarity_boost: 0.88,
-        speed: 1.0,
+        // David should feel calm and unhurried. 1.0 was audibly too fast.
+        speed: 0.86,
         style: 0.35,
       },
     };
