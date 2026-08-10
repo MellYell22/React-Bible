@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, FlatList } from 'react-native';
 import { motion } from 'motion/react';
-import { ChevronRight, ChevronLeft, BookOpen, Book, Bookmark, Check } from 'lucide-react';
+import { ChevronRight, ChevronLeft, BookOpen, Bookmark, Check } from 'lucide-react';
 
 const MotionView = motion(View);
 import { supabase, saveScripture } from '../services/supabase';
@@ -32,6 +32,25 @@ const BIBLE_BOOKS = [
   { name: '3 John', chapters: 1 }, { name: 'Jude', chapters: 1 }, { name: 'Revelation', chapters: 22 }
 ];
 
+type BibleApiVerse = {
+  book_id: string;
+  book_name: string;
+  chapter: number;
+  verse: number;
+  text: string;
+};
+
+type BibleApiResponse = {
+  reference?: string;
+  verses?: BibleApiVerse[];
+  text?: string;
+  translation_id?: string;
+  translation_name?: string;
+  error?: string;
+};
+
+const BIBLE_API_BASE = 'https://dailybible.ca/api';
+
 export default function BibleBrowserScreen() {
   const [view, setView] = useState<'books' | 'chapters' | 'verses' | 'content'>('books');
   const [selectedBook, setSelectedBook] = useState<typeof BIBLE_BOOKS[0] | null>(null);
@@ -40,12 +59,16 @@ export default function BibleBrowserScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [hasSaved, setHasSaved] = useState(false);
+  const [chapterVerses, setChapterVerses] = useState<BibleApiVerse[]>([]);
+  const [chapterLoading, setChapterLoading] = useState(false);
+  const [chapterError, setChapterError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchProfile();
+    void fetchProfile();
   }, []);
 
   const fetchProfile = async () => {
+    if (!supabase) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
@@ -53,16 +76,64 @@ export default function BibleBrowserScreen() {
     }
   };
 
+  const preferredTranslation = profile?.preferred_translation || 'KJV';
+  const readerTranslation = 'KJV';
+  const isUsingKjvFallback = preferredTranslation !== 'KJV';
+
+  const selectedVerseData = useMemo(
+    () => chapterVerses.find(item => item.verse === selectedVerse) || null,
+    [chapterVerses, selectedVerse],
+  );
+
+  const fetchChapter = async (bookName: string, chapter: number) => {
+    setChapterLoading(true);
+    setChapterError(null);
+    setChapterVerses([]);
+
+    try {
+      const reference = `${bookName} ${chapter}`;
+      const response = await fetch(`${BIBLE_API_BASE}/${encodeURIComponent(reference)}?translation=kjv`, {
+        headers: { Accept: 'application/json' },
+      });
+
+      const data = await response.json() as BibleApiResponse;
+      if (!response.ok || data.error) {
+        throw new Error(data.error || `Bible service returned ${response.status}.`);
+      }
+
+      const verses = Array.isArray(data.verses) ? data.verses : [];
+      if (!verses.length) {
+        throw new Error('No scripture text was returned for this chapter.');
+      }
+
+      setChapterVerses(verses);
+    } catch (error: any) {
+      console.error('[BibleBrowser] Could not load chapter:', error);
+      setChapterError(
+        error?.message || 'The Bible text could not load right now. Please try again.'
+      );
+    } finally {
+      setChapterLoading(false);
+    }
+  };
+
   const handleBookSelect = (book: typeof BIBLE_BOOKS[0]) => {
     setSelectedBook(book);
+    setSelectedChapter(null);
+    setSelectedVerse(null);
+    setChapterVerses([]);
+    setChapterError(null);
     setView('chapters');
     setHasSaved(false);
   };
 
   const handleChapterSelect = (chapter: number) => {
+    if (!selectedBook) return;
     setSelectedChapter(chapter);
+    setSelectedVerse(null);
     setView('verses');
     setHasSaved(false);
+    void fetchChapter(selectedBook.name, chapter);
   };
 
   const handleVerseSelect = (verse: number) => {
@@ -72,21 +143,20 @@ export default function BibleBrowserScreen() {
   };
 
   const handleSave = async () => {
-    if (!profile || !selectedBook || !selectedChapter || !selectedVerse || isSaving || hasSaved) return;
-    
+    if (!profile || !selectedBook || !selectedChapter || !selectedVerseData || isSaving || hasSaved) return;
+
     setIsSaving(true);
     try {
-      // Note: In content view, we have a mock text. We should save what's there.
       const scripture = {
-        verse: "This is where the actual scripture text would appear. In a production app, we would fetch this from a Bible API or local database using the selected reference and translation.",
-        reference: `${selectedBook.name} ${selectedChapter}:${selectedVerse}`,
-        explanation: `Reading from the ${profile.preferred_translation || 'KJV'} translation.`
+        verse: selectedVerseData.text.trim(),
+        reference: `${selectedBook.name} ${selectedChapter}:${selectedVerseData.verse}`,
+        explanation: `Reading from the ${readerTranslation} translation.`
       };
 
       await saveScripture(
-        profile.id, 
-        scripture, 
-        profile.preferred_translation || 'KJV',
+        profile.id,
+        scripture,
+        readerTranslation,
         `Bible Browse: ${selectedBook.name}`
       );
       setHasSaved(true);
@@ -110,19 +180,31 @@ export default function BibleBrowserScreen() {
           <ChevronLeft color="#d4af37" size={24} />
         </TouchableOpacity>
       )}
-      <Text style={styles.headerTitle}>
-        {view === 'books' ? 'Select Book' : 
-         view === 'chapters' ? selectedBook?.name : 
-         view === 'verses' ? `${selectedBook?.name} ${selectedChapter}` : 
-         `${selectedBook?.name} ${selectedChapter}:${selectedVerse}`}
-      </Text>
+      <View style={styles.headerTextWrap}>
+        <Text style={styles.headerTitle}>
+          {view === 'books' ? 'Select Book' :
+           view === 'chapters' ? selectedBook?.name :
+           view === 'verses' ? `${selectedBook?.name} ${selectedChapter}` :
+           `${selectedBook?.name} ${selectedChapter}:${selectedVerse}`}
+        </Text>
+        <Text style={styles.translationLabel}>{readerTranslation} READER</Text>
+      </View>
     </View>
   );
+
+  const renderTranslationNotice = () => isUsingKjvFallback ? (
+    <View style={styles.translationNotice}>
+      <Text style={styles.translationNoticeText}>
+        Your preferred translation is {preferredTranslation}. Full-text {preferredTranslation} licensing is not connected yet, so the Bible reader is showing the public-domain KJV for now.
+      </Text>
+    </View>
+  ) : null;
 
   const renderBooks = () => (
     <FlatList
       data={BIBLE_BOOKS}
       keyExtractor={(item) => item.name}
+      ListHeaderComponent={renderTranslationNotice}
       renderItem={({ item }) => (
         <TouchableOpacity style={styles.listItem} onPress={() => handleBookSelect(item)}>
           <Text style={styles.listItemText}>{item.name}</Text>
@@ -158,21 +240,42 @@ export default function BibleBrowserScreen() {
   };
 
   const renderVerses = () => {
-    // Mocking verse count as 30 for all chapters for now
-    const verses = Array.from({ length: 30 }, (_, i) => i + 1);
+    if (chapterLoading) {
+      return (
+        <View style={styles.centerState}>
+          <ActivityIndicator color="#d4af37" size="large" />
+          <Text style={styles.centerStateText}>Loading {selectedBook?.name} {selectedChapter}…</Text>
+        </View>
+      );
+    }
+
+    if (chapterError) {
+      return (
+        <View style={styles.centerState}>
+          <Text style={styles.errorText}>{chapterError}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => selectedBook && selectedChapter && void fetchChapter(selectedBook.name, selectedChapter)}
+          >
+            <Text style={styles.retryButtonText}>TRY AGAIN</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     return (
       <FlatList
-        data={verses}
+        data={chapterVerses}
         numColumns={6}
-        keyExtractor={(item) => item.toString()}
+        keyExtractor={(item) => `${item.chapter}-${item.verse}`}
         renderItem={({ item }) => (
           <MotionView
             whileHover={{ scale: 1.05, backgroundColor: 'rgba(212, 175, 55, 0.1)' }}
             whileTap={{ scale: 0.95 }}
             style={{ flex: 1, margin: 4 }}
           >
-            <TouchableOpacity style={[styles.gridItemSmall, { margin: 0 }]} onPress={() => handleVerseSelect(item)}>
-              <Text style={styles.gridItemTextSmall}>{item}</Text>
+            <TouchableOpacity style={[styles.gridItemSmall, { margin: 0 }]} onPress={() => handleVerseSelect(item.verse)}>
+              <Text style={styles.gridItemTextSmall}>{item.verse}</Text>
             </TouchableOpacity>
           </MotionView>
         )}
@@ -182,20 +285,28 @@ export default function BibleBrowserScreen() {
   };
 
   const renderContent = () => (
-    <ScrollView style={styles.contentContainer}>
+    <ScrollView style={styles.contentContainer} contentContainerStyle={styles.contentScroll}>
       <View style={styles.contentCard}>
         <BookOpen color="#d4af37" size={32} style={{ alignSelf: 'center', marginBottom: 20 }} />
         <Text style={styles.referenceText}>
-          {selectedBook?.name} {selectedChapter}:{selectedVerse} ({profile?.preferred_translation || 'KJV'})
+          {selectedBook?.name} {selectedChapter}:{selectedVerse} ({readerTranslation})
         </Text>
-        <Text style={styles.verseBody}>
-          This is where the actual scripture text would appear. In a production app, we would fetch this from a Bible API or local database using the selected reference and translation.
-        </Text>
-        
-        <TouchableOpacity 
-          style={[styles.actionButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#10B981', marginBottom: 15 }, hasSaved && { opacity: 0.7 }]}
+
+        {selectedVerseData ? (
+          <Text style={styles.verseBody}>“{selectedVerseData.text.trim()}”</Text>
+        ) : (
+          <Text style={styles.errorText}>That verse could not be found. Go back and choose it again.</Text>
+        )}
+
+        <TouchableOpacity
+          style={[
+            styles.actionButton,
+            styles.saveButton,
+            hasSaved && { opacity: 0.7 },
+            !selectedVerseData && { opacity: 0.45 },
+          ]}
           onPress={handleSave}
-          disabled={isSaving || hasSaved}
+          disabled={isSaving || hasSaved || !selectedVerseData}
         >
           {isSaving ? (
             <ActivityIndicator size="small" color="#10B981" />
@@ -209,10 +320,7 @@ export default function BibleBrowserScreen() {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => setView('books')}
-        >
+        <TouchableOpacity style={styles.actionButton} onPress={() => setView('books')}>
           <Text style={styles.actionButtonText}>BROWSE MORE</Text>
         </TouchableOpacity>
       </View>
@@ -250,14 +358,38 @@ const styles = StyleSheet.create({
   backButton: {
     marginRight: 15,
   },
+  headerTextWrap: {
+    flex: 1,
+  },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#d4af37',
     fontFamily: 'Playfair Display',
   },
+  translationLabel: {
+    marginTop: 4,
+    color: 'rgba(245, 215, 122, 0.55)',
+    fontSize: 8,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+  },
   main: {
     flex: 1,
+  },
+  translationNotice: {
+    marginBottom: 16,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.25)',
+    backgroundColor: 'rgba(212, 175, 55, 0.05)',
+  },
+  translationNoticeText: {
+    color: 'rgba(255, 255, 255, 0.72)',
+    fontFamily: 'Playfair Display',
+    fontSize: 13,
+    lineHeight: 20,
   },
   listContent: {
     padding: 20,
@@ -307,8 +439,45 @@ const styles = StyleSheet.create({
     color: '#f5d77a',
     fontWeight: '500',
   },
+  centerState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 30,
+  },
+  centerStateText: {
+    marginTop: 14,
+    color: 'rgba(255, 255, 255, 0.68)',
+    fontFamily: 'Playfair Display',
+    fontSize: 14,
+  },
+  errorText: {
+    color: '#ffb4b4',
+    fontFamily: 'Playfair Display',
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: 18,
+  },
+  retryButton: {
+    minHeight: 44,
+    paddingHorizontal: 24,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#d4af37',
+  },
+  retryButtonText: {
+    color: '#d4af37',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+  },
   contentContainer: {
     flex: 1,
+  },
+  contentScroll: {
     padding: 20,
   },
   contentCard: {
@@ -345,6 +514,12 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderRadius: 30,
     alignItems: 'center',
+  },
+  saveButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#10B981',
+    marginBottom: 15,
   },
   actionButtonText: {
     color: '#0b1e3d',
