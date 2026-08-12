@@ -11,11 +11,13 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Send, PhoneCall, ThumbsUp, ThumbsDown, Volume2, Square } from 'lucide-react';
-import { getChatResponseStream, generateSpeech, ChatHistoryMessage } from '../services/ai';
+import { generateSpeech } from '../services/ai';
 import { ChatMessage } from '../types';
-import { saveAIFeedback } from '../services/supabase';
+import { saveAIFeedback, supabase } from '../services/supabase';
+import { createCheckoutSession } from '../services/stripe';
 import { useUser } from '../UserContext';
 import { DAVID_CHAT_GREETINGS } from '../constants/persona';
+import DailyLimitUpgrade from '../components/DailyLimitUpgrade';
 
 export default function ChatScreen({ navigation, route }: any) {
   const { profile } = useUser();
@@ -23,9 +25,16 @@ export default function ChatScreen({ navigation, route }: any) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
+  const [limitReached, setLimitReached] = useState(false);
+  const [upgradeLoading, setUpgradeLoading] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const initialPromptHandledRef = useRef<string | null>(null);
+
+  const isPaid = profile?.role === 'owner'
+    || profile?.subscription_tier === 'owner'
+    || profile?.subscription_tier === 'plus'
+    || profile?.subscription_tier === 'pro';
 
   const submitMessage = async (
     rawText: string,
@@ -34,6 +43,14 @@ export default function ChatScreen({ navigation, route }: any) {
   ) => {
     const trimmedInput = rawText.trim();
     if (!trimmedInput || loading) return;
+
+    if (!supabase) {
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: "I can't connect right now. Please refresh and try again.",
+      }]);
+      return;
+    }
 
     const userMessage: ChatMessage = { role: 'user', content: trimmedInput };
     const nextMessages = [...baseMessages, userMessage];
@@ -44,50 +61,52 @@ export default function ChatScreen({ navigation, route }: any) {
     setLoading(true);
 
     try {
-      const history: ChatHistoryMessage[] = baseMessages.map(msg => ({
-        role: msg.role === 'user' ? 'user' : 'assistant',
-        content: msg.content,
-      }));
-      history.push({ role: 'user', content: userMessage.content });
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session?.access_token) {
+        throw new Error('Your sign-in session expired. Please sign in again.');
+      }
 
-      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !anonKey) {
+        throw new Error('The app connection is not configured.');
+      }
 
-      setMessages(prev => {
-        const newMessages = [...prev];
-        newMessages[modelMessageIndex] = { role: 'assistant', content: '' };
-        return newMessages;
+      const response = await fetch(`${supabaseUrl}/functions/v1/david-chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': anonKey,
+        },
+        body: JSON.stringify({
+          message: trimmedInput,
+          mode: 'chat',
+        }),
       });
 
-      const response = await getChatResponseStream(
-        history,
-        (fullText) => {
-          setMessages(prev => {
-            const newMessages = [...prev];
-            newMessages[modelMessageIndex] = { role: 'assistant', content: fullText };
-            return newMessages;
-          });
-        },
-        profile?.preferred_response_length || 'medium',
-        undefined,
-        { userId: profile?.id || null },
-      );
+      const data = await response.json().catch(() => ({}));
 
-      if (!response) {
-        setMessages(prev => {
-          const newMessages = [...prev];
-          newMessages[modelMessageIndex] = {
-            role: 'assistant',
-            content: "Something didn't come through clearly. Try saying that again, a little slower.",
-          };
-          return newMessages;
-        });
+      if (response.status === 429 || data?.limitReached || data?.code === 'DAILY_LIMIT_REACHED') {
+        setLimitReached(true);
+        setMessages(baseMessages);
+        if (clearComposer) setInput(trimmedInput);
+        return;
       }
+
+      if (!response.ok) {
+        throw new Error(data?.error || data?.message || 'David could not respond right now.');
+      }
+
+      const reply = typeof data?.reply === 'string' ? data.reply.trim() : '';
+      if (!reply) {
+        throw new Error('David returned an empty response.');
+      }
+
+      setMessages([...nextMessages, { role: 'assistant', content: reply }]);
     } catch (error: any) {
       console.error('Chat Error:', error);
-      let errorMessage = "I'm having a bit of trouble connecting right now. Let's try again in a moment.";
-      if (error?.message?.includes('quota') || error?.message?.includes('rate limit')) {
-        errorMessage = "I need a short breather — a lot of people are talking with me right now. Try me again in a few minutes.";
-      }
+      const errorMessage = error?.message || "I'm having a bit of trouble connecting right now. Let's try again in a moment.";
       setMessages(prev => {
         const newMessages = [...prev];
         if (newMessages.length > modelMessageIndex) {
@@ -162,7 +181,6 @@ export default function ChatScreen({ navigation, route }: any) {
       const audioUrl = await generateSpeech(text);
       if (audioUrl) {
         const audio = new Audio(audioUrl);
-        // Keep optional read-aloud calm and below normal media volume.
         audio.volume = 0.55;
         currentAudioRef.current = audio;
         audio.onended = () => {
@@ -188,9 +206,32 @@ export default function ChatScreen({ navigation, route }: any) {
     }
   };
 
+  const handleUpgrade = async (plan: 'plus' | 'pro') => {
+    if (upgradeLoading) return;
+    try {
+      setUpgradeLoading(true);
+      await createCheckoutSession(plan);
+    } catch (error) {
+      console.error('Upgrade error:', error);
+    } finally {
+      setUpgradeLoading(false);
+    }
+  };
+
   useEffect(() => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
   }, [messages]);
+
+  if (limitReached && !isPaid) {
+    return (
+      <DailyLimitUpgrade
+        onUpgradePlus={() => void handleUpgrade('plus')}
+        onUpgradePro={() => void handleUpgrade('pro')}
+        onDismiss={() => setLimitReached(false)}
+        busy={upgradeLoading}
+      />
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -202,7 +243,9 @@ export default function ChatScreen({ navigation, route }: any) {
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>David</Text>
         </View>
-        <Text style={styles.headerSubtitle}>Free text chat</Text>
+        <Text style={styles.headerSubtitle}>
+          {isPaid ? 'Unlimited text chat' : '3 free messages daily'}
+        </Text>
         <TouchableOpacity
           style={styles.headerCallButton}
           onPress={() => navigation.navigate('Voice')}
