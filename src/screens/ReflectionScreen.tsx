@@ -2,17 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { motion } from 'motion/react';
 import { Sparkles, Bookmark, Check, Globe } from 'lucide-react';
-import { getVerseReflection, getVerseOfTheDay } from '../services/ai';
+import {
+  DailyReflectionLimitError,
+  getVerseReflection,
+  getVerseOfTheDay,
+  ReflectionRequestError,
+} from '../services/ai';
 import { saveScripture, supabase } from '../services/supabase';
+import { createCheckoutSession } from '../services/stripe';
 import { Scripture } from '../types';
 import { useUser } from '../UserContext';
+import { hasPremiumAccess } from '../utils/tier';
+import DailyLimitUpgrade from '../components/DailyLimitUpgrade';
 
 const MotionView = motion(View);
 
 const TRANSLATIONS = ['NIV', 'KJV', 'NLT', 'ESV', 'NKJV', 'CSB'];
 
 export default function ReflectionScreen({ navigation }: any) {
-  const { profile } = useUser();
+  const { profile, signOut } = useUser();
   const [refreshing, setRefreshing] = useState(false);
   const [dailyVerse, setDailyVerse] = useState<Scripture | null>(null);
   const [reflection, setReflection] = useState<string | null>(null);
@@ -20,6 +28,12 @@ export default function ReflectionScreen({ navigation }: any) {
   const [isSaving, setIsSaving] = useState(false);
   const [hasSaved, setHasSaved] = useState(false);
   const [showTranslations, setShowTranslations] = useState(false);
+  const [limitReached, setLimitReached] = useState(false);
+  const [upgradeLoading, setUpgradeLoading] = useState(false);
+  const [reflectionError, setReflectionError] = useState<string | null>(null);
+  const [signInRequired, setSignInRequired] = useState(false);
+
+  const isPaid = hasPremiumAccess(profile);
 
   const fetchDailyVerse = async () => {
     try {
@@ -61,6 +75,17 @@ export default function ReflectionScreen({ navigation }: any) {
   };
 
   const handleReflect = async () => {
+    if (loadingReflection || !dailyVerse) return;
+
+    setReflectionError(null);
+    setSignInRequired(false);
+
+    if (!profile || profile.id === 'guest') {
+      setReflectionError('Sign in to use your three free reflections each day.');
+      setSignInRequired(true);
+      return;
+    }
+
     setLoadingReflection(true);
     try {
       const verse = dailyVerse?.verse || "";
@@ -69,10 +94,33 @@ export default function ReflectionScreen({ navigation }: any) {
         const text = await getVerseReflection(verse, ref);
         setReflection(text);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      if (error instanceof DailyReflectionLimitError) {
+        setLimitReached(true);
+        return;
+      }
+
+      if (error instanceof ReflectionRequestError && error.code === 'AUTH_REQUIRED') {
+        setSignInRequired(true);
+      }
+      setReflectionError(error?.message || 'David could not create a reflection right now. Please try again.');
     } finally {
       setLoadingReflection(false);
+    }
+  };
+
+  const handleUpgrade = async (plan: 'plus' | 'pro') => {
+    if (upgradeLoading) return;
+    try {
+      setUpgradeLoading(true);
+      await createCheckoutSession(plan);
+    } catch (error: any) {
+      console.error('Upgrade error:', error);
+      setReflectionError(error?.message || 'Unable to start checkout right now.');
+      setLimitReached(false);
+    } finally {
+      setUpgradeLoading(false);
     }
   };
 
@@ -87,6 +135,18 @@ export default function ReflectionScreen({ navigation }: any) {
     }
   };
 
+  if (limitReached && !isPaid) {
+    return (
+      <DailyLimitUpgrade
+        feature="reflections"
+        onUpgradePlus={() => void handleUpgrade('plus')}
+        onUpgradePro={() => void handleUpgrade('pro')}
+        onDismiss={() => setLimitReached(false)}
+        busy={upgradeLoading}
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView 
@@ -97,6 +157,9 @@ export default function ReflectionScreen({ navigation }: any) {
         <View style={styles.header}>
           <Text style={styles.title}>DAILY REFLECTION</Text>
           <View style={styles.titleUnderline} />
+          <Text style={styles.allowanceText}>
+            {isPaid ? 'UNLIMITED REFLECTIONS' : '3 FREE REFLECTIONS DAILY'}
+          </Text>
         </View>
 
         <View style={styles.versionRow}>
@@ -199,6 +262,22 @@ export default function ReflectionScreen({ navigation }: any) {
               )}
             </TouchableOpacity>
           )}
+
+          {reflectionError && (
+            <View style={styles.reflectionErrorBox}>
+              <Text style={styles.reflectionErrorText}>{reflectionError}</Text>
+              {signInRequired && (
+                <TouchableOpacity
+                  style={styles.signInButton}
+                  onPress={() => void signOut()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Sign in"
+                >
+                  <Text style={styles.signInButtonText}>SIGN IN</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </MotionView>
 
         <View style={styles.infoBox}>
@@ -246,6 +325,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#d4af37',
     marginTop: 8,
     opacity: 0.3,
+  },
+  allowanceText: {
+    color: 'rgba(212, 175, 55, 0.68)',
+    fontSize: 9,
+    fontWeight: 'bold',
+    letterSpacing: 1.3,
+    marginTop: 12,
   },
   versionRow: {
     alignItems: 'center',
@@ -385,6 +471,36 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
     letterSpacing: 0.8,
+  },
+  reflectionErrorBox: {
+    width: '100%',
+    marginTop: 16,
+    padding: 14,
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+    borderRadius: 12,
+  },
+  reflectionErrorText: {
+    color: '#fecaca',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  signInButton: {
+    marginTop: 12,
+    minHeight: 40,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    backgroundColor: '#d4af37',
+    borderRadius: 20,
+  },
+  signInButtonText: {
+    color: '#051020',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 1,
   },
   reflectionContainer: {
     marginTop: 24,

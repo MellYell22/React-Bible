@@ -26,6 +26,8 @@ type Props = {
   onDismiss: () => void;
   /** Optional: disables the buttons while a checkout request is in flight. */
   busy?: boolean;
+  /** Identifies which free daily allowance was reached. */
+  feature?: 'conversations' | 'reflections';
 };
 
 /**
@@ -41,6 +43,7 @@ export default function DailyLimitUpgrade({
   onUpgradePro,
   onDismiss,
   busy = false,
+  feature = 'conversations',
 }: Props) {
   const plans = [
     { data: PLANS.FREE, current: true, featured: false },
@@ -55,7 +58,7 @@ export default function DailyLimitUpgrade({
 
         <Text style={styles.message}>
           We hope today’s scripture and encouragement brought you peace. You’ve reached
-          today’s free conversations, but your journey doesn’t have to end here.
+          today’s three free {feature}, but your journey doesn’t have to end here.
         </Text>
 
         <Text style={styles.messageQuiet}>
