@@ -89,7 +89,8 @@ export default async function handler(req: any, res: any) {
 
   try {
     const supabase = getSupabaseUserClient(accessToken);
-    const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
+    const authClient: any = supabase.auth;
+    const { data: { user }, error: userError } = await authClient.getUser(accessToken);
     if (userError || !user) {
       return res.status(401).json({ code: 'AUTH_REQUIRED', error: 'Your sign-in session expired. Please sign in again.' });
     }
