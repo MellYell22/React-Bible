@@ -14,6 +14,12 @@ import {
   OPENAI_API_KEY_ENV_NAME,
 } from './lib/openaiEnv';
 import { handleMobileBuilderHttp } from './lib/mobile-builder/http';
+import {
+  claimReflectionUsage,
+  getBearerToken,
+  refundReflectionUsage,
+  ReflectionUsageClaim,
+} from './lib/reflectionUsage';
 import { DAVID_PERSONALITY_PROMPT, DAVID_CHAT_TEMPERATURE } from './src/constants/persona';
 import { buildDavidScriptureGuidance, buildDavidSystemPromptFromGuidance, resolveMoodKey } from './src/utils/davidMoodContext';
 const ELEVENLABS_TTS_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
@@ -596,13 +602,59 @@ Format your response as valid JSON:
 });
 
 app.post("/api/reflection", async (req, res) => {
-  const { verse, reference } = req.body;
+  const verse = typeof req.body?.verse === 'string' ? req.body.verse.trim() : '';
+  const reference = typeof req.body?.reference === 'string' ? req.body.reference.trim() : '';
+
+  res.setHeader('Cache-Control', 'no-store');
+
+  if (!verse || !reference || verse.length > 2000 || reference.length > 200) {
+    return res.status(400).json({ error: 'A valid verse and reference are required.' });
+  }
+
+  const accessToken = getBearerToken(req.headers.authorization);
+  if (!accessToken) {
+    return res.status(401).json({
+      code: 'AUTH_REQUIRED',
+      error: 'Please sign in to use your three free reflections each day.',
+    });
+  }
+
+  if (!supabase) {
+    return res.status(503).json({ error: 'Reflection limits are temporarily unavailable.' });
+  }
+
+  if (!getOpenAIApiKey()) {
+    return res.status(503).json({ error: 'Reflection service is temporarily unavailable.' });
+  }
 
   console.log("OPENAI REQUEST SENT - Reflection");
 
+  let userId: string | null = null;
+  let claim: ReflectionUsageClaim | null = null;
+
   try {
+    const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
+    if (userError || !user) {
+      return res.status(401).json({
+        code: 'AUTH_REQUIRED',
+        error: 'Your sign-in session expired. Please sign in again.',
+      });
+    }
+
+    userId = user.id;
+    claim = await claimReflectionUsage(supabase, user.id);
+    if (!claim.allowed) {
+      return res.status(429).json({
+        code: 'DAILY_REFLECTION_LIMIT_REACHED',
+        limitReached: true,
+        dailyLimit: claim.dailyLimit,
+        used: claim.used,
+        remaining: 0,
+      });
+    }
+
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: process.env.OPENAI_MODEL || "gpt-4o",
       messages: [
         { role: "system", content: DAVID_PERSONALITY_PROMPT },
         { 
@@ -615,10 +667,26 @@ Briefly explain how it applies to a person's life today. The reflection must be 
     });
 
     console.log("OPENAI RESPONSE RECEIVED - Reflection");
-    res.json({ text: completion.choices[0].message.content });
+    const text = completion.choices[0]?.message?.content?.trim();
+    if (!text) throw new Error('OpenAI returned an empty reflection.');
+
+    return res.json({
+      text,
+      usage: {
+        dailyLimit: claim.dailyLimit,
+        used: claim.used,
+        remaining: claim.remaining,
+        unlimited: claim.unlimited,
+      },
+    });
   } catch (error: any) {
     console.error("[OpenAI] Reflection error:", error);
-    res.status(500).json({ error: error.message });
+
+    if (userId && claim?.claimId) {
+      await refundReflectionUsage(supabase, userId, claim.claimId);
+    }
+
+    return res.status(500).json({ error: 'David could not create a reflection right now. Please try again.' });
   }
 });
 

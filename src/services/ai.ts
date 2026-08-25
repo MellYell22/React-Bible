@@ -198,20 +198,69 @@ export const getMoodScriptures = async (
   return response.json();
 };
 
+export class ReflectionRequestError extends Error {
+  code: string;
+  status: number;
+
+  constructor(message: string, code: string, status: number) {
+    super(message);
+    this.name = 'ReflectionRequestError';
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export class DailyReflectionLimitError extends ReflectionRequestError {
+  constructor(message = 'You have reached today’s free reflection limit.') {
+    super(message, 'DAILY_REFLECTION_LIMIT_REACHED', 429);
+    this.name = 'DailyReflectionLimitError';
+  }
+}
+
 export const getVerseReflection = async (verse: string, reference: string): Promise<string> => {
   console.log("OPENAI REQUEST SENT - Reflection");
+
+  if (!supabase) {
+    throw new ReflectionRequestError('The app connection is not configured.', 'CONNECTION_UNAVAILABLE', 503);
+  }
+
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session?.access_token) {
+    throw new ReflectionRequestError(
+      'Please sign in to use your three free reflections each day.',
+      'AUTH_REQUIRED',
+      401,
+    );
+  }
+
   const response = await fetch('/api/reflection', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`,
+    },
     body: JSON.stringify({ verse, reference })
   });
 
+  const data = await response.json().catch(() => ({}));
+
+  if (
+    response.status === 429
+    || data?.limitReached
+    || data?.code === 'DAILY_REFLECTION_LIMIT_REACHED'
+  ) {
+    throw new DailyReflectionLimitError(data?.error);
+  }
+
   if (!response.ok) {
-    throw new Error("Failed to generate reflection.");
+    throw new ReflectionRequestError(
+      data?.error || 'Failed to generate reflection.',
+      data?.code || 'REFLECTION_REQUEST_FAILED',
+      response.status,
+    );
   }
 
   console.log("OPENAI RESPONSE RECEIVED - Reflection");
-  const data = await response.json();
   return data.text;
 };
 

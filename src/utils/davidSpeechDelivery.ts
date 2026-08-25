@@ -146,6 +146,14 @@ export function humanizeForTts(
   if (options.skipHumanize) return text.trim();
 
   const prepared = preparePlainText(text);
+
+  // Session greetings are already intentionally short. Do not run them through
+  // the three-sentence one-breath limiter: an opening such as
+  // "Hey... good to see you. I'm David. What's going on with you today?"
+  // otherwise gets cut off before the final question because "Hey..." counts
+  // as its own sentence.
+  if (options.isGreeting) return prepared.trim();
+
   return enforceOneBreath(prepared).trim();
 }
 
@@ -155,8 +163,8 @@ export function humanizeForTts(
  * Important:
  * - Never insert periods every one or two words.
  * - Never split a grammatical phrase just to manufacture a pause.
- * - Ellipses are normalized into a clean sentence stop because repeated dots
- *   often make ElevenLabs sound hesitant or robotic.
+ * - Ellipses become a light comma-like pause instead of an extra sentence,
+ *   which keeps greetings and gentle lead-ins flowing naturally.
  * - Dashes and semicolons become light commas so the voice can keep flowing.
  * - Existing sentence endings remain the main pacing signal.
  */
@@ -166,8 +174,9 @@ export function sanitizeForDavidSpeech(text: string): string {
   let t = preparePlainText(text);
   t = protectDecimalPoints(t);
 
-  // Long/stacked punctuation creates exaggerated or nervous delivery.
-  t = t.replace(/\s*\.{2,}\s*/g, '. ');
+  // Long/stacked punctuation can create exaggerated, disconnected delivery.
+  // Treat an ellipsis as one light pause rather than a new full sentence.
+  t = t.replace(/\s*\.{2,}\s*/g, ', ');
   t = t.replace(/!{2,}/g, '!');
   t = t.replace(/\?{2,}/g, '?');
 
@@ -176,8 +185,8 @@ export function sanitizeForDavidSpeech(text: string): string {
   t = t.replace(/\s*[;:]+\s*/g, ', ');
   t = t.replace(/,{2,}/g, ',');
 
-  // A few common greeting shapes sound much more natural when "I'm David"
-  // is allowed to land as one complete thought.
+  // Let "I'm David" land as one complete thought without chopping the words
+  // around it into artificial micro-pauses.
   t = t.replace(/\bHey,\s*I'm David,\s*/gi, "Hey, I'm David. ");
   t = t.replace(/\bHey\s+I'm David,\s*/gi, "Hey, I'm David. ");
 

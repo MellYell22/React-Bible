@@ -26,7 +26,9 @@ const FAST_OUTPUT_FORMATS = new Set([
   'mp3_44100_64',
   'mp3_44100_96',
 ]);
-const DEFAULT_OUTPUT_FORMAT = 'mp3_22050_32';
+// 44.1kHz / 64kbps stays lightweight for live web playback while avoiding the
+// thin, telephone-like quality of the smallest format.
+const DEFAULT_OUTPUT_FORMAT = 'mp3_44100_64';
 const requestedOutputFormat = (process.env.ELEVENLABS_OUTPUT_FORMAT || '').trim();
 const ELEVENLABS_OUTPUT_FORMAT = FAST_OUTPUT_FORMATS.has(requestedOutputFormat)
   ? requestedOutputFormat
@@ -68,8 +70,6 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'Missing text' });
   }
 
-  // Keep one source of truth for David's pacing. This sanitizer is
-  // intentionally idempotent: it never inserts periods on a word-count rule.
   const cleanText = sanitizeForDavidSpeech(cleanTranscript(text));
 
   const apiKey = process.env.ELEVENLABS_API_KEY;
@@ -92,11 +92,12 @@ export default async function handler(req: any, res: any) {
       text: cleanText,
       model_id: ELEVENLABS_MODEL,
       voice_settings: {
-        // Calm, unhurried delivery: a little more stable than before, noticeably
-        // slower, no style exaggeration, and no speaker boost intensity.
-        stability: 0.64,
-        similarity_boost: 0.82,
-        speed: 0.86,
+        // David should sound like someone sitting beside the user, not an
+        // announcer. Slow the cadence, keep enough variation to avoid a robotic
+        // read, and disable speaker boost so the source audio is not pushed.
+        stability: 0.62,
+        similarity_boost: 0.86,
+        speed: 0.80,
         style: 0.0,
         use_speaker_boost: false,
       },

@@ -20,8 +20,11 @@ const TRANSLATIONS = ['NIV', 'KJV', 'NLT', 'ESV', 'NKJV', 'CSB'];
 
 export default function AuthScreen() {
   const { continueAsGuest } = useUser();
+  const [firstName, setFirstName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
@@ -30,16 +33,31 @@ export default function AuthScreen() {
   const [showTranslations, setShowTranslations] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const showSignUp = () => {
+    setError(null);
+    setIsResettingPassword(false);
+    setIsSignUp(true);
+  };
+
+  const showSignIn = () => {
+    setError(null);
+    setIsResettingPassword(false);
+    setIsSignUp(false);
+    setConfirmPassword('');
+    setAcceptedTerms(false);
+  };
+
   const handleAuth = async () => {
     setError(null);
+
     if (isResettingPassword) {
-      if (!email) {
+      if (!email.trim()) {
         setError('Please enter your email');
         return;
       }
       setLoading(true);
       try {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
           redirectTo: window.location.origin,
         });
         if (error) throw error;
@@ -53,22 +71,47 @@ export default function AuthScreen() {
       return;
     }
 
-    if (!email || !password) {
+    if (isSignUp && !firstName.trim()) {
+      setError('Please enter your first name');
+      return;
+    }
+
+    if (!email.trim() || !password) {
       setError('Please enter both email and password');
+      return;
+    }
+
+    if (isSignUp && password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    if (isSignUp && !acceptedTerms) {
+      setError('Please agree to the Terms and Privacy Policy to create your account');
       return;
     }
 
     setLoading(true);
     try {
       if (isSignUp) {
+        const cleanFirstName = firstName.trim();
+        const cleanEmail = email.trim();
         const emailRedirectTo =
           typeof window !== 'undefined'
             ? `${window.location.origin}`
             : 'https://www.mybibleaicompanion.com';
+
         const { data, error } = await supabase.auth.signUp({
-          email,
+          email: cleanEmail,
           password,
-          options: { emailRedirectTo },
+          options: {
+            emailRedirectTo,
+            data: {
+              full_name: cleanFirstName,
+              name: cleanFirstName,
+              preferred_translation: preferredTranslation,
+            },
+          },
         });
         if (error) throw error;
 
@@ -98,7 +141,10 @@ export default function AuthScreen() {
           alert('Check your email to confirm your account, then sign in.');
         }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
         if (error) throw error;
       }
     } catch (error: any) {
@@ -110,7 +156,11 @@ export default function AuthScreen() {
 
   return (
     <FullScreenBackground center={false}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Header Navigation */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -131,8 +181,11 @@ export default function AuthScreen() {
           </View>
 
           <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.signUpButton}>
-              <Text style={styles.signUpText}>SIGN UP</Text>
+            <TouchableOpacity
+              style={styles.signUpButton}
+              onPress={isSignUp ? showSignIn : showSignUp}
+            >
+              <Text style={styles.signUpText}>{isSignUp ? 'SIGN IN' : 'SIGN UP'}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.headerIcon}>
               <Settings size={20} color="#d4af37" />
@@ -142,29 +195,33 @@ export default function AuthScreen() {
 
         {/* Translation Selector - Top Right */}
         <View style={styles.translationContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.translationSelector}
             onPress={() => setShowTranslations(!showTranslations)}
           >
-            <Text style={styles.translationLabel}>NIV</Text>
+            <Text style={styles.translationLabel}>{preferredTranslation}</Text>
             <Globe size={12} color="#d4af37" />
           </TouchableOpacity>
-          
+
           {showTranslations && (
             <View style={styles.translationDropdown}>
               {TRANSLATIONS.map(t => (
-                <TouchableOpacity 
-                  key={t} 
+                <TouchableOpacity
+                  key={t}
                   style={styles.dropdownItem}
                   onPress={() => {
                     setPreferredTranslation(t);
                     setShowTranslations(false);
                   }}
                 >
-                  <Text style={[
-                    styles.dropdownText,
-                    preferredTranslation === t && styles.dropdownTextActive
-                  ]}>{t}</Text>
+                  <Text
+                    style={[
+                      styles.dropdownText,
+                      preferredTranslation === t && styles.dropdownTextActive,
+                    ]}
+                  >
+                    {t}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -173,12 +230,37 @@ export default function AuthScreen() {
 
         {/* Main Content */}
         <View style={styles.mainContent}>
-          <Text style={styles.mainTitle}>ENTER SANCTUARY</Text>
+          <Text style={styles.mainTitle}>
+            {isResettingPassword
+              ? 'RESET PASSWORD'
+              : isSignUp
+                ? 'CREATE YOUR ACCOUNT'
+                : 'ENTER SANCTUARY'}
+          </Text>
 
           <View style={styles.form}>
             {error && (
               <View style={styles.errorContainer}>
                 <Text style={styles.errorText}>{error}</Text>
+              </View>
+            )}
+
+            {/* First Name Input */}
+            {isSignUp && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>FIRST NAME</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Your first name"
+                  placeholderTextColor="rgba(212, 175, 55, 0.4)"
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  autoCapitalize="words"
+                  autoComplete="name-given"
+                  textContentType="givenName"
+                  returnKeyType="next"
+                />
+                <Text style={styles.inputHint}>David can use this to greet you personally.</Text>
               </View>
             )}
 
@@ -192,8 +274,10 @@ export default function AuthScreen() {
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
+                autoComplete="email"
                 keyboardType="email-address"
-                onSubmitEditing={handleAuth}
+                returnKeyType={isResettingPassword ? 'send' : 'next'}
+                onSubmitEditing={isResettingPassword ? handleAuth : undefined}
               />
             </View>
 
@@ -202,9 +286,11 @@ export default function AuthScreen() {
               <View style={styles.inputGroup}>
                 <View style={styles.passwordHeader}>
                   <Text style={styles.inputLabel}>PASSWORD</Text>
-                  <TouchableOpacity onPress={() => setIsResettingPassword(true)}>
-                    <Text style={styles.forgotPasswordLink}>FORGOT PASSWORD?</Text>
-                  </TouchableOpacity>
+                  {!isSignUp && (
+                    <TouchableOpacity onPress={() => setIsResettingPassword(true)}>
+                      <Text style={styles.forgotPasswordLink}>FORGOT PASSWORD?</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
                 <TextInput
                   style={styles.input}
@@ -213,6 +299,28 @@ export default function AuthScreen() {
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry
+                  autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                  textContentType={isSignUp ? 'newPassword' : 'password'}
+                  returnKeyType={isSignUp ? 'next' : 'go'}
+                  onSubmitEditing={isSignUp ? undefined : handleAuth}
+                />
+              </View>
+            )}
+
+            {/* Confirm Password Input */}
+            {isSignUp && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>CONFIRM PASSWORD</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="••••••••"
+                  placeholderTextColor="rgba(212, 175, 55, 0.4)"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry
+                  autoComplete="new-password"
+                  textContentType="newPassword"
+                  returnKeyType="done"
                   onSubmitEditing={handleAuth}
                 />
               </View>
@@ -221,9 +329,11 @@ export default function AuthScreen() {
             {/* Remember Me Checkbox */}
             {!isResettingPassword && !isSignUp && (
               <View style={styles.rememberMeContainer}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.checkbox, rememberMe && styles.checkboxChecked]}
                   onPress={() => setRememberMe(!rememberMe)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: rememberMe }}
                 >
                   {rememberMe && <Text style={styles.checkmark}>✓</Text>}
                 </TouchableOpacity>
@@ -231,10 +341,28 @@ export default function AuthScreen() {
               </View>
             )}
 
-            {/* Sign In Button */}
-            <TouchableOpacity 
-              style={styles.signInButton} 
-              onPress={handleAuth} 
+            {/* Terms Checkbox */}
+            {isSignUp && (
+              <TouchableOpacity
+                style={styles.termsContainer}
+                onPress={() => setAcceptedTerms(!acceptedTerms)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: acceptedTerms }}
+                activeOpacity={0.75}
+              >
+                <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>
+                  {acceptedTerms && <Text style={styles.checkmark}>✓</Text>}
+                </View>
+                <Text style={styles.termsText}>
+                  I agree to the Terms of Service and Privacy Policy.
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Primary Auth Button */}
+            <TouchableOpacity
+              style={[styles.signInButton, loading && styles.primaryButtonDisabled]}
+              onPress={handleAuth}
               disabled={loading}
             >
               {loading ? (
@@ -248,10 +376,7 @@ export default function AuthScreen() {
 
             {/* Create Free Account Button */}
             {!isResettingPassword && !isSignUp && (
-              <TouchableOpacity 
-                style={styles.createAccountButton}
-                onPress={() => setIsSignUp(true)}
-              >
+              <TouchableOpacity style={styles.createAccountButton} onPress={showSignUp}>
                 <Text style={styles.createAccountText}>CREATE FREE ACCOUNT</Text>
               </TouchableOpacity>
             )}
@@ -268,16 +393,13 @@ export default function AuthScreen() {
 
             {/* Toggle between Sign In and Sign Up */}
             {isSignUp && (
-              <TouchableOpacity 
-                style={styles.toggleContainer}
-                onPress={() => setIsSignUp(false)}
-              >
+              <TouchableOpacity style={styles.toggleContainer} onPress={showSignIn}>
                 <Text style={styles.toggleText}>Already have an account? Sign in</Text>
               </TouchableOpacity>
             )}
 
             {isResettingPassword && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.toggleContainer}
                 onPress={() => setIsResettingPassword(false)}
               >
@@ -493,6 +615,14 @@ const styles = StyleSheet.create({
     fontFamily: 'Cinzel',
   },
 
+  inputHint: {
+    marginTop: 7,
+    color: 'rgba(245, 215, 122, 0.45)',
+    fontSize: 10,
+    lineHeight: 15,
+    fontFamily: 'Playfair Display',
+  },
+
   passwordHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -540,6 +670,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
+    flexShrink: 0,
   },
 
   checkboxChecked: {
@@ -561,6 +692,22 @@ const styles = StyleSheet.create({
     fontFamily: 'Cinzel',
   },
 
+  termsContainer: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 9,
+    marginBottom: 20,
+  },
+
+  termsText: {
+    flex: 1,
+    color: 'rgba(245, 215, 122, 0.68)',
+    fontSize: 10,
+    lineHeight: 16,
+    fontFamily: 'Playfair Display',
+  },
+
   // Sign In Button (Gold/Yellow)
   signInButton: {
     width: '100%',
@@ -569,6 +716,10 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: 'center',
     marginBottom: 12,
+  },
+
+  primaryButtonDisabled: {
+    opacity: 0.65,
   },
 
   signInButtonText: {
