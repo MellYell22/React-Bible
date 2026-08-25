@@ -1,11 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { Send, PhoneCall, ThumbsUp, ThumbsDown, Volume2, Square } from 'lucide-react';
-import { getChatResponseStream, generateSpeech, ChatHistoryMessage } from '../services/ai';
+import {
+  getChatResponseStream,
+  generateSpeech,
+  isChatLimitReachedError,
+  SPEECH_USER_TAP,
+  ChatHistoryMessage,
+} from '../services/ai';
 import { ChatMessage } from '../types';
 import { saveAIFeedback } from '../services/supabase';
 import { useUser } from '../UserContext';
 import { DAVID_CHAT_GREETINGS } from '../constants/persona';
+import DailyLimitUpgrade from '../components/DailyLimitUpgrade';
+import { createCheckoutSession } from '../services/stripe';
+import { trackEvent } from '../services/analytics';
+import type { CheckoutPlan } from '../services/stripe';
 
 export default function ChatScreen({ navigation, route }: any) {
   const { profile } = useUser();
@@ -14,6 +24,8 @@ export default function ChatScreen({ navigation, route }: any) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
+  const [limitReached, setLimitReached] = useState(false);
+  const [upgradeBusy, setUpgradeBusy] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const initialPromptHandledRef = useRef<string | null>(null);
@@ -68,6 +80,19 @@ export default function ChatScreen({ navigation, route }: any) {
         });
       }
     } catch (error: any) {
+      // The free daily limit is not a failure — it is the paywall. Roll the
+      // transcript back to before this turn so the conversation stays clean,
+      // then hand over to the upgrade screen.
+      if (isChatLimitReachedError(error)) {
+        console.log('[Chat] Free daily limit reached — showing upgrade screen.');
+        trackEvent('chat_limit_reached');
+        setMessages(baseMessages);
+        if (!clearComposer) setInput(trimmedInput);
+        setLimitReached(true);
+        setLoading(false);
+        return;
+      }
+
       console.error("Chat Error:", error);
       let errorMessage = "I'm having a bit of trouble connecting right now. Let's try again in a moment.";
       if (error?.message?.includes("quota") || error?.message?.includes("rate limit")) {
@@ -143,7 +168,8 @@ export default function ChatScreen({ navigation, route }: any) {
     setSpeakingIndex(index);
     try {
       // generateSpeech returns a blob URL — use HTML Audio directly
-      const audioUrl = await generateSpeech(text);
+      // Typed chat is silent. Audio here only ever comes from this button.
+      const audioUrl = await generateSpeech(text, { source: SPEECH_USER_TAP });
       if (audioUrl) {
         const audio = new Audio(audioUrl);
         currentAudioRef.current = audio;
@@ -173,6 +199,39 @@ export default function ChatScreen({ navigation, route }: any) {
   useEffect(() => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
   }, [messages]);
+
+  const startUpgrade = async (plan: CheckoutPlan) => {
+    if (upgradeBusy) return;
+    setUpgradeBusy(true);
+    try {
+      // Fired before the redirect: once Stripe takes over the tab, this code
+      // no longer runs, so a post-redirect event would never be sent.
+      trackEvent('checkout_started', { plan, from: 'chat_limit' });
+      // Redirects to Stripe Checkout on success, so this rarely returns.
+      await createCheckoutSession(plan);
+    } catch (error: any) {
+      console.error('[Chat] Upgrade could not start:', error?.message || error);
+      setUpgradeBusy(false);
+      setLimitReached(false);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: error?.message || "I couldn't open checkout just now. Please try again in a moment.",
+      }]);
+    }
+  };
+
+  // Free account has spent today's conversations — show the upgrade screen
+  // instead of the composer. Dismissing returns them to the transcript.
+  if (limitReached) {
+    return (
+      <DailyLimitUpgrade
+        onUpgradePlus={() => startUpgrade('plus')}
+        onUpgradePro={() => startUpgrade('pro')}
+        onDismiss={() => setLimitReached(false)}
+        busy={upgradeBusy}
+      />
+    );
+  }
 
   return (
     <KeyboardAvoidingView

@@ -10,7 +10,7 @@ export const PLANS = {
     priceId: null,
     features: [
       'Daily Verse of the Day',
-      '3 messages a day with David',
+      '5 messages a day with David',
       '3 reflections a day',
     ],
   },

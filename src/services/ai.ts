@@ -4,6 +4,11 @@ import {
   sanitizeForDavidSpeech,
 } from "../utils/davidSpeechDelivery";
 import {
+  canSpeak,
+  SPEECH_SOURCE_VOICE_MODE,
+  SPEECH_SOURCE_USER_TAP,
+} from "../utils/speechPolicy.mjs";
+import {
   DavidConversationMemory,
   getDavidConversationMemory,
   saveDavidConversationMemory,
@@ -20,7 +25,30 @@ export type GenerateSpeechOptions = {
   withThinkingDelay?: boolean;
   /** Used by the voice state machine to cancel stale speech requests. */
   signal?: AbortSignal;
+  /**
+   * REQUIRED. Why this audio is allowed to play. Omitting it is refused, so
+   * typed chat can never produce sound by accident.
+   */
+  source?: SpeechSource;
 };
+
+export type SpeechSource = 'voice-mode' | 'user-tap';
+export const SPEECH_VOICE_MODE: SpeechSource = SPEECH_SOURCE_VOICE_MODE as SpeechSource;
+export const SPEECH_USER_TAP: SpeechSource = SPEECH_SOURCE_USER_TAP as SpeechSource;
+
+/**
+ * Whether a live voice session is running. VoiceScreen owns this; nothing
+ * else should set it. Typed chat never turns it on, so voice-mode speech
+ * requests from a text screen are refused.
+ */
+let voiceModeActive = false;
+
+export const setVoiceModeActive = (active: boolean): void => {
+  voiceModeActive = Boolean(active);
+  console.log(`[Speech] Voice mode ${voiceModeActive ? 'ACTIVE' : 'inactive'}.`);
+};
+
+export const isVoiceModeActive = (): boolean => voiceModeActive;
 
 type RequestOptions = {
   signal?: AbortSignal;
@@ -59,6 +87,60 @@ const throwIfAborted = (signal?: AbortSignal) => {
   const error = new Error('Request was cancelled.');
   error.name = 'AbortError';
   throw error;
+};
+
+/**
+ * Thrown when the server refuses a chat turn because the free daily limit is
+ * spent (or a Pro-only feature was requested on a free account). Callers catch
+ * this to show the upgrade screen instead of an error bubble.
+ */
+export class ChatLimitReachedError extends Error {
+  readonly limit: number | null;
+  readonly used: number | null;
+  readonly tier: string | null;
+
+  constructor(message: string, details: { limit?: number | null; used?: number | null; tier?: string | null } = {}) {
+    super(message || "You've reached today's free conversations with David.");
+    this.name = 'ChatLimitReachedError';
+    this.limit = details.limit ?? null;
+    this.used = details.used ?? null;
+    this.tier = details.tier ?? null;
+  }
+}
+
+export const isChatLimitReachedError = (error: unknown): error is ChatLimitReachedError => (
+  error instanceof ChatLimitReachedError
+  || (typeof error === 'object' && error !== null && (error as any).name === 'ChatLimitReachedError')
+);
+
+/**
+ * `/api/chat` meters usage per signed-in account, so every call must carry the
+ * Supabase access token. Guest sessions have none — those requests go through
+ * unauthenticated and are capped in the UI instead.
+ */
+const buildChatRequestHeaders = async (): Promise<Record<string, string>> => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (!supabase) return headers;
+
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  } catch (error) {
+    console.log('[Chat] Could not attach the access token to this request:', error);
+  }
+
+  return headers;
+};
+
+/** Turns a 402 limit response into a typed error the chat screens can act on. */
+const throwIfLimitReached = (status: number, payload: any) => {
+  if (status !== 402 && !payload?.limitReached) return;
+  throw new ChatLimitReachedError(payload?.message || '', {
+    limit: payload?.limit,
+    used: payload?.used,
+    tier: payload?.tier,
+  });
 };
 
 const waitFor = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -390,7 +472,7 @@ export const getDavidVoiceResponse = async (
 
   const response = await fetch('/api/chat', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await buildChatRequestHeaders(),
     body: JSON.stringify(chatPayload),
     signal: options.signal,
   });
@@ -398,9 +480,10 @@ export const getDavidVoiceResponse = async (
   if (!response.ok) {
     const errorBody = await response.text().catch(() => '');
     let errorMessage = errorBody;
+    let parsedBody: any = null;
     try {
-      const parsed = JSON.parse(errorBody);
-      errorMessage = parsed.message || parsed.error || errorBody;
+      parsedBody = JSON.parse(errorBody);
+      errorMessage = parsedBody.message || parsedBody.error || errorBody;
     } catch {
       // Keep the raw body preview when the response is plain text.
     }
@@ -411,6 +494,7 @@ export const getDavidVoiceResponse = async (
       ...getResponseHeaders(response),
       bodyPreview: previewText(errorBody, 300),
     });
+    throwIfLimitReached(response.status, parsedBody);
     throw new Error(errorMessage || `Failed to get chat response (${response.status})`);
   }
 
@@ -534,7 +618,7 @@ export const getChatResponseStream = async (
 
   const response = await fetch('/api/chat', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await buildChatRequestHeaders(),
     body: JSON.stringify(streamPayload),
     signal: options.signal,
   });
@@ -549,6 +633,7 @@ export const getChatResponseStream = async (
       ...getResponseHeaders(response),
       error,
     });
+    throwIfLimitReached(response.status, error);
     throw new Error(error.message || error.error || `Failed to get chat stream (${response.status})`);
   }
 
@@ -633,6 +718,14 @@ export const generateSpeech = async (
   text: string,
   options: GenerateSpeechOptions = {},
 ): Promise<string | null> => {
+  // ---- speech gate: typed chat is silent, always ----
+  // Checked before anything else so a refused call costs no network request.
+  const verdict = canSpeak({ source: options.source, voiceModeActive });
+  if (!verdict.allowed) {
+    console.warn(`[Speech] ${verdict.reason} No audio was generated.`);
+    return null;
+  }
+
   throwIfAborted(options.signal);
 
   const speechText = options.alreadyPrepared
@@ -661,6 +754,7 @@ export const generateSpeech = async (
     alreadyPrepared: Boolean(options.alreadyPrepared),
     skipHumanize: Boolean(options.skipHumanize),
     isGreeting: Boolean(options.isGreeting),
+    source: options.source,
   });
   const response = await fetch('/api/speech', {
     method: 'POST',

@@ -11,6 +11,7 @@ import {
   buildDavidSystemPromptFromGuidance,
   resolveMoodKey,
 } from '../src/utils/davidMoodContext.js';
+import { checkChatAccess } from '../lib/chatAccess.js';
 
 const DAVID_CHAT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const DAVID_CHAT_TEMPERATURE = 0.8;
@@ -75,6 +76,25 @@ export default async function handler(req: any, res: any) {
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: 'Missing or invalid messages array' });
   }
+
+  // ---- entitlement gate (server enforced) ----
+  // Runs before any OpenAI work so a blocked turn costs nothing.
+  const access = await checkChatAccess(req, { liveVoice: Boolean(liveVoice) });
+  if (!access.allowed) {
+    console.log('[Chat API] Blocked by entitlement gate.', {
+      status: access.status,
+      limitReached: Boolean(access.body?.limitReached),
+      tier: access.body?.tier ?? null,
+      used: access.body?.used ?? null,
+    });
+    return res.status(access.status || 402).json(access.body || { error: 'Upgrade required' });
+  }
+  console.log('[Chat API] Access granted.', {
+    reason: access.reason,
+    tier: access.tier,
+    used: access.used,
+    limit: access.limit,
+  });
 
   const sanitizedMessages = sanitizeMessages(messages);
   const latestUserText = getLatestUserText(sanitizedMessages);
