@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Globe, Menu, Search, User, Settings } from 'lucide-react';
 import { supabase } from '../services/supabase';
+import { trackEvent } from '../services/analytics';
 import { FullScreenBackground } from '../components/FullScreenBackground';
 import { useUser } from '../UserContext';
 import { BibleTranslation } from '../types';
@@ -70,6 +71,10 @@ export default function AuthScreen() {
           options: { emailRedirectTo },
         });
         if (error) throw error;
+
+        // `confirmed` separates the two funnels: accounts that land straight in
+        // the app, and accounts parked waiting on a confirmation email.
+        trackEvent('signup', { confirmed: Boolean(data.session) });
 
         // When email confirmation is ON, signUp returns a user but NO session.
         // Inserting into `profiles` here would run as an anon user and fail

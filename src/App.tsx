@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Analytics } from '@vercel/analytics/react';
+import { initAnalytics, trackEvent } from './services/analytics';
 import { UserProvider, useUser } from './UserContext';
 import AuthScreen from './screens/AuthScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
@@ -67,6 +68,19 @@ function AppShell() {
   const [onboardingCompletedLocally, setOnboardingCompletedLocally] = useState(false);
 
   const isDesktopWeb = Platform.OS === 'web' && width >= DESKTOP_NAV_BREAKPOINT;
+
+  // Stamp first-touch attribution before any in-app navigation rewrites the
+  // URL, then close the funnel if this load is Stripe returning from a paid
+  // checkout. Guarded by a ref so React's dev double-mount cannot double-count.
+  const paidTracked = useRef(false);
+  useEffect(() => {
+    initAnalytics();
+    if (paidTracked.current) return;
+    if (route.name === 'Profile' && route.params?.paymentSuccess) {
+      paidTracked.current = true;
+      trackEvent('checkout_completed');
+    }
+  }, [route.name, route.params?.paymentSuccess]);
 
   useEffect(() => {
     setOnboardingCompletedLocally(false);

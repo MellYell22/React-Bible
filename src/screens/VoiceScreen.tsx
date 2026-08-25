@@ -10,9 +10,16 @@ import {
 } from 'react-native';
 import { Lock, Mic, Send, Sparkles, Square } from 'lucide-react';
 
-import { generateSpeech, getDavidVoiceResponse, transcribeAudio } from '../services/ai';
+import {
+  generateSpeech,
+  getDavidVoiceResponse,
+  transcribeAudio,
+  setVoiceModeActive,
+  SPEECH_VOICE_MODE,
+} from '../services/ai';
 import { useUser } from '../UserContext';
 import { createCheckoutSession } from '../services/stripe';
+import { trackEvent } from '../services/analytics';
 import { hasProAccess, OWNER_EMAIL } from '../utils/tier';
 import { prepareDavidTtsPayload } from '../utils/davidSpeechDelivery';
 import { detectMoodKeyFromMessages } from '../utils/davidMoodContext';
@@ -656,6 +663,7 @@ export default function VoiceScreen() {
       const audioUrl = await generateSpeech(preparedText, {
         alreadyPrepared: true,
         signal: speechController.signal,
+        source: SPEECH_VOICE_MODE,
       });
 
       if (speechAbortControllerRef.current === speechController) {
@@ -752,16 +760,21 @@ export default function VoiceScreen() {
       stopListening(true);
       stopVoiceActivity();
       stopCurrentAudio();
+      // Leaving the voice screen ends voice mode, so nothing can speak after.
+      setVoiceModeActive(false);
     };
   }, []);
 
   useEffect(() => {
     if (userContextLoading) return;
     if (hasVoiceAccess) {
+      // This screen is the only place voice mode is ever switched on.
+      setVoiceModeActive(true);
       setPhase(current => (current === 'checking' ? 'idle' : current));
       return;
     }
 
+    setVoiceModeActive(false);
     setPhase('idle');
   }, [hasVoiceAccess, userContextLoading]);
 
@@ -953,6 +966,7 @@ export default function VoiceScreen() {
 
     try {
       setUpgradeLoading(true);
+      trackEvent('checkout_started', { plan: 'pro', from: 'voice' });
       await createCheckoutSession();
     } catch (err: any) {
       setError(err?.message || 'Unable to start checkout right now.');
