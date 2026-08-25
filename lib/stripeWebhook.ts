@@ -54,8 +54,8 @@ const getCustomerEmail = async (stripe: Stripe, customerId: string | null, logge
 
   try {
     const customer = await stripe.customers.retrieve(customerId);
-    if ('deleted' in customer && customer.deleted) return null;
-    return customer.email || null;
+    if ((customer as any).deleted) return null;
+    return (customer as Stripe.Customer).email || null;
   } catch (error: any) {
     logger.warn(`[Stripe Webhook] Could not retrieve customer ${customerId}: ${error?.message || error}`);
     return null;
