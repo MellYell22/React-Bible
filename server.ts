@@ -32,7 +32,7 @@ dotenv.config({ path: path.join(projectRoot, ".env.local") });
 dotenv.config({ path: path.join(projectRoot, ".env") });
 
 export const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 // OpenAI initialization
 const openai = new OpenAI({
@@ -814,10 +814,10 @@ app.post("/api/speech", async (req, res) => {
 
   const voiceId = process.env.ELEVENLABS_VOICE_ID || DAVID_ELEVENLABS_VOICE_ID;
 
-  // eleven_turbo_v2_5: ~2-3x faster than eleven_v3, still natural and warm.
-  // mp3_22050_32: smaller payload = faster transfer to client with no audible difference for speech.
-  const FAST_MODEL = 'eleven_turbo_v2_5';
-  const FAST_FORMAT = 'mp3_22050_32';
+  // eleven_multilingual_v2: warmest, most human-sounding model. The turbo model
+  // sounded thin/robotic, so we trade a little latency for a genuinely warm voice.
+  const FAST_MODEL = process.env.ELEVENLABS_MODEL || 'eleven_multilingual_v2';
+  const FAST_FORMAT = 'mp3_44100_128'; // higher quality audio = fuller, less robotic
 
   try {
     const speechUrl = `${ELEVENLABS_TTS_URL}/${voiceId}?output_format=${encodeURIComponent(FAST_FORMAT)}`;
@@ -825,11 +825,11 @@ app.post("/api/speech", async (req, res) => {
       text: cleanText,
       model_id: FAST_MODEL,
       voice_settings: {
-        stability: 0.42,         // slightly lower = more natural variation, less flat delivery
-        similarity_boost: 0.88,
-        speed: 1.06,             // marginally faster pacing — feels live, not rushed
-        style: 0.2,
-        use_speaker_boost: true,
+        stability: 0.55,          // steadier, calmer delivery (was 0.42 = erratic)
+        similarity_boost: 0.80,
+        speed: 0.96,              // slightly slower than natural = warm, unhurried (was 1.06)
+        style: 0.0,               // no exaggeration = stops the "yelling"/announcer feel (was 0.2)
+        use_speaker_boost: false, // was true = over-projected/loud; off = softer, more intimate
       },
     };
 
