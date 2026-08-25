@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, TextInput } from 'react-native';
 import { motion } from 'motion/react';
-import { getMoodScriptures, generateSpeech } from '../services/ai';
+import { getMoodScriptures, generateSpeech, SPEECH_USER_TAP } from '../services/ai';
 
 const MotionView = motion(View);
 import { MoodResponse } from '../types';
@@ -198,7 +198,7 @@ export default function MoodScreen({ route, navigation }: any) {
     setIsSpeaking(true);
     try {
       // generateSpeech returns a blob URL — use HTML Audio directly (NOT base64/AudioContext)
-      const audioUrl = await generateSpeech(result.encouragement);
+      const audioUrl = await generateSpeech(result.encouragement, { source: SPEECH_USER_TAP });
       if (audioUrl) {
         const audio = new Audio(audioUrl);
         audio.onended = () => {
