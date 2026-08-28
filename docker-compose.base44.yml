@@ -1,0 +1,21 @@
+services:
+  web:
+    image: node:22
+    working_dir: /app
+    volumes:
+      - .:/app
+      - pnpm_store:/tmp/pnpm-store
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - BASE44_PUBLIC_HOST_SUFFIX=${BASE44_PUBLIC_HOST_SUFFIX}
+    env_file:
+      - ./.env.base44-defaults
+      - /run/base44/app.env
+    command: sh -c "corepack enable pnpm && pnpm install --store-dir /tmp/pnpm-store && pnpm dev"
+    restart: unless-stopped
+
+volumes:
+  pnpm_store:

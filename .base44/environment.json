@@ -1,0 +1,57 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/api/health",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "OPENAI_API_KEY",
+      "description": "OpenAI API key — powers the David chat, mood scriptures, verse of the day, reflections, and Whisper transcription. Obtain from https://platform.openai.com/api-keys.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "ELEVENLABS_API_KEY",
+      "description": "ElevenLabs API key — powers David's spoken voice (text-to-speech). Obtain from https://elevenlabs.io/app/settings/api-keys.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "ELEVENLABS_VOICE_ID",
+      "description": "ElevenLabs voice ID for David's voice. A default is already set; override only if you have a custom voice. Obtain from the ElevenLabs voice library.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "VITE_SUPABASE_URL",
+      "description": "Supabase project URL — powers user auth and profiles in the frontend. Without it the app runs in guest mode. Obtain from https://supabase.com/dashboard > Project Settings > API.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "VITE_SUPABASE_ANON_KEY",
+      "description": "Supabase anon (public) key — paired with VITE_SUPABASE_URL for frontend auth. Obtain from https://supabase.com/dashboard > Project Settings > API.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "SUPABASE_SERVICE_ROLE_KEY",
+      "description": "Supabase service role key — server-side admin access for webhook handlers and reflection limits. Obtain from https://supabase.com/dashboard > Project Settings > API.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "STRIPE_SECRET_KEY",
+      "description": "Stripe secret key — powers checkout sessions and subscription management. Obtain from https://dashboard.stripe.com/apikeys.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "STRIPE_WEBHOOK_SECRET",
+      "description": "Stripe webhook signing secret — verifies local webhook events. Obtain from https://dashboard.stripe.com/webhooks.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "VITE_STRIPE_PUBLISHABLE_KEY",
+      "description": "Stripe publishable key — frontend Stripe.js integration. Obtain from https://dashboard.stripe.com/apikeys.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "VITE_STRIPE_PRICE_ID_PRO",
+      "description": "Stripe price ID for the Pro subscription plan. Obtain from https://dashboard.stripe.com/products.",
+      "requiredAtBoot": false
+    }
+  ]
+}
