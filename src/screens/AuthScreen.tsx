@@ -50,6 +50,11 @@ export default function AuthScreen() {
   const handleAuth = async () => {
     setError(null);
 
+    if (!supabase) {
+      setError('Sign-in is not available yet. Tap "Continue as Guest" to explore the app.');
+      return;
+    }
+
     if (isResettingPassword) {
       if (!email.trim()) {
         setError('Please enter your email');
