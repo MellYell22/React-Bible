@@ -15,7 +15,9 @@
     "moduleDetection": "force",
     "allowJs": true,
     "jsx": "react-jsx",
-    "types": ["vite/client"],
+    "types": [
+      "vite/client"
+    ],
     "paths": {
       "@/*": [
         "./*"
@@ -27,6 +29,7 @@
   "exclude": [
     "supabase/functions",
     "convex",
-    "mobile"
+    "mobile",
+    "Bible mood search"
   ]
 }
