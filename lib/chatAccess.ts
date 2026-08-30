@@ -1,15 +1,21 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 /**
- * Server-side entitlement gate for David's chat.
+ * Server-side entitlement gate for `/api/chat`.
  *
- * The free daily limit used to live only in the `david-chat` Supabase edge
- * function, which the web app never calls — every chat request goes to
- * `/api/chat`. That left the free tier effectively unlimited. This module is
- * the enforcement point for the endpoint the app actually uses.
+ * The app's own UI only reaches this endpoint from VoiceScreen, always with
+ * `liveVoice: true` — text chat goes through the `david-chat` Supabase edge
+ * function instead, which has its own separate limit in api/david-chat.ts.
+ * That means the `under-limit` / `denied` counting path below is never
+ * exercised by the app today: `liveVoice` requests are resolved by the
+ * premium check or the flat Pro-only denial before reaching it.
  *
- * Counting matches the edge function: one row per completed exchange in
- * `david_conversation_memory`, counted from UTC midnight.
+ * It stays in place anyway. `/api/chat` is a public HTTP endpoint — anyone
+ * can POST to it directly with `liveVoice: false` or omitted, bypassing the
+ * UI entirely — so this is the backstop for that request shape, and for any
+ * future caller that sends it. Counting matches the edge function: one row
+ * per completed exchange in `david_conversation_memory`, counted from UTC
+ * midnight.
  */
 
 export const FREE_DAILY_MESSAGE_LIMIT = 5;
