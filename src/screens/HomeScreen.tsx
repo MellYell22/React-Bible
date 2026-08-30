@@ -96,7 +96,7 @@ const getFallbackVerseForDay = (dayKey: string): Scripture => {
 
 export default function HomeScreen({ navigation }: any) {
   const { profile } = useUser();
-  const { height: viewportHeight } = useWindowDimensions();
+  const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [emotionalEntry, setEmotionalEntry] = useState('');
@@ -109,9 +109,14 @@ export default function HomeScreen({ navigation }: any) {
   const translation = profile?.preferred_translation || 'KJV';
   const voiceIncluded = hasProAccess(profile);
 
-  // This intentionally moves the whole Home experience lower on taller screens.
-  // It stays smaller on short mobile screens so the page does not feel cramped.
-  const contentTopPadding = Math.max(110, Math.min(190, Math.round(viewportHeight * 0.2)));
+  // On desktop the offset deliberately drops the experience toward the middle of
+  // a tall window. On a phone that same 20% was spending a fifth of the first
+  // screen on empty navy and pushing the mood grid — the thing that makes people
+  // stay — below the fold, so phones get a much tighter offset.
+  const isPhone = viewportWidth < 700;
+  const contentTopPadding = isPhone
+    ? Math.max(24, Math.min(56, Math.round(viewportHeight * 0.05)))
+    : Math.max(110, Math.min(190, Math.round(viewportHeight * 0.2)));
 
   const loadDailyVerse = React.useCallback(async () => {
     setVerseLoading(true);
@@ -199,7 +204,7 @@ export default function HomeScreen({ navigation }: any) {
     >
       <View style={styles.contentStack}>
         <View style={styles.searchSection}>
-          <Text style={styles.freeChatLabel}>TEXT CHAT WITH DAVID · FREE</Text>
+          <Text style={styles.freeChatLabel} role="heading" aria-level={2}>TEXT CHAT WITH DAVID · FREE</Text>
           <View style={[styles.searchShell, searchFocused && styles.searchShellFocused]}>
             <TextInput
               value={emotionalEntry}
@@ -228,7 +233,7 @@ export default function HomeScreen({ navigation }: any) {
         </View>
 
         <View style={styles.moodSection}>
-          <Text style={styles.sectionLabel}>HOW ARE YOU FEELING</Text>
+          <Text style={styles.sectionLabel} role="heading" aria-level={2}>HOW ARE YOU FEELING</Text>
           <View style={styles.moodGrid}>
             {MOODS.map((mood, index) => (
               <TouchableOpacity
@@ -259,7 +264,7 @@ export default function HomeScreen({ navigation }: any) {
 
         <View style={styles.verseSection}>
           <View style={styles.verseBorder}>
-            <Text style={styles.verseLabel}>VERSE OF THE DAY</Text>
+            <Text style={styles.verseLabel} role="heading" aria-level={2}>VERSE OF THE DAY</Text>
             <Text style={styles.verseDate}>{formattedDate}</Text>
 
             {verseLoading ? (

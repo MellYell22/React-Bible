@@ -6,7 +6,8 @@ import {
   StyleSheet, 
   ScrollView, 
   Platform,
-  Dimensions
+  Dimensions,
+  useWindowDimensions
 } from 'react-native';
 import { 
   Search, 
@@ -46,6 +47,10 @@ const Layout: React.FC<LayoutProps> = ({
   translation,
   onTranslationChange
 }) => {
+  // Same collision as the sign-in header: three columns will not fit a phone,
+  // so below this width the brand takes its own row.
+  const { width: windowWidth } = useWindowDimensions();
+  const isNarrowHeader = windowWidth < 700;
   const isGuest = user?.id === 'guest';
   const isPro = user?.subscription_tier === 'pro';
 
@@ -53,31 +58,40 @@ const Layout: React.FC<LayoutProps> = ({
     <View style={styles.safeArea}>
       <View style={styles.container}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, isNarrowHeader && styles.headerStacked]}>
+          <View style={styles.headerBar}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={onHome} style={styles.iconButton}>
+            <TouchableOpacity role="button" onPress={onHome} style={styles.iconButton} aria-label="Home">
               <BookOpen size={18} color="#ffffff" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={onBrowse} style={styles.iconButton}>
+            <TouchableOpacity role="button" onPress={onBrowse} style={styles.iconButton} aria-label="Browse the Bible">
               <Search size={18} color="#ffffff" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={onOpenBookmarks} style={styles.iconButton}>
+            <TouchableOpacity role="button" onPress={onOpenBookmarks} style={styles.iconButton} aria-label="Saved verses">
               <Bookmark size={18} color="#ffffff" />
             </TouchableOpacity>
           </View>
-          <View style={styles.headerCenter}>
-            <Text style={styles.appName}>BIBLE MOOD SEARCH</Text>
-            <Text style={styles.tagline}>DISCOVER SCRIPTURE FOR EVERY FEELING.</Text>
-          </View>
+          {!isNarrowHeader && (
+            <View style={styles.headerCenter}>
+              <Text style={styles.appName} numberOfLines={1} role="heading" aria-level={1}>
+                BIBLE MOOD SEARCH
+              </Text>
+              <Text style={styles.tagline} numberOfLines={1}>
+                DISCOVER SCRIPTURE FOR EVERY FEELING.
+              </Text>
+            </View>
+          )}
           <View style={styles.headerRight}>
             <View style={styles.translationWrapper}>
               <TranslationPicker value={translation} onChange={onTranslationChange} />
             </View>
-            <TouchableOpacity onPress={onOpenProfile} style={styles.iconButton}>
+            <TouchableOpacity role="button" onPress={onOpenProfile} style={styles.iconButton} aria-label="Profile">
               <UserIcon size={18} color="#ffffff" />
             </TouchableOpacity>
             {onLogout && (
-              <TouchableOpacity 
+              <TouchableOpacity
+                role="button"
+                aria-label="Log out"
                 onPress={onLogout}
                 style={styles.iconButton}
               >
@@ -85,6 +99,18 @@ const Layout: React.FC<LayoutProps> = ({
               </TouchableOpacity>
             )}
           </View>
+          </View>
+
+          {isNarrowHeader && (
+            <View style={styles.headerBrandStacked}>
+              <Text style={styles.appName} numberOfLines={1} role="heading" aria-level={1}>
+                BIBLE MOOD SEARCH
+              </Text>
+              <Text style={styles.tagline} numberOfLines={1}>
+                DISCOVER SCRIPTURE FOR EVERY FEELING.
+              </Text>
+            </View>
+          )}
         </View>
         <ScrollView 
           style={styles.main} 
@@ -114,15 +140,24 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
     backgroundColor: '#050a14',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(212, 175, 55, 0.15)',
     zIndex: 50,
+  },
+  headerStacked: {
+    paddingBottom: 12,
+  },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerBrandStacked: {
+    alignItems: 'center',
+    marginTop: 10,
   },
   headerLeft: {
     flex: 1,

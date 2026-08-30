@@ -10,13 +10,13 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ onProfile }) => {
   return (
     <View style={styles.navbar}>
-      <TouchableOpacity style={styles.iconButton}>
+      <TouchableOpacity role="button" aria-label="Menu" style={styles.iconButton}>
         <Menu size={20} color="#d4af37" />
       </TouchableOpacity>
       <View style={styles.center}>
         <Text style={styles.logoText}>BMS</Text>
       </View>
-      <TouchableOpacity style={styles.iconButton} onPress={onProfile}>
+      <TouchableOpacity role="button" aria-label="Profile" style={styles.iconButton} onPress={onProfile}>
         <User size={20} color="#d4af37" />
       </TouchableOpacity>
     </View>

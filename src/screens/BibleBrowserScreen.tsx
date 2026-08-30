@@ -176,12 +176,12 @@ export default function BibleBrowserScreen() {
   const renderHeader = () => (
     <View style={styles.header}>
       {view !== 'books' && (
-        <TouchableOpacity onPress={goBack} style={styles.backButton}>
+        <TouchableOpacity role="button" aria-label="Back" onPress={goBack} style={styles.backButton}>
           <ChevronLeft color="#d4af37" size={24} />
         </TouchableOpacity>
       )}
       <View style={styles.headerTextWrap}>
-        <Text style={styles.headerTitle}>
+        <Text style={styles.headerTitle} role="heading" aria-level={1}>
           {view === 'books' ? 'Select Book' :
            view === 'chapters' ? selectedBook?.name :
            view === 'verses' ? `${selectedBook?.name} ${selectedChapter}` :
@@ -206,7 +206,7 @@ export default function BibleBrowserScreen() {
       keyExtractor={(item) => item.name}
       ListHeaderComponent={renderTranslationNotice}
       renderItem={({ item }) => (
-        <TouchableOpacity style={styles.listItem} onPress={() => handleBookSelect(item)}>
+        <TouchableOpacity role="button" style={styles.listItem} onPress={() => handleBookSelect(item)}>
           <Text style={styles.listItemText}>{item.name}</Text>
           <ChevronRight color="rgba(212, 175, 55, 0.3)" size={20} />
         </TouchableOpacity>
@@ -229,7 +229,7 @@ export default function BibleBrowserScreen() {
             whileTap={{ scale: 0.95 }}
             style={{ flex: 1, margin: 6 }}
           >
-            <TouchableOpacity style={[styles.gridItem, { margin: 0 }]} onPress={() => handleChapterSelect(item)}>
+            <TouchableOpacity role="button" style={[styles.gridItem, { margin: 0 }]} onPress={() => handleChapterSelect(item)}>
               <Text style={styles.gridItemText}>{item}</Text>
             </TouchableOpacity>
           </MotionView>
@@ -253,7 +253,7 @@ export default function BibleBrowserScreen() {
       return (
         <View style={styles.centerState}>
           <Text style={styles.errorText}>{chapterError}</Text>
-          <TouchableOpacity
+          <TouchableOpacity role="button"
             style={styles.retryButton}
             onPress={() => selectedBook && selectedChapter && void fetchChapter(selectedBook.name, selectedChapter)}
           >
@@ -263,23 +263,27 @@ export default function BibleBrowserScreen() {
       );
     }
 
+    // The chapter text is already in `chapterVerses`; this view used to render
+    // only a grid of verse numbers and drop `item.text` entirely, so opening a
+    // chapter showed an empty page. Render the scripture, with each verse
+    // tappable to open it on its own.
     return (
       <FlatList
         data={chapterVerses}
-        numColumns={6}
         keyExtractor={(item) => `${item.chapter}-${item.verse}`}
         renderItem={({ item }) => (
-          <MotionView
-            whileHover={{ scale: 1.05, backgroundColor: 'rgba(212, 175, 55, 0.1)' }}
-            whileTap={{ scale: 0.95 }}
-            style={{ flex: 1, margin: 4 }}
+          <TouchableOpacity
+            role="button"
+            aria-label={`${selectedBook?.name} ${item.chapter}:${item.verse}`}
+            style={styles.verseRow}
+            onPress={() => handleVerseSelect(item.verse)}
+            activeOpacity={0.7}
           >
-            <TouchableOpacity style={[styles.gridItemSmall, { margin: 0 }]} onPress={() => handleVerseSelect(item.verse)}>
-              <Text style={styles.gridItemTextSmall}>{item.verse}</Text>
-            </TouchableOpacity>
-          </MotionView>
+            <Text style={styles.verseNumber}>{item.verse}</Text>
+            <Text style={styles.verseText}>{item.text.trim()}</Text>
+          </TouchableOpacity>
         )}
-        contentContainerStyle={styles.gridContent}
+        contentContainerStyle={styles.chapterContent}
       />
     );
   };
@@ -298,7 +302,7 @@ export default function BibleBrowserScreen() {
           <Text style={styles.errorText}>That verse could not be found. Go back and choose it again.</Text>
         )}
 
-        <TouchableOpacity
+        <TouchableOpacity role="button"
           style={[
             styles.actionButton,
             styles.saveButton,
@@ -309,18 +313,18 @@ export default function BibleBrowserScreen() {
           disabled={isSaving || hasSaved || !selectedVerseData}
         >
           {isSaving ? (
-            <ActivityIndicator size="small" color="#10B981" />
+            <ActivityIndicator size="small" color="#d4af37" />
           ) : (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              {hasSaved ? <Check size={18} color="#10B981" /> : <Bookmark size={18} color="#10B981" />}
-              <Text style={[styles.actionButtonText, { color: '#10B981' }]}>
+              {hasSaved ? <Check size={18} color="#d4af37" /> : <Bookmark size={18} color="#d4af37" />}
+              <Text style={[styles.actionButtonText, { color: '#d4af37' }]}>
                 {hasSaved ? 'SAVED TO MY LIST' : 'SAVE TO MY LIST'}
               </Text>
             </View>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton} onPress={() => setView('books')}>
+        <TouchableOpacity role="button" style={styles.actionButton} onPress={() => setView('books')}>
           <Text style={styles.actionButtonText}>BROWSE MORE</Text>
         </TouchableOpacity>
       </View>
@@ -419,6 +423,37 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(212, 175, 55, 0.15)',
   },
+  chapterContent: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 40,
+  },
+
+  verseRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 10,
+    gap: 12,
+  },
+
+  verseNumber: {
+    fontFamily: 'Cinzel',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#d4af37',
+    minWidth: 26,
+    paddingTop: 4,
+    textAlign: 'right',
+  },
+
+  verseText: {
+    flex: 1,
+    fontFamily: 'Playfair Display',
+    fontSize: 17,
+    lineHeight: 28,
+    color: '#f4efe4',
+  },
+
   gridItemSmall: {
     aspectRatio: 1,
     backgroundColor: 'rgba(212, 175, 55, 0.03)',
@@ -518,7 +553,7 @@ const styles = StyleSheet.create({
   saveButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#10B981',
+    borderColor: 'rgba(212, 175, 55, 0.5)',
     marginBottom: 15,
   },
   actionButtonText: {

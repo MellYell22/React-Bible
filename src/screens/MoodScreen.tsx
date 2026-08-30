@@ -102,6 +102,10 @@ export default function MoodScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<MoodResponse | null>(null);
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
+  const [guidanceExpanded, setGuidanceExpanded] = useState(false);
+  // Roughly where a reply stops fitting a phone screen alongside the actions
+  // beneath it. Longer replies open clamped with a "continue reading" toggle.
+  const isLongGuidance = (result?.encouragement?.length ?? 0) > 420;
   const [testamentFilter, setTestamentFilter] = useState<'all' | 'old' | 'new'>('all');
   const [readingMode] = useState<ReadingMode>('sanctuary');
   const [fontSize] = useState<FontSize>('medium');
@@ -137,6 +141,9 @@ export default function MoodScreen({ route, navigation }: any) {
   }, [route?.params?.mood]);
 
   const handleInitialSearch = async (initialMood: string) => {
+    // Ahead of the static-mood early return below, or a reply that was expanded
+    // stays expanded when the next one replaces it.
+    setGuidanceExpanded(false);
     const staticMood = MOODS_DATA.find(m => m.key === initialMood.toUpperCase());
 
     if (staticMood) {
@@ -168,6 +175,8 @@ export default function MoodScreen({ route, navigation }: any) {
   const handleSearch = async () => {
     const query = (searchQuery || mood).trim();
     if (!query || loading) return;
+
+    setGuidanceExpanded(false);
 
     const staticMood = MOODS_DATA.find(
       m => m.label.toLowerCase() === query.toLowerCase() || m.key === query.toUpperCase(),
@@ -293,7 +302,7 @@ export default function MoodScreen({ route, navigation }: any) {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.headerContainer}>
-          <Text style={[styles.title, { color: theme.accent, fontFamily: 'Playfair Display' }]}>
+          <Text style={[styles.title, { color: theme.accent, fontFamily: 'Playfair Display' }]} role="heading" aria-level={1}>
             {mood ? `Reflections on ${mood}` : 'How are you feeling?'}
           </Text>
         </View>
@@ -314,7 +323,7 @@ export default function MoodScreen({ route, navigation }: any) {
               returnKeyType="send"
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+              <TouchableOpacity role="button" aria-label="Clear search" onPress={() => setSearchQuery('')} style={styles.clearButton}>
                 <X size={14} color={theme.muted} />
               </TouchableOpacity>
             )}
@@ -342,7 +351,7 @@ export default function MoodScreen({ route, navigation }: any) {
                 whileTap={{ scale: 0.98 }}
                 style={{ width: '31%', marginBottom: 10 }}
               >
-                <TouchableOpacity
+                <TouchableOpacity role="button"
                   style={[
                     styles.moodPill,
                     {
@@ -390,7 +399,7 @@ export default function MoodScreen({ route, navigation }: any) {
                   <Sparkles color={theme.accent} size={20} />
                   <Text style={[styles.guidanceLabel, { color: theme.accent }]}>DAVID'S GUIDANCE</Text>
                 </View>
-                <TouchableOpacity onPress={speakEncouragement} disabled={isSpeaking} style={styles.readAloudButton}>
+                <TouchableOpacity role="button" onPress={speakEncouragement} disabled={isSpeaking} style={styles.readAloudButton}>
                   {isSpeaking ? (
                     <ActivityIndicator size="small" color={theme.accent} />
                   ) : (
@@ -400,20 +409,36 @@ export default function MoodScreen({ route, navigation }: any) {
                 </TouchableOpacity>
               </View>
 
-              <Text style={[styles.encouragementText, { color: theme.text, fontSize: fonts.verse - 2, fontFamily: 'Playfair Display' }]}>
+              <Text
+                style={[styles.encouragementText, { color: theme.text, fontSize: fonts.verse - 2, fontFamily: 'Playfair Display' }]}
+                numberOfLines={guidanceExpanded ? undefined : 9}
+              >
                 {result.encouragement}
               </Text>
+              {isLongGuidance && (
+                <TouchableOpacity
+                  role="button"
+                  onPress={() => setGuidanceExpanded(v => !v)}
+                  style={styles.guidanceToggle}
+                >
+                  <Text style={[styles.guidanceToggleText, { color: theme.accent }]}>
+                    {guidanceExpanded ? 'SHOW LESS' : 'CONTINUE READING'}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               <View style={styles.feedbackContainer}>
                 <Text style={[styles.feedbackLabel, { color: theme.muted }]}>Was this helpful?</Text>
                 <View style={styles.feedbackButtons}>
-                  <TouchableOpacity
+                  <TouchableOpacity role="button"
+                    aria-label="This was helpful"
                     onPress={() => handleFeedback('up')}
-                    style={[styles.feedbackButton, feedback === 'up' && { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}
+                    style={[styles.feedbackButton, feedback === 'up' && { backgroundColor: 'rgba(127, 184, 148, 0.2)' }]}
                   >
-                    <ThumbsUp size={16} color={feedback === 'up' ? '#10B981' : theme.muted} />
+                    <ThumbsUp size={16} color={feedback === 'up' ? '#7fb894' : theme.muted} />
                   </TouchableOpacity>
-                  <TouchableOpacity
+                  <TouchableOpacity role="button"
+                    aria-label="This was not helpful"
                     onPress={() => handleFeedback('down')}
                     style={[styles.feedbackButton, feedback === 'down' && { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}
                   >
@@ -423,7 +448,7 @@ export default function MoodScreen({ route, navigation }: any) {
               </View>
 
               <View style={styles.continueActions}>
-                <TouchableOpacity
+                <TouchableOpacity role="button"
                   style={[styles.continueButton, styles.freeChatButton, { backgroundColor: theme.accent }]}
                   onPress={continueInTextChat}
                 >
@@ -432,7 +457,7 @@ export default function MoodScreen({ route, navigation }: any) {
                   <Text style={styles.freeTag}>FREE</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
+                <TouchableOpacity role="button"
                   style={[styles.continueButton, styles.voiceButton, { borderColor: theme.accent }]}
                   onPress={() => navigation.navigate('Voice', { mood })}
                 >
@@ -444,19 +469,19 @@ export default function MoodScreen({ route, navigation }: any) {
             </View>
 
             <View style={styles.filterContainer}>
-              <TouchableOpacity
+              <TouchableOpacity role="button"
                 style={[styles.filterPill, testamentFilter === 'all' && { backgroundColor: theme.accent }]}
                 onPress={() => setTestamentFilter('all')}
               >
                 <Text style={[styles.filterText, testamentFilter === 'all' && { color: '#fff' }]}>ALL</Text>
               </TouchableOpacity>
-              <TouchableOpacity
+              <TouchableOpacity role="button"
                 style={[styles.filterPill, testamentFilter === 'old' && { backgroundColor: theme.accent }]}
                 onPress={() => setTestamentFilter('old')}
               >
                 <Text style={[styles.filterText, testamentFilter === 'old' && { color: '#fff' }]}>OLD TESTAMENT</Text>
               </TouchableOpacity>
-              <TouchableOpacity
+              <TouchableOpacity role="button"
                 style={[styles.filterPill, testamentFilter === 'new' && { backgroundColor: theme.accent }]}
                 onPress={() => setTestamentFilter('new')}
               >
@@ -500,7 +525,7 @@ export default function MoodScreen({ route, navigation }: any) {
                   <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
                   <View style={styles.verseActions}>
-                    <TouchableOpacity
+                    <TouchableOpacity role="button"
                       style={[styles.verseActionButton, { borderColor: theme.accent }, savedIds.has(index) && { opacity: 0.7 }]}
                       onPress={() => handleSave(item, index)}
                       disabled={savingId === index || savedIds.has(index)}
@@ -508,11 +533,11 @@ export default function MoodScreen({ route, navigation }: any) {
                       {savingId === index ? (
                         <ActivityIndicator size="small" color={theme.accent} />
                       ) : savedIds.has(index) ? (
-                        <Check size={14} color="#10B981" />
+                        <Check size={14} color="#7fb894" />
                       ) : (
                         <Bookmark size={14} color={theme.accent} />
                       )}
-                      <Text style={[styles.verseActionButtonText, { color: savedIds.has(index) ? '#10B981' : theme.accent }]}>
+                      <Text style={[styles.verseActionButtonText, { color: savedIds.has(index) ? '#7fb894' : theme.accent }]}>
                         {savedIds.has(index) ? 'SAVED' : 'SAVE VERSE'}
                       </Text>
                     </TouchableOpacity>
@@ -664,6 +689,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  guidanceToggle: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+  },
+
+  guidanceToggleText: {
+    fontFamily: 'Cinzel',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+  },
+
   guidanceLabel: {
     fontSize: 10,
     fontWeight: 'bold',

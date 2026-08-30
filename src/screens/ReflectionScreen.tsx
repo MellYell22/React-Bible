@@ -155,7 +155,7 @@ export default function ReflectionScreen({ navigation }: any) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#d4af37" />}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>DAILY REFLECTION</Text>
+          <Text style={styles.title} role="heading" aria-level={1}>DAILY REFLECTION</Text>
           <View style={styles.titleUnderline} />
           <Text style={styles.allowanceText}>
             {isPaid ? 'UNLIMITED REFLECTIONS' : '3 FREE REFLECTIONS DAILY'}
@@ -163,7 +163,7 @@ export default function ReflectionScreen({ navigation }: any) {
         </View>
 
         <View style={styles.versionRow}>
-          <TouchableOpacity 
+          <TouchableOpacity role="button" 
             style={styles.translationSelector}
             onPress={() => setShowTranslations(!showTranslations)}
           >
@@ -176,7 +176,7 @@ export default function ReflectionScreen({ navigation }: any) {
             <View style={styles.translationDropdown}>
               <ScrollView style={{ maxHeight: 200 }}>
                 {TRANSLATIONS.map(t => (
-                  <TouchableOpacity 
+                  <TouchableOpacity role="button" 
                     key={t} 
                     style={styles.dropdownItem}
                     onPress={() => handleTranslationSelect(t)}
@@ -206,7 +206,7 @@ export default function ReflectionScreen({ navigation }: any) {
           )}
           
           <View style={styles.verseActions}>
-            <TouchableOpacity 
+            <TouchableOpacity role="button" 
               style={[styles.saveButton, hasSaved && styles.saveButtonActive]} 
               onPress={handleSave}
               disabled={isSaving || hasSaved || !dailyVerse}
@@ -215,8 +215,8 @@ export default function ReflectionScreen({ navigation }: any) {
                 <ActivityIndicator size="small" color="#0b1e3d" />
               ) : hasSaved ? (
                 <View style={styles.saveButtonContent}>
-                  <Check size={14} color="#10B981" style={{ marginRight: 6 }} />
-                  <Text style={[styles.saveButtonText, { color: '#10B981' }]}>SAVED</Text>
+                  <Check size={14} color="#7fb894" style={{ marginRight: 6 }} />
+                  <Text style={[styles.saveButtonText, { color: '#7fb894' }]}>SAVED</Text>
                 </View>
               ) : (
                 <View style={styles.saveButtonContent}>
@@ -239,13 +239,13 @@ export default function ReflectionScreen({ navigation }: any) {
                   <Text style={styles.reflectionTitle}>DAVID'S REFLECTION</Text>
                 </View>
                 <Text style={styles.reflectionBody}>{reflection}</Text>
-                <TouchableOpacity onPress={() => setReflection(null)} style={styles.closeReflection}>
+                <TouchableOpacity role="button" onPress={() => setReflection(null)} style={styles.closeReflection}>
                   <Text style={styles.closeReflectionText}>CLOSE</Text>
                 </TouchableOpacity>
               </View>
             </MotionView>
           ) : (
-            <TouchableOpacity 
+            <TouchableOpacity role="button" 
               style={styles.reflectionButton} 
               onPress={handleReflect}
               disabled={loadingReflection || !dailyVerse}
@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
   saveButtonActive: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#10B981',
+    borderColor: '#7fb894',
   },
   saveButtonContent: {
     flexDirection: 'row',

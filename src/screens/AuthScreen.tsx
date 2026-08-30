@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Platform,
   ScrollView,
+  useWindowDimensions,
 } from 'react-native';
 import { Globe, Menu, Search, User, Settings } from 'lucide-react';
 import { supabase } from '../services/supabase';
@@ -19,6 +20,10 @@ import { BibleTranslation } from '../types';
 const TRANSLATIONS = ['NIV', 'KJV', 'NLT', 'ESV', 'NKJV', 'CSB'];
 
 export default function AuthScreen() {
+  // Below this width the header's three columns overlap, so the brand moves to
+  // its own row. Matches the app's other layout breakpoints.
+  const { width: windowWidth } = useWindowDimensions();
+  const isNarrowHeader = windowWidth < 700;
   const { continueAsGuest } = useUser();
   const [firstName, setFirstName] = useState('');
   const [email, setEmail] = useState('');
@@ -162,75 +167,98 @@ export default function AuthScreen() {
         keyboardShouldPersistTaps="handled"
       >
         {/* Header Navigation */}
-        <View style={styles.header}>
+        <View style={[styles.header, isNarrowHeader && styles.headerStacked]}>
+          <View style={styles.headerBar}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity style={styles.headerIcon}>
+            <TouchableOpacity role="button" aria-label="Menu" style={styles.headerIcon}>
               <Menu size={20} color="#d4af37" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.headerIcon}>
+            <TouchableOpacity role="button" aria-label="Search" style={styles.headerIcon}>
               <Search size={20} color="#d4af37" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.headerIcon}>
+            <TouchableOpacity role="button" aria-label="Account" style={styles.headerIcon}>
               <User size={20} color="#d4af37" />
             </TouchableOpacity>
           </View>
 
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>BIBLE MOOD SEARCH</Text>
-            <Text style={styles.headerSubtitle}>DISCOVER SCRIPTURE FOR EVERY FEELING.</Text>
-          </View>
+          {!isNarrowHeader && (
+            <View style={styles.headerCenter}>
+              <Text
+                style={styles.headerTitle}
+                numberOfLines={1}
+                role="heading"
+                aria-level={1}
+              >
+                BIBLE MOOD SEARCH
+              </Text>
+              <Text style={styles.headerSubtitle} numberOfLines={1}>
+                DISCOVER SCRIPTURE FOR EVERY FEELING.
+              </Text>
+            </View>
+          )}
 
           <View style={styles.headerRight}>
-            <TouchableOpacity
+            <View style={styles.translationContainer}>
+              <TouchableOpacity role="button"
+                style={styles.translationSelector}
+                onPress={() => setShowTranslations(!showTranslations)}
+              >
+                <Text style={styles.translationLabel}>{preferredTranslation}</Text>
+                <Globe size={12} color="#d4af37" />
+              </TouchableOpacity>
+
+              {showTranslations && (
+                <View style={styles.translationDropdown}>
+                  {TRANSLATIONS.map(t => (
+                    <TouchableOpacity role="button"
+                      key={t}
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        setPreferredTranslation(t);
+                        setShowTranslations(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.dropdownText,
+                          preferredTranslation === t && styles.dropdownTextActive,
+                        ]}
+                      >
+                        {t}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+            <TouchableOpacity role="button"
               style={styles.signUpButton}
               onPress={isSignUp ? showSignIn : showSignUp}
             >
               <Text style={styles.signUpText}>{isSignUp ? 'SIGN IN' : 'SIGN UP'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.headerIcon}>
+            <TouchableOpacity role="button" aria-label="Settings" style={styles.headerIcon}>
               <Settings size={20} color="#d4af37" />
             </TouchableOpacity>
           </View>
-        </View>
+          </View>
 
-        {/* Translation Selector - Top Right */}
-        <View style={styles.translationContainer}>
-          <TouchableOpacity
-            style={styles.translationSelector}
-            onPress={() => setShowTranslations(!showTranslations)}
-          >
-            <Text style={styles.translationLabel}>{preferredTranslation}</Text>
-            <Globe size={12} color="#d4af37" />
-          </TouchableOpacity>
-
-          {showTranslations && (
-            <View style={styles.translationDropdown}>
-              {TRANSLATIONS.map(t => (
-                <TouchableOpacity
-                  key={t}
-                  style={styles.dropdownItem}
-                  onPress={() => {
-                    setPreferredTranslation(t);
-                    setShowTranslations(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.dropdownText,
-                      preferredTranslation === t && styles.dropdownTextActive,
-                    ]}
-                  >
-                    {t}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+          {/* Phone widths: the brand gets its own line so nothing collides. */}
+          {isNarrowHeader && (
+            <View style={styles.headerBrandStacked}>
+              <Text style={styles.headerTitle} numberOfLines={1} role="heading" aria-level={1}>
+                BIBLE MOOD SEARCH
+              </Text>
+              <Text style={styles.headerSubtitle} numberOfLines={1}>
+                DISCOVER SCRIPTURE FOR EVERY FEELING.
+              </Text>
             </View>
           )}
         </View>
 
         {/* Main Content */}
         <View style={styles.mainContent}>
-          <Text style={styles.mainTitle}>
+          <Text style={styles.mainTitle} role="heading" aria-level={2}>
             {isResettingPassword
               ? 'RESET PASSWORD'
               : isSignUp
@@ -287,7 +315,7 @@ export default function AuthScreen() {
                 <View style={styles.passwordHeader}>
                   <Text style={styles.inputLabel}>PASSWORD</Text>
                   {!isSignUp && (
-                    <TouchableOpacity onPress={() => setIsResettingPassword(true)}>
+                    <TouchableOpacity role="button" onPress={() => setIsResettingPassword(true)}>
                       <Text style={styles.forgotPasswordLink}>FORGOT PASSWORD?</Text>
                     </TouchableOpacity>
                   )}
@@ -360,7 +388,7 @@ export default function AuthScreen() {
             )}
 
             {/* Primary Auth Button */}
-            <TouchableOpacity
+            <TouchableOpacity role="button"
               style={[styles.signInButton, loading && styles.primaryButtonDisabled]}
               onPress={handleAuth}
               disabled={loading}
@@ -376,14 +404,14 @@ export default function AuthScreen() {
 
             {/* Create Free Account Button */}
             {!isResettingPassword && !isSignUp && (
-              <TouchableOpacity style={styles.createAccountButton} onPress={showSignUp}>
+              <TouchableOpacity role="button" style={styles.createAccountButton} onPress={showSignUp}>
                 <Text style={styles.createAccountText}>CREATE FREE ACCOUNT</Text>
               </TouchableOpacity>
             )}
 
             {/* Continue as Guest Link */}
             {!isResettingPassword && !isSignUp && (
-              <TouchableOpacity
+              <TouchableOpacity role="button"
                 style={styles.guestLinkContainer}
                 onPress={() => continueAsGuest(preferredTranslation as BibleTranslation)}
               >
@@ -393,13 +421,13 @@ export default function AuthScreen() {
 
             {/* Toggle between Sign In and Sign Up */}
             {isSignUp && (
-              <TouchableOpacity style={styles.toggleContainer} onPress={showSignIn}>
+              <TouchableOpacity role="button" style={styles.toggleContainer} onPress={showSignIn}>
                 <Text style={styles.toggleText}>Already have an account? Sign in</Text>
               </TouchableOpacity>
             )}
 
             {isResettingPassword && (
-              <TouchableOpacity
+              <TouchableOpacity role="button"
                 style={styles.toggleContainer}
                 onPress={() => setIsResettingPassword(false)}
               >
@@ -430,13 +458,25 @@ const styles = StyleSheet.create({
 
   // Header Navigation
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(212, 175, 55, 0.1)',
+  },
+
+  headerStacked: {
+    paddingBottom: 12,
+  },
+
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  headerBrandStacked: {
+    alignItems: 'center',
+    marginTop: 10,
   },
 
   headerLeft: {
@@ -498,9 +538,7 @@ const styles = StyleSheet.create({
 
   // Translation Selector
   translationContainer: {
-    position: 'absolute',
-    top: 16,
-    right: 20,
+    position: 'relative',
     zIndex: 100,
   },
 

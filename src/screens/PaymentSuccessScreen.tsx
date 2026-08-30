@@ -86,7 +86,7 @@ export default function PaymentSuccessScreen({ navigation }: { navigation: any }
                   animate={{ scale: 1 }}
                   transition={{ type: "spring", stiffness: 200, damping: 20 }}
                 >
-                  <CheckCircle color="#10B981" size={64} />
+                  <CheckCircle color="#7fb894" size={64} />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -103,7 +103,7 @@ export default function PaymentSuccessScreen({ navigation }: { navigation: any }
           </Text>
 
           {!isActivating && (
-            <TouchableOpacity 
+            <TouchableOpacity role="button" 
               style={styles.button} 
               onPress={handleContinue}
               activeOpacity={0.8}
@@ -114,7 +114,7 @@ export default function PaymentSuccessScreen({ navigation }: { navigation: any }
           )}
 
           {isActivating && attempts > 10 && (
-            <TouchableOpacity 
+            <TouchableOpacity role="button" 
               style={styles.troubleButton} 
               onPress={handleContinue}
             >

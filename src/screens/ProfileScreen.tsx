@@ -271,7 +271,7 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{profile?.email?.[0].toUpperCase()}</Text>
         </View>
-        <Text style={styles.email}>{profile?.email}</Text>
+        <Text style={styles.email} role="heading" aria-level={1}>{profile?.email}</Text>
         <View style={styles.tierBadge}>
           <Text style={styles.tierText}>
             {profile?.email === OWNER_EMAIL ? 'OWNER (FULL ACCESS)' : (profile?.subscription_tier?.toUpperCase() || 'FREE')}
@@ -323,8 +323,8 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
       {section === 'saved' ? (
         <View style={styles.savedSection}>
           <View style={styles.savedHeader}>
-            <Text style={styles.sectionTitle}>My Saved Scriptures</Text>
-            <TouchableOpacity onPress={fetchSavedScriptures} disabled={loadingSaved}>
+            <Text style={styles.sectionTitle} role="heading" aria-level={2}>My Saved Scriptures</Text>
+            <TouchableOpacity role="button" onPress={fetchSavedScriptures} disabled={loadingSaved}>
               <Text style={{ fontSize: 10, color: '#d4af37', fontWeight: 'bold' }}>REFRESH</Text>
             </TouchableOpacity>
           </View>
@@ -340,12 +340,12 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
           ) : (
             savedScriptures.map((item) => (
               <View key={item.id} style={[styles.savedCard, item.is_memorized && styles.memorizedCard]}>
-                <TouchableOpacity 
+                <TouchableOpacity role="button" 
                   style={styles.savedCardHeader}
                   onPress={() => setExpandedId(expandedId === item.id ? null : item.id)}
                 >
                   <View style={styles.savedCardTitleRow}>
-                    <View style={[styles.memorizedDot, { backgroundColor: item.is_memorized ? '#10B981' : 'rgba(212, 175, 55, 0.3)' }]} />
+                    <View style={[styles.memorizedDot, { backgroundColor: item.is_memorized ? '#7fb894' : 'rgba(212, 175, 55, 0.3)' }]} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.savedReference}>{item.reference}</Text>
                       <Text style={styles.savedCategory}>{item.category || 'Uncategorized'} • {item.version}</Text>
@@ -373,17 +373,17 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
                     </View>
                     
                     <View style={styles.savedActions}>
-                      <TouchableOpacity 
+                      <TouchableOpacity role="button" 
                         style={[styles.actionBtn, item.is_memorized && styles.memorizedBtn]}
                         onPress={() => handleToggleMemorized(item)}
                       >
-                        <Check size={14} color={item.is_memorized ? '#fff' : '#10B981'} />
+                        <Check size={14} color={item.is_memorized ? '#fff' : '#7fb894'} />
                         <Text style={[styles.actionBtnText, item.is_memorized && { color: '#fff' }]}>
                           {item.is_memorized ? 'MEMORIZED' : 'MARK AS MEMORIZED'}
                         </Text>
                       </TouchableOpacity>
                       
-                      <TouchableOpacity 
+                      <TouchableOpacity role="button" 
                         style={[styles.actionBtn, styles.deleteBtn]}
                         onPress={() => handleDeleteSaved(item.id)}
                       >
@@ -401,13 +401,13 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
         <>
           {statusMessage && (
         <View style={[styles.statusBanner, styles[`${statusMessage.type}Banner`]]}>
-          {statusMessage.type === 'error' ? <AlertCircle size={16} color="#ef4444" /> : <CheckCircle2 size={16} color={statusMessage.type === 'success' ? '#10B981' : '#d4af37'} />}
+          {statusMessage.type === 'error' ? <AlertCircle size={16} color="#ef4444" /> : <CheckCircle2 size={16} color={statusMessage.type === 'success' ? '#7fb894' : '#d4af37'} />}
           <Text style={[styles.statusText, styles[`${statusMessage.type}Text`]]}>{statusMessage.text}</Text>
         </View>
       )}
 
       {section === 'preferences' && (<>
-      <Text style={styles.sectionTitle}>AI Preferences</Text>
+      <Text style={styles.sectionTitle} role="heading" aria-level={2}>AI Preferences</Text>
       <View style={styles.settingsCard}>
         <Text style={styles.settingsLabel}>Response Length</Text>
         <View style={styles.optionsRow}>
@@ -417,7 +417,7 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
             const isSelected = profile?.preferred_response_length === length;
 
             return (
-              <TouchableOpacity
+              <TouchableOpacity role="button"
                 key={length}
                 style={[
                   styles.optionButton,
@@ -449,6 +449,9 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
         <View style={styles.toggleRow}>
           <Text style={styles.toggleLabel}>Daily Notifications</Text>
           <TouchableOpacity
+            role="switch"
+            aria-label="Daily verse notifications"
+            aria-checked={Boolean(profile?.verse_of_the_day_enabled)}
             style={[styles.toggleSwitch, profile?.verse_of_the_day_enabled && styles.toggleSwitchActive]}
             onPress={() => updatePreference('verse_of_the_day_enabled', !profile?.verse_of_the_day_enabled)}
             disabled={loading}
@@ -487,29 +490,29 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
       </>)}
 
       {section === 'subscription' && (<>
-      <Text style={[styles.sectionTitle, { paddingLeft: 44 }]}>Your Benefits</Text>
+      <Text style={[styles.sectionTitle, { paddingLeft: 44 }]} role="heading" aria-level={2}>Your Benefits</Text>
       <View style={[styles.benefitsSummary, { paddingLeft: 16 }]}>
         <View style={styles.benefitItem}>
-          <CheckCircle2 size={16} color="#10B981" />
+          <CheckCircle2 size={16} color="#7fb894" />
           <Text style={styles.benefitText}>
             {profile?.subscription_tier === 'pro' ? 'Unlimited AI Chat with David' : '3 Mood Searches / Day'}
           </Text>
         </View>
         <View style={styles.benefitItem}>
-          <CheckCircle2 size={16} color="#10B981" />
+          <CheckCircle2 size={16} color="#7fb894" />
           <Text style={styles.benefitText}>
             {profile?.subscription_tier === 'pro' ? 'Live Voice Chat with David' : 'Standard AI Reflections'}
           </Text>
         </View>
         <View style={styles.benefitItem}>
-          <CheckCircle2 size={16} color="#10B981" />
+          <CheckCircle2 size={16} color="#7fb894" />
           <Text style={styles.benefitText}>
             {profile?.subscription_tier === 'pro' ? 'Deeper Scripture Reflections' : 'Daily Verse of the Day'}
           </Text>
         </View>
         {profile?.subscription_tier === 'pro' && (
           <View style={styles.benefitItem}>
-            <CheckCircle2 size={16} color="#10B981" />
+            <CheckCircle2 size={16} color="#7fb894" />
             <Text style={styles.benefitText}>Deeper Scripture Insights & Ad-free</Text>
           </View>
         )}
@@ -531,9 +534,17 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
       </TouchableOpacity>
 
       {showOtherPlans && (
-      <Text style={styles.sectionTitle} onLayout={(e) => {
-        // Fallback for measurement if needed
-      }} ref={pricingRef}>Subscription Plans</Text>
+      <Text
+        style={styles.sectionTitle}
+        role="heading"
+        aria-level={2}
+        onLayout={(e) => {
+          // Fallback for measurement if needed
+        }}
+        ref={pricingRef}
+      >
+        Subscription Plans
+      </Text>
       )}
 
       {showOtherPlans && Object.values(PLANS).map((plan) => {
@@ -589,7 +600,7 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
                 // For plans higher than current, show what they *will* get.
                 return (
                   <View key={idx} style={styles.featureItem}>
-                    <CheckCircle2 color={plan.id === 'pro' ? "#fff" : "#10B981"} size={14} />
+                    <CheckCircle2 color={plan.id === 'pro' ? "#fff" : "#7fb894"} size={14} />
                     <Text style={[styles.featureText, plan.id === 'pro' && { color: '#fff' }]}>{feature}</Text>
                   </View>
                 );
@@ -597,7 +608,7 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
             </View>
 
             {canUpgrade ? (
-              <TouchableOpacity 
+              <TouchableOpacity role="button" 
                 style={[
                   styles.planButton, 
                   plan.id === 'pro' && styles.proButton
@@ -738,8 +749,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   successBanner: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: 'rgba(127, 184, 148, 0.1)',
+    borderColor: 'rgba(127, 184, 148, 0.3)',
   },
   errorBanner: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -754,7 +765,7 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     fontWeight: '500',
   },
-  successText: { color: '#10B981' },
+  successText: { color: '#7fb894' },
   errorText: { color: '#ef4444' },
   infoText: { color: '#d4af37' },
   sectionTitle: {
@@ -833,7 +844,7 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 30,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: 'rgba(127, 184, 148, 0.3)',
   },
   benefitItem: {
     flexDirection: 'row',
@@ -1043,8 +1054,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#0b1e3d',
   },
   currentPlanCard: {
-    borderColor: '#10B981',
-    backgroundColor: 'rgba(16, 185, 129, 0.05)',
+    borderColor: '#7fb894',
+    backgroundColor: 'rgba(127, 184, 148, 0.05)',
   },
   proBadge: {
     position: 'absolute',
@@ -1068,7 +1079,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     left: -30,
-    backgroundColor: '#10B981',
+    backgroundColor: '#7fb894',
     paddingHorizontal: 40,
     paddingVertical: 4,
     transform: [{ rotate: '-45deg' }],
@@ -1245,8 +1256,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   memorizedCard: {
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-    backgroundColor: 'rgba(16, 185, 129, 0.02)',
+    borderColor: 'rgba(127, 184, 148, 0.3)',
+    backgroundColor: 'rgba(127, 184, 148, 0.02)',
   },
   savedCardHeader: {
     padding: 16,
@@ -1333,8 +1344,8 @@ const styles = StyleSheet.create({
     color: 'rgba(212, 175, 55, 0.8)',
   },
   memorizedBtn: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
+    backgroundColor: '#7fb894',
+    borderColor: '#7fb894',
   },
   deleteBtn: {
     borderColor: 'rgba(239, 68, 68, 0.2)',

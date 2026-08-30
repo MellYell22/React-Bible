@@ -46,6 +46,20 @@ export const danger = {
   border: 'rgba(239, 68, 68, 0.3)',
 } as const;
 
+/**
+ * Success / saved states. Green still carries the meaning "this worked", which
+ * gold cannot — gold is the primary action colour here, so reusing it would
+ * make a confirmation look like another button. This is a muted sage rather
+ * than the stock emerald (#10B981) that was hardcoded across the screens: it
+ * keeps the semantic while sitting inside the navy-and-gold palette instead of
+ * reading as borrowed from another design system.
+ */
+export const success = {
+  text: '#7fb894',
+  bg: 'rgba(127, 184, 148, 0.12)',
+  border: 'rgba(127, 184, 148, 0.35)',
+} as const;
+
 /* ── Type ───────────────────────────────────────────────────────────── */
 
 export const fonts = {

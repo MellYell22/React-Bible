@@ -1051,7 +1051,7 @@ export default function VoiceScreen() {
       <View style={styles.lockedContainer}>
         <View style={styles.lockCard}>
           <Lock color="#d4af37" size={48} style={{ marginBottom: 20 }} />
-          <Text style={styles.lockTitle}>David's Voice Pro</Text>
+          <Text style={styles.lockTitle} role="heading" aria-level={1}>David's Voice Pro</Text>
           <Text style={styles.lockText}>
             Live voice with David is a David's Voice Pro feature.
           </Text>
@@ -1114,7 +1114,7 @@ export default function VoiceScreen() {
       <ScrollView style={styles.scrollArea} contentContainerStyle={styles.container}>
         <View style={styles.header}>
           <Sparkles color="#d4af37" size={24} />
-          <Text style={styles.title}>Voice with David</Text>
+          <Text style={styles.title} role="heading" aria-level={1}>Voice with David</Text>
           <Text style={styles.subtitle}>A calm spiritual companion</Text>
         </View>
 
@@ -1254,6 +1254,8 @@ export default function VoiceScreen() {
                 multiline={false}
               />
               <TouchableOpacity
+                role="button"
+                aria-label="Send message to David"
                 style={[
                   styles.sendButton,
                   (!textInput.trim() || inputIsDisabled) && styles.sendButtonDisabled,
