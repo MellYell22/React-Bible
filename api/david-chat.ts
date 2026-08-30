@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { DAVID_PERSONA } from '../src/constants/persona.js';
 import { DAVID_SELF_INTRODUCTION_RULE, normalizeDavidSelfIntroduction } from '../src/utils/davidIdentity.js';
 import { detectConversationOpening } from '../src/utils/conversationOpening.mjs';
+import { buildOpeningRules } from '../src/utils/davidOpeningRules.mjs';
 import {
   buildContinuityBriefing,
   summarizeTurn,
@@ -24,35 +25,10 @@ const VOICE_ADDENDUM = `
 
 VOICE MODE: This response will be spoken aloud. Keep it especially short, smooth, and natural. One or two complete spoken sentences, unhurried.`;
 
-/**
- * Someone opening with "hi David" has given no feeling to meet and asked for
- * no verse. Without this David either reaches for Scripture nobody wanted or
- * answers so minimally the conversation dead-ends on its first turn.
- */
-const OPENING_RULES: Record<string, string> = {
-  greeting: `
-THIS TURN IS A GREETING — HANDLE IT AS CONVERSATION, NOT AS A REQUEST FOR HELP:
-- Greet them back like a friend would, in your own words. Warm, unhurried, human.
-- Then leave one easy, open door — never an interrogation, never two questions.
-- Do NOT offer Scripture, a verse, or a reflection this turn. Nobody asked for one yet.
-- Do NOT assume or name a mood. A short message is not evidence something is wrong.
-- Do NOT answer with a bare echo like "hey." on its own. Matching their size still means giving them somewhere to go.
-- Keep it to one or two short sentences. Light stays light.`,
-  'small-talk': `
-THIS TURN IS SMALL TALK — THEY ARE ASKING ABOUT YOU:
-- Answer plainly and briefly in your own voice. No feature lists, no product description, never "I'm here to listen."
-- Then turn it back to them with one easy question.
-- No Scripture this turn.`,
-  'low-signal': `
-THIS TURN IS LOW-SIGNAL ("idk", "fine", "nothing much") — DO NOT READ DEPTH INTO IT:
-- It is not a crisis and not an invitation to get poetic. Stay easy and take the pressure off.
-- Give them a simple way in. No Scripture, no mood guessing, no escalation to depth before they go there.`,
-};
-
 const buildSystemPrompt = (options: {
   continuity: string;
   mode: 'chat' | 'voice';
-  opening: string | null;
+  opening: 'greeting' | 'small-talk' | 'low-signal' | null;
   latestUserText: string;
   isReturning: boolean;
 }): string => {
@@ -70,7 +46,7 @@ THIS TURN:
     DAVID_SELF_INTRODUCTION_RULE,
     continuity,
     turnRules,
-    opening ? OPENING_RULES[opening] || '' : '',
+    opening ? buildOpeningRules(opening) : '',
     mode === 'voice' ? VOICE_ADDENDUM : '',
   ]
     .filter(Boolean)

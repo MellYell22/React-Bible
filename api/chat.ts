@@ -13,6 +13,7 @@ import {
 } from '../src/utils/davidMoodContext.js';
 import { checkChatAccess } from '../lib/chatAccess.js';
 import { detectConversationOpening } from '../src/utils/conversationOpening.mjs';
+import { buildOpeningRules } from '../src/utils/davidOpeningRules.mjs';
 
 const DAVID_CHAT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const DAVID_CHAT_TEMPERATURE = 0.8;
@@ -154,9 +155,8 @@ export default async function handler(req: any, res: any) {
     // and no verse to offer. Without this, David either reaches for Scripture
     // nobody asked for or answers so minimally ("hey.") that the conversation
     // dead-ends on its first turn.
-    const openingRules = opening
-      ? `\n\nTHIS TURN IS ${opening.toUpperCase()} — HANDLE IT AS CONVERSATION, NOT AS A REQUEST FOR HELP:\n - Greet them back like a friend would, in your own words. Warm, unhurried, human.\n - Then ask ONE gentle, open question that invites them to say anything at all. Never interrogate, never stack questions.\n - Do NOT offer Scripture, a verse, a reference, or a reflection this turn. Nobody asked for one yet, and reaching for it here is exactly what makes you feel like a form.\n - Do NOT assume or name a mood. They have not told you how they feel; do not guess, and do not read weight into a short message.\n - Do NOT answer with a bare echo like "hey." or "yeah?" on its own. Matching their size still means moving things forward — a short greeting AND a door held open.\n - Keep it to one or two short sentences. Light stays light.\n${opening === 'small-talk' ? ' - They are asking about you. Answer plainly and briefly in your own voice, without listing features and without sounding like a product description, then turn it back to them.\n' : ''}${opening === 'low-signal' ? ' - "idk" is not a crisis. Do not read depth into it or get poetic about it. Stay easy, take the pressure off, and give them an easy way in.\n' : ''} - Avoid churchy stock closers. Never use "What\'s on your heart", "What brings you here today", or any phrasing you would find on a form.\n - Vary the way you open the door. Do not reach for "How\'s your day going?" every time — ask about what they are up to, what is new, what brought them by, or simply leave a warm opening. Different words every time.\n - No exclamation marks unless they are clearly celebrating something first.`
-      : '';
+    const openingRulesBody = buildOpeningRules(opening);
+    const openingRules = openingRulesBody ? `\n\n${openingRulesBody}` : '';
 
     const sharedRules = `\n - Answer only the latest user words: "${latestUserText.replace(/"/g, '\\"').slice(0, 500)}"\n - Recent context can help tone and continuity, but it must not override the user's latest message. Continue naturally from what the user just said.${hasSpokenBefore ? ' Do not restart the conversation or open with another greeting.' : ''}\n - If the user shared a concrete life detail earlier (an illness, a loss, a name, a struggle), quietly carry it forward. When they say something vague like "I'm scared", connect it to what they already told you instead of asking them to explain from scratch.\n - Do not use bullets, numbering, headings, or formal transitions.\n - Never mention, recommend, or offer videos, YouTube, reels, clips, or other external media unless the user explicitly asks for a video or external media.\n - Do not open with stock phrases like "I hear you", "That's heavy", "Sadness is real", or any opening you used earlier in this conversation. Vary your wording every turn.${antiRepeatRule}\n - End with one gentle question only when it truly helps, and never the same question twice. Otherwise stop warmly with no question.`;
     const modeRules = liveVoice
