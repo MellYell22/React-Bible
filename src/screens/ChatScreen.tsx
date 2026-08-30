@@ -16,9 +16,29 @@ import { ChatMessage } from '../types';
 import { saveAIFeedback, supabase } from '../services/supabase';
 import { createCheckoutSession, type CheckoutPlan } from '../services/stripe';
 import { useUser } from '../UserContext';
-import { DAVID_CHAT_GREETINGS } from '../constants/persona';
+import { getDavidGreeting } from '../constants/persona';
 import DailyLimitUpgrade from '../components/DailyLimitUpgrade';
 import { trackEvent } from '../services/analytics';
+
+const LAST_GREETING_KEY = 'david:last-greeting';
+
+/** Remembering the last greeting is what stops "Hey. I'm David." twice in a row. */
+const readLastGreeting = (): string | null => {
+  try {
+    return window.localStorage.getItem(LAST_GREETING_KEY);
+  } catch {
+    return null;
+  }
+};
+
+const writeLastGreeting = (greeting: string): void => {
+  try {
+    window.localStorage.setItem(LAST_GREETING_KEY, greeting);
+  } catch {
+    // Private browsing or blocked storage — harmless, greeting variety just
+    // falls back to random.
+  }
+};
 
 export default function ChatScreen({ navigation, route }: any) {
   const { profile } = useUser();
@@ -141,9 +161,63 @@ export default function ChatScreen({ navigation, route }: any) {
       return;
     }
 
-    const randomGreeting = DAVID_CHAT_GREETINGS[Math.floor(Math.random() * DAVID_CHAT_GREETINGS.length)];
-    setMessages([{ role: 'assistant', content: randomGreeting }]);
-  }, [route?.params?.initialPrompt, route?.params?.submittedAt]);
+    // David should not greet a person he already knows the same way he greets
+    // a stranger. Look up when they last talked so the opening line matches the
+    // actual relationship instead of re-introducing him every single day.
+    let cancelled = false;
+
+    const openWithGreeting = async () => {
+      let isReturning = false;
+      let daysSinceLastChat: number | null = null;
+      let firstName: string | undefined;
+
+      try {
+        if (supabase) {
+          const { data: { session } } = await supabase.auth.getSession();
+          const metadata: any = session?.user?.user_metadata || {};
+          firstName = metadata.first_name || metadata.full_name || metadata.name || undefined;
+
+          const { data } = await supabase
+            .from('david_conversation_memory')
+            .select('created_at')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          const lastAt = data?.[0]?.created_at;
+          if (lastAt) {
+            isReturning = true;
+            const elapsed = Date.now() - new Date(lastAt).getTime();
+            if (Number.isFinite(elapsed) && elapsed >= 0) {
+              daysSinceLastChat = elapsed / (1000 * 60 * 60 * 24);
+            }
+          }
+        }
+      } catch (error) {
+        // A greeting is never worth failing a screen over — fall back to
+        // meeting them fresh.
+        console.warn('Greeting continuity lookup failed:', error);
+      }
+
+      if (cancelled) return;
+
+      const lastGreeting = readLastGreeting();
+      const greeting = getDavidGreeting({
+        firstName,
+        isReturning,
+        daysSinceLastChat,
+        lastGreeting,
+      });
+
+      writeLastGreeting(greeting);
+      setMessages([{ role: 'assistant', content: greeting }]);
+    };
+
+    void openWithGreeting();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [route?.params?.initialPrompt, route?.params?.submittedAt, profile?.id]);
 
   useEffect(() => {
     return () => {
@@ -261,7 +335,7 @@ export default function ChatScreen({ navigation, route }: any) {
     >
       <View style={styles.header}>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>David</Text>
+          <Text style={styles.headerTitle} role="heading" aria-level={1}>David</Text>
         </View>
         <Text style={styles.headerSubtitle}>
           {isPaid ? 'Unlimited text chat' : '5 free messages daily'}
@@ -320,14 +394,14 @@ export default function ChatScreen({ navigation, route }: any) {
                     )}
                   </TouchableOpacity>
                   <View style={{ flex: 1 }} />
-                  <TouchableOpacity onPress={() => handleFeedback(index, 'up')} style={styles.feedbackButton}>
+                  <TouchableOpacity role="button" aria-label="This was helpful" onPress={() => handleFeedback(index, 'up')} style={styles.feedbackButton}>
                     <ThumbsUp
                       size={14}
                       color={msg.feedback === 'up' ? '#d4af37' : 'rgba(212, 175, 55, 0.4)'}
                       fill={msg.feedback === 'up' ? '#d4af37' : 'transparent'}
                     />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleFeedback(index, 'down')} style={styles.feedbackButton}>
+                  <TouchableOpacity role="button" aria-label="This was not helpful" onPress={() => handleFeedback(index, 'down')} style={styles.feedbackButton}>
                     <ThumbsDown
                       size={14}
                       color={msg.feedback === 'down' ? '#ef4444' : 'rgba(212, 175, 55, 0.4)'}

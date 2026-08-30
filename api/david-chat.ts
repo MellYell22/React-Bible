@@ -1,17 +1,81 @@
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
+import { DAVID_PERSONA } from '../src/constants/persona.js';
+import { DAVID_SELF_INTRODUCTION_RULE, normalizeDavidSelfIntroduction } from '../src/utils/davidIdentity.js';
+import { detectConversationOpening } from '../src/utils/conversationOpening.mjs';
+import {
+  buildContinuityBriefing,
+  summarizeTurn,
+  toRecentTranscript,
+} from '../src/utils/davidContinuity.mjs';
 
 const FREE_DAILY_LIMIT = 5;
 
-const DAVID_SYSTEM_PROMPT = `You are David, a calm Christian spiritual companion inside Bible Mood Search.
+/**
+ * How far back David actually remembers. The full window feeds the continuity
+ * briefing (what keeps coming back, what he already said); only the newest few
+ * turns are replayed verbatim, which keeps the thread coherent without paying
+ * for the whole history on every request.
+ */
+const MEMORY_WINDOW = 24;
+const VERBATIM_TURNS = 8;
 
-Speak like a trusted friend sitting beside the user: warm, grounded, brief, human, emotionally present, and biblically thoughtful. You are not a generic assistant, preacher, therapist intake form, or support agent.
+const VOICE_ADDENDUM = `
 
-Keep each reply to one to three short natural sentences. Usually two is best. Acknowledge what the user actually said, then offer one thought or one fitting Bible verse only when it genuinely helps. Never give a sermon, list, menu of options, or multiple questions. Do not always end with a question. Vary your openings and wording. Never shame, accuse, or invent personal details. Plain spoken text only, with no markdown or bracketed stage directions.
+VOICE MODE: This response will be spoken aloud. Keep it especially short, smooth, and natural. One or two complete spoken sentences, unhurried.`;
 
-If the user appears to be mid-thought, a short response such as “Take your time.” is enough. If the user expresses immediate danger or self-harm, respond warmly and directly and encourage immediate human or emergency support rather than giving a routine devotional response.`;
+/**
+ * Someone opening with "hi David" has given no feeling to meet and asked for
+ * no verse. Without this David either reaches for Scripture nobody wanted or
+ * answers so minimally the conversation dead-ends on its first turn.
+ */
+const OPENING_RULES: Record<string, string> = {
+  greeting: `
+THIS TURN IS A GREETING — HANDLE IT AS CONVERSATION, NOT AS A REQUEST FOR HELP:
+- Greet them back like a friend would, in your own words. Warm, unhurried, human.
+- Then leave one easy, open door — never an interrogation, never two questions.
+- Do NOT offer Scripture, a verse, or a reflection this turn. Nobody asked for one yet.
+- Do NOT assume or name a mood. A short message is not evidence something is wrong.
+- Do NOT answer with a bare echo like "hey." on its own. Matching their size still means giving them somewhere to go.
+- Keep it to one or two short sentences. Light stays light.`,
+  'small-talk': `
+THIS TURN IS SMALL TALK — THEY ARE ASKING ABOUT YOU:
+- Answer plainly and briefly in your own voice. No feature lists, no product description, never "I'm here to listen."
+- Then turn it back to them with one easy question.
+- No Scripture this turn.`,
+  'low-signal': `
+THIS TURN IS LOW-SIGNAL ("idk", "fine", "nothing much") — DO NOT READ DEPTH INTO IT:
+- It is not a crisis and not an invitation to get poetic. Stay easy and take the pressure off.
+- Give them a simple way in. No Scripture, no mood guessing, no escalation to depth before they go there.`,
+};
 
-const VOICE_ADDENDUM = `\n\nVOICE MODE: This response will be spoken aloud. Keep it especially short, smooth, and natural.`;
+const buildSystemPrompt = (options: {
+  continuity: string;
+  mode: 'chat' | 'voice';
+  opening: string | null;
+  latestUserText: string;
+  isReturning: boolean;
+}): string => {
+  const { continuity, mode, opening, latestUserText, isReturning } = options;
+
+  const turnRules = `
+THIS TURN:
+- Answer only what they actually just said: "${latestUserText.replace(/"/g, "'").slice(0, 400)}"
+- Continue naturally from it. ${isReturning ? 'Do NOT restart the conversation or open with a fresh greeting — you are already in this with them.' : ''}
+- Never mention, recommend, or offer videos, clips, or external media unless they explicitly ask for it.
+- Never say "As an AI", and never mention memory, records, history, logs, or "our previous conversation" as a system. You simply remember them, the way a friend does.`;
+
+  return [
+    DAVID_PERSONA,
+    DAVID_SELF_INTRODUCTION_RULE,
+    continuity,
+    turnRules,
+    opening ? OPENING_RULES[opening] || '' : '',
+    mode === 'voice' ? VOICE_ADDENDUM : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+};
 
 const cleanReply = (text: string): string => {
   let value = text
@@ -29,17 +93,26 @@ const cleanReply = (text: string): string => {
     const sentence = raw.trim();
     if (!sentence) continue;
     kept.push(sentence);
-    if (/\?['"’”)]*$/.test(sentence) || kept.length >= 3) break;
+    if (/\?['"’”)]*$/.test(sentence) || kept.length >= 4) break;
   }
 
   value = kept.join(' ').trim();
-  return value;
+  return normalizeDavidSelfIntroduction(value);
 };
 
 const getBearerToken = (authorization: unknown): string | null => {
   if (typeof authorization !== 'string') return null;
   const match = authorization.match(/^Bearer\s+(.+)$/i);
   return match?.[1]?.trim() || null;
+};
+
+/** Only a real, human-looking first name — never an email or an id fragment. */
+const cleanFirstName = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes('@') || trimmed.length > 40 || /\d/.test(trimmed)) return '';
+  const first = trimmed.split(/\s+/)[0];
+  return first.length > 1 && first.length <= 20 ? first : '';
 };
 
 const getSupabaseUserClient = (accessToken: string) => {
@@ -131,46 +204,78 @@ export default async function handler(req: any, res: any) {
       }
     }
 
+    // ---- memory ----
+    // Newest first. The whole window shapes the briefing; only the newest few
+    // turns get replayed to the model verbatim.
     const { data: history, error: historyError } = await supabase
       .from('david_conversation_memory')
-      .select('user_message, david_response')
+      .select('user_message, david_response, verse_used, opening_phrase, short_summary, mood_key, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(8);
+      .limit(MEMORY_WINDOW);
 
     if (historyError) {
       console.error('[David Chat] Memory read failed:', historyError.message);
     }
 
+    // A memory failure must never cost the user their conversation — David
+    // simply meets them fresh instead of erroring out.
+    const rows = Array.isArray(history) ? history : [];
+    const isReturning = rows.length > 0;
+
+    const firstName =
+      cleanFirstName(user.user_metadata?.first_name)
+      || cleanFirstName(user.user_metadata?.full_name)
+      || cleanFirstName(user.user_metadata?.name);
+
+    const priorUserTexts = rows.map((row: any) => row?.user_message).filter(Boolean);
+    const opening = detectConversationOpening(message, priorUserTexts);
+
+    const continuity = buildContinuityBriefing(rows, { now: new Date(), firstName });
+    const systemPrompt = buildSystemPrompt({
+      continuity,
+      mode,
+      opening,
+      latestUserText: message,
+      isReturning,
+    });
+
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-      {
-        role: 'system',
-        content: DAVID_SYSTEM_PROMPT + (mode === 'voice' ? VOICE_ADDENDUM : ''),
-      },
+      { role: 'system', content: systemPrompt },
+      ...(toRecentTranscript(rows, VERBATIM_TURNS) as Array<{ role: 'user' | 'assistant'; content: string }>),
     ];
 
-    for (const row of (history ?? []).reverse()) {
-      if (row?.user_message) messages.push({ role: 'user', content: row.user_message });
-      if (row?.david_response) messages.push({ role: 'assistant', content: row.david_response });
-    }
-
-    const moodNote = mood ? ` (The user indicated they are feeling ${mood} today.)` : '';
+    // A mood the user picked is context, not an instruction to preach at it.
+    const moodNote = mood && !opening ? ` (Context only: they tagged today as ${mood}. Do not lead with it.)` : '';
     messages.push({ role: 'user', content: message + moodNote });
+
+    console.log('[David Chat] Turn context:', {
+      mode,
+      opening: opening || null,
+      historyRows: rows.length,
+      isReturning,
+      hasFirstName: Boolean(firstName),
+      systemPromptLength: systemPrompt.length,
+    });
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const configuredModel = process.env.OPENAI_MODEL?.trim();
     const model = configuredModel || 'gpt-4.1-mini';
 
+    // Higher temperature plus strong presence/frequency penalties is what keeps
+    // David from settling into one groove across sessions.
+    const completionOptions = {
+      messages,
+      max_tokens: mode === 'voice' ? 160 : 300,
+      temperature: 0.9,
+      top_p: 0.95,
+      presence_penalty: 0.75,
+      frequency_penalty: 0.6,
+    };
+
     let completion;
     try {
-      completion = await openai.chat.completions.create({
-        model,
-        messages,
-        max_tokens: mode === 'voice' ? 160 : 280,
-        temperature: 0.75,
-        presence_penalty: 0.5,
-        frequency_penalty: 0.4,
-      });
+      completion = await openai.chat.completions.create({ model, ...completionOptions });
     } catch (primaryError: any) {
       const status = Number(primaryError?.status || 0);
       const code = String(primaryError?.code || primaryError?.error?.code || '');
@@ -181,19 +286,16 @@ export default async function handler(req: any, res: any) {
       if (!shouldTryKnownModel) throw primaryError;
 
       console.warn(`[David Chat] Configured model ${configuredModel} failed; retrying with gpt-4.1-mini.`);
-      completion = await openai.chat.completions.create({
-        model: 'gpt-4.1-mini',
-        messages,
-        max_tokens: mode === 'voice' ? 160 : 280,
-        temperature: 0.75,
-        presence_penalty: 0.5,
-        frequency_penalty: 0.4,
-      });
+      completion = await openai.chat.completions.create({ model: 'gpt-4.1-mini', ...completionOptions });
     }
 
     const rawReply = completion.choices[0]?.message?.content?.trim() || '';
-    const reply = cleanReply(rawReply) || "I'm right here. What's on your heart?";
+    const reply = cleanReply(rawReply) || 'Mm. I’m here — say that again for me?';
 
+    // Persist the turn WITH its metadata. These columns already existed but
+    // nothing filled them, which is why David kept reusing the same openings
+    // and the same verses day after day.
+    const turnMetadata = summarizeTurn(message, reply);
     const { error: memoryInsertError } = await supabase
       .from('david_conversation_memory')
       .insert({
@@ -201,6 +303,9 @@ export default async function handler(req: any, res: any) {
         mood_key: mood || null,
         user_message: message,
         david_response: reply,
+        verse_used: turnMetadata.verseUsed,
+        opening_phrase: turnMetadata.openingPhrase,
+        short_summary: turnMetadata.shortSummary,
       });
 
     if (memoryInsertError) {
