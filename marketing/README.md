@@ -63,3 +63,53 @@ the whole 30-day sprint so the sprint can be read as one cohort.
 Read as a funnel: `signup → chat_limit_reached → checkout_started →
 checkout_completed`, split by `utm_content`. The clip with the best
 signup→paid rate is the one to boost — not the one with the most views.
+
+## Promo video — `david-promo-15s.mp4`
+
+15.000s · 1080×1920 · 30fps · H.264 · ~10 Mbps · audio from 1.30s.
+Ready to upload as-is to TikTok, Reels, Shorts, and Facebook Reels.
+
+**Everything in it is real.** The app frames were captured from the live
+production site (guest session, anxious mood), and the voice is David's actual
+ElevenLabs output — `voice-samples/david-reassuring-anxiety.mp3`, not a
+stand-in. Captions are timed to the measured speech envelope, so they track the
+audio rather than being evenly spaced.
+
+### Beat sheet
+
+| Time | Beat |
+| --- | --- |
+| 0.0–1.3s | Hook on navy — "I told it I was anxious." |
+| 1.3s | David's voice starts; app card fades up on the mood grid |
+| 2.9–4.1s | Gold pulse on the ANXIOUS tile |
+| 6.6s | Cut to the Bible reader on **Psalms 46:1** |
+| 10.9s | Cut to David's reflection, with CHAT FREE / VOICE PRO |
+| 13.4–15.0s | End card — "Talk to David free · MyBibleAiCompanion.com" |
+
+The Psalm 46 beat is deliberate: David's voice names Psalm 46, so the screen
+behind him shows Psalms 46:1 rather than a different passage. An earlier cut had
+him say "Psalm 46" over a Philippians screen — in a scripture app that
+contradiction is the kind of detail the audience notices.
+
+### Suggested caption
+
+> I told it I was anxious. It didn't give me a pep talk — it gave me Psalm 46. 🤍
+> Free at MyBibleAiCompanion.com
+> #christiantiktok #bibleverse #faith #anxiety #prayer
+
+Put the tagged link from the section above in your bio, one `utm_content` per
+clip, so the funnel can attribute a signup back to this video.
+
+### Regenerating
+
+Sources live in the session scratchpad (`video/frame.html`, `render.mjs`,
+`encode.swift`). To change copy, edit the `CAPS` array and the hook text in
+`frame.html`, re-run `node render.mjs`, then
+`./encode frames <voice.mp3> 1.30 out.mp4`.
+
+### Worth knowing
+
+This is a motion-graphics promo built from still captures with a slow push and
+crossfade — not a screen recording. It is a strong week-one asset, but the
+scripts in `VIDEO_SCRIPTS.md` still want real footage of a finger tapping and
+text streaming in. Shoot those when you can; this covers you until then.

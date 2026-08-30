@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1080px; height:1920px; overflow:hidden; background:#0b1e3d; }
+  #frame { position:relative; width:1080px; height:1920px; overflow:hidden; }
+
+  .bloom {
+    position:absolute; inset:0;
+    background:
+      radial-gradient(ellipse at 50% 30%, rgba(212,175,55,0.16) 0%, rgba(212,175,55,0.04) 36%, transparent 64%),
+      radial-gradient(ellipse at 50% 112%, rgba(5,16,32,0.9) 0%, transparent 58%);
+  }
+
+  .eyebrow {
+    position:absolute; top:96px; left:0; right:0; text-align:center;
+    font-family:'Cinzel',serif; font-weight:700; font-size:27px;
+    letter-spacing:7px; color:#d4af37; text-transform:uppercase;
+  }
+
+  /* The app screen, inset like a device so nothing of the UI is cropped. */
+  .card {
+    position:absolute; left:140px; top:214px; width:800px; height:1178px;
+    border-radius:46px; overflow:hidden;
+    border:2px solid rgba(212,175,55,0.42);
+    box-shadow:0 50px 120px rgba(0,0,0,0.6), 0 0 0 1px rgba(5,16,32,0.8);
+    background:#0b1e3d;
+  }
+  .card img { position:absolute; left:0; top:0; width:800px; height:1422px; display:block; }
+  /* Home: skip the empty header band. Guidance: already full, start at the top. */
+  #shotHome  { top:-170px; }
+  #shotPsalm { top:-70px; }   /* clears the nav bar from the card's lower edge */
+  #shotGuide { top:0; }
+
+  /* Gold pulse over the ANXIOUS tile, in app-image coordinates. */
+  .ring {
+    position:absolute; border:3px solid #f5d77a; border-radius:14px;
+    box-shadow:0 0 40px rgba(245,215,122,0.75);
+  }
+
+  .hook {
+    position:absolute; left:90px; right:90px; top:50%;
+    transform:translateY(-50%); text-align:center;
+    font-family:'Playfair Display',serif; font-weight:700;
+    font-size:96px; line-height:1.14; color:#f4efe4;
+  }
+
+  .capwrap { position:absolute; left:0; right:0; bottom:378px; text-align:center; }
+  .capscrim {
+    position:absolute; left:0; right:0; bottom:0; height:760px;
+    background:linear-gradient(to top, rgba(5,16,32,0.88) 10%, rgba(5,16,32,0.55) 46%, transparent 100%);
+  }
+  .caption {
+    position:relative; display:inline-block; max-width:900px; padding:0 40px;
+    font-family:'Playfair Display',serif; font-style:italic; font-weight:400;
+    font-size:62px; line-height:1.32; color:#f4efe4;
+    text-shadow:0 4px 24px rgba(0,0,0,0.85);
+  }
+
+  /* Closing frame reuses the share-card composition. */
+  .end { position:absolute; inset:0; display:flex; flex-direction:column;
+         align-items:center; justify-content:center; text-align:center; background:#0b1e3d; }
+  .end .e1 { font-family:'Cinzel',serif; font-weight:700; font-size:30px;
+             letter-spacing:8px; color:#d4af37; text-transform:uppercase; }
+  .end .e2 { font-family:'Playfair Display',serif; font-weight:700;
+             font-size:158px; color:#f4efe4; margin-top:56px; }
+  .end .e3 { font-family:'Playfair Display',serif; font-style:italic;
+             font-size:50px; color:rgba(244,239,228,0.78); margin-top:40px; max-width:840px; line-height:1.42; }
+  .end .plate { margin-top:96px; border:2px solid rgba(212,175,55,0.55); padding:34px 62px; }
+  .end .plate .c { font-family:'Cinzel',serif; font-weight:700; font-size:33px;
+                   letter-spacing:5px; color:#f5d77a; text-transform:uppercase; display:block; }
+  .end .plate .d { font-family:'Cinzel',serif; font-size:23px; letter-spacing:3.4px;
+                   color:rgba(244,239,228,0.72); text-transform:uppercase; display:block; margin-top:18px; }
+</style></head>
+<body>
+<div id="frame">
+  <div class="bloom"></div>
+  <div class="eyebrow" id="eyebrow">Bible Mood Search</div>
+
+  <div class="card" id="card">
+    <img id="shotHome" src="shots/02-home.png">
+    <img id="shotPsalm" src="shots/12-psalm46-v1.png">
+    <img id="shotGuide" src="shots/05-guidance.png">
+    <div class="ring" id="ring"></div>
+  </div>
+
+  <div class="hook" id="hook">I told it<br>I was anxious.</div>
+
+  <div class="capscrim" id="capscrim"></div>
+  <div class="capwrap"><span class="caption" id="caption"></span></div>
+
+  <div class="end" id="end">
+    <div class="e1">Bible Mood Search</div>
+    <div class="e2">Meet David.</div>
+    <div class="e3">A Bible companion that actually talks with you.</div>
+    <div class="plate">
+      <span class="c">Talk to David free</span>
+      <span class="d">MyBibleAiCompanion.com</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const clamp = (v,a,b) => Math.min(b, Math.max(a, v));
+const lerp  = (a,b,k) => a + (b-a)*k;
+const ease  = k => k<0.5 ? 2*k*k : 1-Math.pow(-2*k+2,2)/2;
+/** Ramp from 0->1 across [a,b], eased. */
+const ramp  = (t,a,b) => ease(clamp((t-a)/(b-a), 0, 1));
+/** Fade in over [a,b], hold, fade out over [c,d]. */
+const band  = (t,a,b,c,d) => Math.min(ramp(t,a,b), 1-ramp(t,c,d));
+
+// Beats, in video seconds. Audio is laid in at AUDIO_START by the encoder.
+const AUDIO_START = 1.30;
+const S_APP = 1.30, S_PSALM = 6.60, S_GUIDE = 10.90, S_END = 13.40, T_END = 15.0;
+
+// Caption windows derived from the measured speech envelope, shifted by AUDIO_START.
+const CAPS = [
+  { a:0.16,  b:3.62,  text:'I hear you — that anxiety can feel heavy.' },
+  { a:5.86,  b:9.04,  text:'Psalm 46 says, God is our refuge and strength.' },
+  { a:9.94,  b:12.12, text:"Let's take one slow breath together." },
+];
+
+function render(t) {
+  const hook = document.getElementById('hook');
+  const card = document.getElementById('card');
+  const end  = document.getElementById('end');
+  const ring = document.getElementById('ring');
+  const home = document.getElementById('shotHome');
+  const guide= document.getElementById('shotGuide');
+  const cap  = document.getElementById('caption');
+  const scrim= document.getElementById('capscrim');
+  const eyeb = document.getElementById('eyebrow');
+
+  // 1. Hook holds, then lifts away as the app arrives.
+  hook.style.opacity   = band(t, 0.10, 0.85, 1.05, 1.55);
+  hook.style.transform = `translateY(${lerp(34, -26, ramp(t, 0, 1.55))}px)`;
+
+  // 2. App card fades in and drifts — a slow push so the frame never sits still.
+  const appIn = band(t, S_APP - 0.25, S_APP + 0.35, S_END - 0.30, S_END + 0.10);
+  card.style.opacity = appIn;
+  const k = ramp(t, S_APP, S_END);
+  card.style.transform = `scale(${lerp(0.965, 1.035, k)}) translateY(${lerp(16, -16, k)}px)`;
+  eyeb.style.opacity = appIn * 0.9;
+
+  // 3. Cut to the actual Psalm 46 screen exactly while David names it, then to
+  //    his reflection. Showing a different verse than the one he speaks would
+  //    read as careless in a scripture app.
+  const psalm = document.getElementById('shotPsalm');
+  home.style.opacity  = 1;
+  psalm.style.opacity = ramp(t, S_PSALM - 0.30, S_PSALM + 0.30);
+  guide.style.opacity = ramp(t, S_GUIDE - 0.30, S_GUIDE + 0.30);
+
+  // 4. Tap pulse on the ANXIOUS tile. Coordinates are the tile's box in the
+  //    1080x1920 capture, scaled by 800/1080 into the card.
+  const S = 800 / 1080, OX = 0, OY = -170;
+  const pulse = clamp((t - 2.85) / 1.15, 0, 1);
+  const showRing = t > 2.85 && t < 4.05 ? Math.sin(Math.PI * pulse) : 0;
+  Object.assign(ring.style, {
+    left:   `${OX + 386 * S - 10 * pulse}px`,
+    top:    `${OY + 803 * S - 10 * pulse}px`,
+    width:  `${308 * S + 20 * pulse}px`,
+    height: `${134 * S + 20 * pulse}px`,
+    opacity: String(showRing),
+  });
+
+  // 5. Captions, one beat at a time.
+  let text = '', op = 0;
+  for (const c of CAPS) {
+    const a = c.a + AUDIO_START, b = c.b + AUDIO_START;
+    const v = band(t, a - 0.20, a + 0.25, b - 0.10, b + 0.40);
+    if (v > op) { op = v; text = c.text; }
+  }
+  cap.textContent = text;
+  cap.style.opacity = op;
+  cap.style.transform = `translateY(${lerp(16, 0, op)}px)`;
+  scrim.style.opacity = op * 0.96;
+
+  // 6. Closing card.
+  end.style.opacity = ramp(t, S_END, S_END + 0.55);
+  end.style.transform = `scale(${lerp(1.03, 1.0, ramp(t, S_END, S_END + 0.9))})`;
+}
+
+const t = parseFloat(new URLSearchParams(location.search).get('t') || '0');
+window.__ready = false;
+document.fonts.ready.then(() => { render(t); window.__ready = true; });
+window.__render = render;
+</script>
+</body></html>
