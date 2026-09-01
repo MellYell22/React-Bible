@@ -34,8 +34,14 @@ const SPEECH_VOLUME_THRESHOLD = 0.09;
 /** Voiced audio must persist this long (cumulative) before it counts as the user
  * actually speaking — a stray TV syllable or clatter no longer arms the recorder. */
 const SPEECH_SUSTAIN_MS = 300;
-// Give natural pauses a little more room so David does not cut the user off mid-thought.
-const SILENCE_STOP_MS = 1100;
+// How long the mic waits after the last voiced audio before deciding the user is
+// done. This is pure dead air at the front of every reply, so it is the single
+// biggest latency win available without rebuilding the voice pipeline.
+//
+// 650ms sits just above a normal mid-sentence breath (~300-500ms), so David stops
+// stalling without cutting people off. SPEECH_SUSTAIN_MS and MIN_RECORDING_MS
+// still guard against a stray noise arming or ending a turn early.
+const SILENCE_STOP_MS = 650;
 const MIN_RECORDING_MS = 700;
 const HARD_MAX_RECORDING_MS = 45000;
 
@@ -121,14 +127,21 @@ const updateUsedVerseForMood = (input: {
 const normalizeTranscript = (value: string): string =>
   value.replace(/\s+/g, ' ').trim();
 
-const isMeaningfulUserText = (value: string): boolean => {
+const isMeaningfulUserText = (value: string, source: 'voice' | 'typed' = 'voice'): boolean => {
   const text = normalizeTranscript(value);
   if (!text) return false;
 
+  // Typed text is always intentional — the noise filter below exists only to
+  // keep mic artifacts (coughs, TV, room tone) from becoming a turn.
+  if (source === 'typed') return /[a-zA-Z0-9]/.test(text);
+
   const lowered = text.toLowerCase();
+  // Short conversational replies ("yeah", "okay", "not really", "thanks",
+  // "I'm tired") are real turns and must reach David. Only pure filler
+  // vocalizations and nonverbal noise are filtered here.
   const junkPatterns = [
     /^[\s.…,!?*-]+$/,
-    /^(okay|ok|um+|uh+|hmm+|mm+|mhm+|ah+|oh+|bye|goodbye)[.!?\s]*$/i,
+    /^(um+|uh+|mm+|mhm+|ah+|er+)[.!?\s]*$/i,
     /^(music|applause|\[silence\]|\[music\]|\[inaudible\])$/i,
     /^(cough|coughing|sniff|sniffle|sniffling|sneeze|sneezing|achoo|ahem|yawn|yawning)[.!?\s]*$/i,
     /^(laugh|laughing|laughter|giggle|giggling|chuckle|chuckling)[.!?\s]*$/i,
@@ -645,6 +658,125 @@ export default function VoiceScreen() {
     }
   };
 
+  /**
+   * Plays one already-rendered audio clip and resolves when it finishes.
+   * Extracted so the streaming queue below can play David's sentences
+   * back-to-back without duplicating the lifecycle bookkeeping.
+   */
+  const playClipUrl = (audioUrl: string, onStart?: () => void): Promise<void> =>
+    new Promise<void>((resolve, reject) => {
+      const audio = new Audio(audioUrl);
+      let finished = false;
+
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        currentAudioRef.current = null;
+        currentAudioUrlRef.current = null;
+        audioStopResolverRef.current = null;
+        try {
+          URL.revokeObjectURL(audioUrl);
+        } catch {
+          // Ignore revoke errors.
+        }
+        resolve();
+      };
+
+      currentAudioRef.current = audio;
+      currentAudioUrlRef.current = audioUrl;
+      audioStopResolverRef.current = finish;
+      audio.preload = 'auto';
+      audio.volume = 0.82;
+      audio.onended = finish;
+      audio.onerror = () => {
+        finish();
+        reject(new Error("David's voice audio was returned, but the browser could not play it."));
+      };
+      audio.play().then(() => onStart?.()).catch(reject);
+    });
+
+  /**
+   * David's reply, spoken sentence by sentence as he writes it.
+   *
+   * Two things run at once: text-to-speech renders upcoming sentences while the
+   * current one is still playing. That overlap is the whole point — the user
+   * hears his first sentence roughly a full generation cycle sooner than before.
+   *
+   * Returns false if nothing was ever spoken, so the caller can fall back to
+   * the original one-shot path instead of leaving the user in silence.
+   */
+  const createStreamingSpeaker = (options: {
+    conversationId: number;
+    requestId: number;
+    signal: AbortSignal;
+    onFirstAudio?: () => void;
+  }) => {
+    const clips: Array<Promise<string | null>> = [];
+    let closed = false;
+    let wake: (() => void) | null = null;
+    let spokeAnything = false;
+
+    const nudge = () => {
+      wake?.();
+      wake = null;
+    };
+
+    /** Start rendering a sentence immediately; do not wait for it. */
+    const push = (sentence: string) => {
+      const prepared = prepareDavidTtsPayload(sentence, { isGreeting: false }).speechText;
+      if (!prepared.trim()) return;
+      clips.push(
+        generateSpeech(prepared, {
+          alreadyPrepared: true,
+          signal: options.signal,
+          source: SPEECH_VOICE_MODE,
+        }).catch((error) => {
+          console.log('[David Voice] A sentence failed to render; continuing:', error);
+          return null;
+        }),
+      );
+      nudge();
+    };
+
+    const close = () => {
+      closed = true;
+      nudge();
+    };
+
+    /** Drains the queue in order, waiting for more while the stream is open. */
+    const play = async (): Promise<boolean> => {
+      let index = 0;
+
+      while (true) {
+        if (index >= clips.length) {
+          if (closed) break;
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+          });
+          continue;
+        }
+
+        const url = await clips[index];
+        index += 1;
+
+        if (!isCurrentConversation(options.conversationId, options.requestId)) return spokeAnything;
+        if (options.signal.aborted) return spokeAnything;
+        if (!url || Platform.OS !== 'web') continue;
+
+        await playClipUrl(url, () => {
+          if (!spokeAnything) {
+            spokeAnything = true;
+            options.onFirstAudio?.();
+          }
+        });
+      }
+
+      return spokeAnything;
+    };
+
+    return { push, close, play };
+  };
+
   const playDavidResponseAudio = async (
     text: string,
     options: PlayDavidAudioOptions,
@@ -830,10 +962,11 @@ export default function VoiceScreen() {
     options: {
       conversationId?: number;
       resumeListening?: boolean;
+      source?: 'voice' | 'typed';
     } = {},
   ) => {
     const userText = normalizeTranscript(rawText);
-    if (!isMeaningfulUserText(userText)) {
+    if (!isMeaningfulUserText(userText, options.source || 'voice')) {
       setError("David couldn't catch enough words to respond yet.");
       return;
     }
@@ -873,14 +1006,53 @@ export default function VoiceScreen() {
 
       console.log('[David Voice] Sending exact latest user words:', userText);
 
-      const response = await getDavidVoiceResponse(nextMessages, {
-        responseLength: 'short',
-        moodKey: detectedMoodKey,
-        usedVerses,
-        userId,
-        liveVoice: true,
-        signal: chatController.signal,
+      // David speaks his first sentence while he is still forming the rest.
+      // Text-to-speech for each sentence starts the moment that sentence is
+      // complete, so the user stops waiting through a whole generation cycle
+      // before hearing anything.
+      const speechController = new AbortController();
+      speechAbortControllerRef.current?.abort();
+      speechAbortControllerRef.current = speechController;
+
+      let firstAudioPlayed = false;
+      const speaker = createStreamingSpeaker({
+        conversationId: localConversationId,
+        requestId,
+        signal: speechController.signal,
+        onFirstAudio: () => {
+          firstAudioPlayed = true;
+          setPhase('speaking');
+        },
       });
+
+      // Stop the mic before any audio starts, or David hears himself.
+      stopListening(true);
+      stopCurrentAudio();
+
+      const playbackDone = speaker.play().catch((error) => {
+        console.log('[David Voice] Streamed playback failed:', error);
+        return firstAudioPlayed;
+      });
+
+      let response;
+      try {
+        response = await getDavidVoiceResponse(nextMessages, {
+          responseLength: 'short',
+          moodKey: detectedMoodKey,
+          usedVerses,
+          userId,
+          liveVoice: true,
+          signal: chatController.signal,
+          onSentence: (sentence) => {
+            if (!isCurrentConversation(localConversationId, requestId)) return;
+            speaker.push(sentence);
+          },
+        });
+      } finally {
+        // Always close the queue, or the player would wait forever.
+        speaker.close();
+      }
+
       if (chatAbortControllerRef.current === chatController) {
         clearAbortController(chatAbortControllerRef);
       }
@@ -903,14 +1075,32 @@ export default function VoiceScreen() {
       ];
 
       commitMessages(finalMessages);
+      setLastResponseText(cleanedResponse);
 
-      await playDavidResponseAudio(cleanedResponse, {
-        conversationId: localConversationId,
-        requestId,
-        isGreeting: false,
-        resumeListening: shouldResumeListening,
-        onPlaybackStart: () => setLastResponseText(cleanedResponse),
-      });
+      const spoke = await playbackDone;
+
+      if (!spoke) {
+        // Streaming produced no audio (no sentences, a TTS failure, or a
+        // non-web platform). Fall back to the original one-shot path so the
+        // user is never left with a silent David.
+        await playDavidResponseAudio(cleanedResponse, {
+          conversationId: localConversationId,
+          requestId,
+          isGreeting: false,
+          resumeListening: shouldResumeListening,
+          onPlaybackStart: () => setLastResponseText(cleanedResponse),
+        });
+        return;
+      }
+
+      if (!isCurrentConversation(localConversationId, requestId)) return;
+
+      if (shouldResumeListening) {
+        setPhase('listening');
+        void startListening({ conversationId: localConversationId });
+      } else {
+        setPhase('idle');
+      }
     } catch (err: any) {
       if (err?.name === 'AbortError') return;
       if (!mountedRef.current) return;
@@ -1038,6 +1228,7 @@ export default function VoiceScreen() {
     await submitUserText(manualText, {
       conversationId: conversationIdRef.current,
       resumeListening: false,
+      source: 'typed',
     });
 
     if (conversationActiveRef.current && phaseRef.current !== 'error') {
@@ -1439,10 +1630,7 @@ const styles = StyleSheet.create({
   },
   voiceWavePanelActive: {
     borderColor: 'rgba(245, 215, 122, 0.62)',
-    shadowColor: '#d4af37',
-    shadowOpacity: 0.22,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 10 },
+    boxShadow: '0 10px 22px rgba(212, 175, 55, 0.22)',
   },
   voiceWaveHeader: {
     flexDirection: 'row',
@@ -1459,10 +1647,7 @@ const styles = StyleSheet.create({
   },
   voiceWaveDotActive: {
     backgroundColor: '#22c55e',
-    shadowColor: '#22c55e',
-    shadowOpacity: 0.7,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 0 },
+    boxShadow: '0 0 10px rgba(34, 197, 94, 0.7)',
   },
   voiceWaveLabel: {
     fontFamily: 'Cinzel',
@@ -1486,10 +1671,7 @@ const styles = StyleSheet.create({
   },
   voiceWaveBarActive: {
     backgroundColor: '#d4af37',
-    shadowColor: '#d4af37',
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    boxShadow: '0 4px 8px rgba(212, 175, 55, 0.35)',
   },
   conversationControls: {
     width: '100%',

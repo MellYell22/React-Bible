@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
-import { DAVID_PERSONA } from '../src/constants/persona.js';
+import { DAVID_PERSONA, DAVID_NO_FABRICATION_RULE } from '../src/constants/persona.js';
 import { DAVID_SELF_INTRODUCTION_RULE, normalizeDavidSelfIntroduction } from '../src/utils/davidIdentity.js';
 import { detectConversationOpening } from '../src/utils/conversationOpening.mjs';
 import { buildOpeningRules } from '../src/utils/davidOpeningRules.mjs';
@@ -39,7 +39,8 @@ THIS TURN:
 - Answer only what they actually just said: "${latestUserText.replace(/"/g, "'").slice(0, 400)}"
 - Continue naturally from it. ${isReturning ? 'Do NOT restart the conversation or open with a fresh greeting — you are already in this with them.' : ''}
 - Never mention, recommend, or offer videos, clips, or external media unless they explicitly ask for it.
-- Never say "As an AI", and never mention memory, records, history, logs, or "our previous conversation" as a system. You simply remember them, the way a friend does.`;
+- Never say "As an AI", and never mention memory, records, history, logs, or "our previous conversation" as a system. You simply remember them, the way a friend does.
+- What you remember about them is ONLY what appears above in the continuity notes and in this conversation. That is the complete list. If a detail is not there, you do not know it — do not supply it, and do not imply you know more than you do.`;
 
   return [
     DAVID_PERSONA,
@@ -48,6 +49,9 @@ THIS TURN:
     turnRules,
     opening ? buildOpeningRules(opening) : '',
     mode === 'voice' ? VOICE_ADDENDUM : '',
+    // Last position on purpose: this is the rule that must survive everything
+    // above it, and recency is the cheapest way to buy that.
+    DAVID_NO_FABRICATION_RULE,
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -124,7 +128,9 @@ export default async function handler(req: any, res: any) {
   const mood = typeof req.body?.mood === 'string' ? req.body.mood.trim() : '';
   const mode = req.body?.mode === 'voice' ? 'voice' : 'chat';
 
-  if (!message || message.length < 2 || message.length > 4000) {
+  // A single character ("k", "?") is still a real turn — only empty or
+  // oversized messages are refused.
+  if (!message || message.length > 4000) {
     return res.status(400).json({ error: 'Invalid message', ignored: true });
   }
 

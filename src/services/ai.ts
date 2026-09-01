@@ -463,6 +463,13 @@ export const getDavidVoiceResponse = async (
     userId?: string | null;
     liveVoice?: boolean;
     signal?: AbortSignal;
+    /**
+     * When provided, David's reply is streamed and each complete sentence is
+     * handed over the moment it is safe to speak — so text-to-speech for his
+     * first sentence starts while he is still writing the rest. Without it the
+     * call behaves exactly as before: one request, one complete reply.
+     */
+    onSentence?: (sentence: string, index: number) => void;
   } = {},
 ): Promise<DavidVoiceResponse> => {
   const responseLength = options.responseLength || 'short';
@@ -519,10 +526,14 @@ export const getDavidVoiceResponse = async (
     responseLength,
   });
 
+  const wantsSentenceStream = typeof options.onSentence === 'function';
+
   const response = await fetch('/api/chat', {
     method: 'POST',
     headers: await buildChatRequestHeaders(),
-    body: JSON.stringify(chatPayload),
+    body: JSON.stringify(
+      wantsSentenceStream ? { ...chatPayload, stream: true } : chatPayload,
+    ),
     signal: options.signal,
   });
 
@@ -547,7 +558,82 @@ export const getDavidVoiceResponse = async (
     throw new Error(errorMessage || `Failed to get chat response (${response.status})`);
   }
 
-  const data = await response.json();
+  // ---- streaming read -----------------------------------------------------
+  // The server forbids the private [VERSE USED] footer while streaming, so the
+  // verse reference is recovered from David's own words instead.
+  let data: any;
+  if (wantsSentenceStream) {
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('David could not open a voice stream.');
+
+    const decoder = new TextDecoder();
+    const sentences = createSentenceStream();
+    let fullText = '';
+    let emitted = 0;
+    let buffered = '';
+
+    const emit = (ready: string[]) => {
+      for (const sentence of ready) {
+        if (!sentence) continue;
+        try {
+          options.onSentence?.(sentence, emitted);
+        } catch (callbackError) {
+          console.log('[David Voice] Sentence handler threw; stream continues:', callbackError);
+        }
+        emitted += 1;
+      }
+    };
+
+    streaming: while (true) {
+      throwIfAborted(options.signal);
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffered += decoder.decode(value, { stream: true });
+      // Only whole SSE lines are parseable; keep any partial tail for next read.
+      const lines = buffered.split('\n');
+      buffered = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if (payload === '[DONE]') break streaming;
+        try {
+          const parsed = JSON.parse(payload);
+          if (parsed?.error) throw new Error(parsed.message || parsed.error);
+          if (typeof parsed?.text === 'string') {
+            fullText += parsed.text;
+            emit(sentences.push(stripVerseFooterClient(fullText)));
+          }
+        } catch (parseError: any) {
+          if (parseError?.message && !/JSON/i.test(parseError.message)) throw parseError;
+          // A partial JSON line simply arrives complete on the next read.
+        }
+      }
+    }
+
+    emit(sentences.flush());
+
+    const streamedText = stripVerseFooterClient(fullText);
+    data = {
+      text: streamedText,
+      moodKey: options.moodKey || null,
+      verseUsed: extractVerseReferences(streamedText)[0] || null,
+      resetUsedVerses: false,
+    };
+
+    logApiResponse('POST /api/chat', {
+      ok: true,
+      mode: 'sentence_stream',
+      status: response.status,
+      sentenceCount: emitted,
+      textLength: streamedText.length,
+      textPreview: previewText(streamedText),
+    });
+  } else {
+    data = await response.json();
+  }
+
   logApiResponse('POST /api/chat', {
     ok: true,
     status: response.status,
@@ -600,6 +686,9 @@ export const getDavidVoiceResponse = async (
   };
 };
 
+import { createSentenceStream } from '../utils/sentenceStream.mjs';
+import { extractVerseReferences } from '../utils/davidContinuity.mjs';
+
 const VERSE_FOOTER_CLIENT_RE = /\s*\[VERSE USED:\s*[^\]]*\]\s*/gi;
 
 const stripVerseFooterClient = (text: string): string =>
@@ -628,7 +717,7 @@ export const getChatResponseStream = async (
 
   const memoryContext = await Promise.race([
     memoryContextPromise,
-    waitFor(800).then(() => null),
+    waitFor(VOICE_MEMORY_WAIT_BUDGET_MS).then(() => null),
   ]);
   const memory = memoryContext?.memory || [];
 
