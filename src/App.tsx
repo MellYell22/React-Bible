@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   loadingPage: {
     flex: 1,
     minHeight: Platform.OS === 'web' ? ('100vh' as any) : undefined,
-    backgroundColor: '#0b1e3d',
+    backgroundColor: 'rgba(7, 17, 31, 0.72)',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16,
@@ -201,9 +201,9 @@ const styles = StyleSheet.create({
   appShell: {
     flex: 1,
     height: Platform.OS === 'web' ? ('100dvh' as any) : undefined,
-    minHeight: 0,
+    minHeight: Platform.OS === 'web' ? ('100vh' as any) : undefined,
     overflow: 'hidden',
-    backgroundColor: '#0b1e3d',
+    backgroundColor: 'transparent',
   },
   screenWrap: {
     flex: 1,
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#051020',
+    backgroundColor: 'rgba(5, 13, 24, 0.78)',
     paddingVertical: 10,
     paddingHorizontal: 8,
   },
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
   tabText: {
     color: 'rgba(245, 215, 122, 0.62)',
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '500',
     letterSpacing: 0.8,
   },
   tabTextActive: {

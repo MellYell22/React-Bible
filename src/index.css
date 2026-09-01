@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -8,32 +8,54 @@
 }
 
 @layer base {
-  html {
-    height: 100%;
-  }
-
+  html, body, #root { min-height: 100%; }
   body {
-    @apply bg-[#050a14];
-    height: 100dvh;
-    overflow: hidden;
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at 22% 12%, rgba(77, 105, 135, .20), transparent 28%),
+      radial-gradient(circle at 80% 18%, rgba(199, 158, 67, .08), transparent 22%),
+      radial-gradient(circle at 72% 72%, rgba(73, 99, 126, .17), transparent 30%),
+      linear-gradient(135deg, #07111f 0%, #0a1829 45%, #06101c 100%);
+    color: #fff8df;
+    overflow-x: hidden;
   }
 
-  #root {
-    @apply w-full relative;
-    height: 100dvh;
-    overflow: hidden;
+  body::before {
+    content: "";
+    position: fixed; inset: -12%; pointer-events: none; z-index: -2;
+    background:
+      radial-gradient(ellipse at 15% 8%, transparent 0 18%, rgba(173,190,204,.10) 20%, transparent 29%),
+      radial-gradient(ellipse at 85% 82%, transparent 0 16%, rgba(179,193,203,.11) 18%, transparent 29%),
+      radial-gradient(ellipse at 56% 44%, transparent 0 20%, rgba(62,82,104,.14) 24%, transparent 36%);
+    filter: blur(24px) contrast(1.12);
+    transform: rotate(-8deg) scale(1.08);
+  }
+
+  body::after {
+    content: "";
+    position: fixed; inset: 0; pointer-events: none; z-index: -1; opacity: .28;
+    background-image:
+      radial-gradient(circle at 15% 21%, rgba(226,181,72,.75) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 76% 34%, rgba(255,242,203,.55) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 52% 69%, rgba(226,181,72,.55) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 88% 84%, rgba(255,242,203,.45) 0 1px, transparent 1.5px);
+    background-size: 170px 170px, 220px 220px, 250px 250px, 310px 310px;
+  }
+
+  #root { width: 100%; min-height: 100vh; position: relative; isolation: isolate; }
+  #root::before {
+    content: ""; position: fixed; inset: 18px; pointer-events: none; z-index: 9999;
+    border-left: 1px solid rgba(220,178,77,.76);
+    border-right: 1px solid rgba(220,178,77,.76);
+    border-top: 1px solid rgba(220,178,77,.38);
+    border-bottom: 1px solid rgba(220,178,77,.38);
+    box-shadow: inset 0 0 40px rgba(5,12,22,.18);
   }
 }
 
-/* Scrollbar styles for cleaner look */
-::-webkit-scrollbar {
-  width: 4px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #E5E7EB;
-  border-radius: 10px;
-}
+@media (max-width: 640px) { #root::before { inset: 8px; } }
 
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(212,175,55,.45); border-radius: 10px; }

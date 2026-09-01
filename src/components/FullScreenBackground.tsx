@@ -19,7 +19,7 @@ export const FullScreenBackground: React.FC<FullScreenBackgroundProps> = ({ chil
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0b1e3d',
+    backgroundColor: 'rgba(7, 17, 31, 0.72)',
   },
   center: {
     justifyContent: 'center',

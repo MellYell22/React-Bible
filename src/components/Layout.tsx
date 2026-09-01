@@ -130,7 +130,7 @@ const Layout: React.FC<LayoutProps> = ({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#050a14',
+    backgroundColor: 'rgba(5, 10, 20, 0.70)',
   },
   container: {
     flex: 1,
@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#050a14',
+    backgroundColor: 'rgba(5, 10, 20, 0.70)',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(212, 175, 55, 0.15)',
     zIndex: 50,
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderTopWidth: 1,
     borderTopColor: 'rgba(212, 175, 55, 0.1)',
-    backgroundColor: '#050a14',
+    backgroundColor: 'rgba(5, 10, 20, 0.70)',
   },
   footerText: {
     fontSize: 10,

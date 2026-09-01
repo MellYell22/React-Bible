@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderRadius: 18,
     paddingLeft: 13,
-    paddingRight: 5,
+    paddingRight: 8,
     borderWidth: 1,
     marginBottom: 12,
   },
@@ -621,7 +621,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   clearButton: {
-    padding: 7,
+    padding: 8,
   },
   searchSubmit: {
     minHeight: 34,
@@ -670,7 +670,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   encouragementCard: {
-    backgroundColor: '#0f2a52',
+    backgroundColor: 'rgba(13, 34, 61, 0.66)',
     borderRadius: 18,
     padding: 16,
     marginBottom: 20,
@@ -779,7 +779,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   scriptureCard: {
-    backgroundColor: '#163d73',
+    backgroundColor: 'rgba(18, 47, 83, 0.62)',
     borderRadius: 18,
     padding: 16,
     marginBottom: 12,

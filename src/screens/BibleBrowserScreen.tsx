@@ -516,7 +516,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   contentCard: {
-    backgroundColor: '#0f2a52',
+    backgroundColor: 'rgba(13, 34, 61, 0.66)',
     borderRadius: 24,
     padding: 30,
     borderWidth: 1,

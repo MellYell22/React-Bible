@@ -676,7 +676,7 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: 30,
-    backgroundColor: '#0f2a52',
+    backgroundColor: 'rgba(13, 34, 61, 0.66)',
     padding: 25,
     borderRadius: 24,
     borderWidth: 1,
@@ -704,7 +704,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#0b1e3d',
+    backgroundColor: 'rgba(7, 17, 31, 0.72)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 10,
@@ -749,8 +749,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   successBanner: {
-    backgroundColor: 'rgba(127, 184, 148, 0.1)',
-    borderColor: 'rgba(127, 184, 148, 0.3)',
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
   },
   errorBanner: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -765,7 +765,7 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     fontWeight: '500',
   },
-  successText: { color: '#7fb894' },
+  successText: { color: '#10B981' },
   errorText: { color: '#ef4444' },
   infoText: { color: '#d4af37' },
   sectionTitle: {
@@ -779,7 +779,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   settingsCard: {
-    backgroundColor: '#0f2a52',
+    backgroundColor: 'rgba(13, 34, 61, 0.66)',
     borderRadius: 24,
     padding: 24,
     marginBottom: 30,
@@ -839,12 +839,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Playfair Display',
   },
   benefitsSummary: {
-    backgroundColor: '#0f2a52',
+    backgroundColor: 'rgba(13, 34, 61, 0.66)',
     borderRadius: 24,
     padding: 20,
     marginBottom: 30,
     borderWidth: 1,
-    borderColor: 'rgba(127, 184, 148, 0.3)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
   },
   benefitItem: {
     flexDirection: 'row',
@@ -1036,7 +1036,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   planCard: {
-    backgroundColor: '#0f2a52',
+    backgroundColor: 'rgba(13, 34, 61, 0.66)',
     borderRadius: 24,
     padding: 24,
     marginBottom: 20,
@@ -1051,11 +1051,11 @@ const styles = StyleSheet.create({
   },
   proCard: {
     borderColor: '#d4af37',
-    backgroundColor: '#0b1e3d',
+    backgroundColor: 'rgba(7, 17, 31, 0.72)',
   },
   currentPlanCard: {
-    borderColor: '#7fb894',
-    backgroundColor: 'rgba(127, 184, 148, 0.05)',
+    borderColor: '#10B981',
+    backgroundColor: 'rgba(16, 185, 129, 0.05)',
   },
   proBadge: {
     position: 'absolute',
@@ -1079,7 +1079,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     left: -30,
-    backgroundColor: '#7fb894',
+    backgroundColor: '#10B981',
     paddingHorizontal: 40,
     paddingVertical: 4,
     transform: [{ rotate: '-45deg' }],
@@ -1201,7 +1201,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   tabActive: {
-    backgroundColor: '#0f2a52',
+    backgroundColor: 'rgba(13, 34, 61, 0.66)',
     borderWidth: 1,
     borderColor: 'rgba(212, 175, 55, 0.3)',
   },
@@ -1227,7 +1227,7 @@ const styles = StyleSheet.create({
   emptySaved: {
     alignItems: 'center',
     padding: 40,
-    backgroundColor: '#0f2a52',
+    backgroundColor: 'rgba(13, 34, 61, 0.66)',
     borderRadius: 24,
     borderWidth: 1,
     borderStyle: 'dashed',
@@ -1248,7 +1248,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Playfair Display',
   },
   savedCard: {
-    backgroundColor: '#0f2a52',
+    backgroundColor: 'rgba(13, 34, 61, 0.66)',
     borderRadius: 16,
     marginBottom: 12,
     borderWidth: 1,
@@ -1256,8 +1256,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   memorizedCard: {
-    borderColor: 'rgba(127, 184, 148, 0.3)',
-    backgroundColor: 'rgba(127, 184, 148, 0.02)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: 'rgba(16, 185, 129, 0.02)',
   },
   savedCardHeader: {
     padding: 16,
@@ -1344,8 +1344,8 @@ const styles = StyleSheet.create({
     color: 'rgba(212, 175, 55, 0.8)',
   },
   memorizedBtn: {
-    backgroundColor: '#7fb894',
-    borderColor: '#7fb894',
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
   },
   deleteBtn: {
     borderColor: 'rgba(239, 68, 68, 0.2)',

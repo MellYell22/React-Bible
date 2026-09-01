@@ -331,13 +331,13 @@ export default function HomeScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: NAVY,
+    backgroundColor: 'transparent',
   },
 
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
+    paddingHorizontal: 18,
+    paddingBottom: 48,
     alignItems: 'center',
   },
 
@@ -350,7 +350,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MAX_CONTENT_WIDTH,
     alignItems: 'center',
-    marginBottom: spacing.section,
+    marginBottom: 36,
   },
 
   freeChatLabel: {
@@ -370,16 +370,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: gold.a30,
-    borderRadius: radius.sm,
-    backgroundColor: surfaces.sunken,
-    paddingLeft: spacing.lg,
-    paddingRight: spacing.xs,
+    borderColor: 'rgba(212, 175, 55, 0.35)',
+    borderRadius: 28,
+    backgroundColor: 'rgba(5, 16, 32, 0.62)',
+    paddingLeft: 22,
+    paddingRight: 6,
     ...glow,
   },
 
   searchShellFocused: {
-    borderColor: gold.a70,
+    borderColor: 'rgba(245, 215, 122, 0.82)',
     backgroundColor: 'rgba(5, 16, 32, 0.82)',
     shadowOpacity: 0.34,
     shadowRadius: 24,
@@ -391,19 +391,19 @@ const styles = StyleSheet.create({
     color: '#fff8df',
     fontSize: 16,
     fontStyle: 'italic',
-    fontFamily: fonts.display,
+    fontFamily: 'Playfair Display',
     letterSpacing: 0.3,
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}),
   },
 
   searchSubmit: {
-    minWidth: 82,
+    minWidth: 70,
     minHeight: 40,
     paddingHorizontal: spacing.md,
-    borderRadius: radius.sm,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: GOLD,
+    backgroundColor: 'rgba(212, 175, 55, 0.92)',
   },
 
   searchSubmitDisabled: {
@@ -411,11 +411,11 @@ const styles = StyleSheet.create({
   },
 
   searchSubmitText: {
-    fontFamily: fonts.ui,
-    fontSize: fontSize.button,
-    fontWeight: '700',
+    fontFamily: 'Cinzel',
+    fontSize: 9,
+    fontWeight: '800',
     color: DARK_NAVY,
-    letterSpacing: tracking.wider,
+    letterSpacing: 1.3,
     textTransform: 'uppercase',
   },
 
@@ -433,13 +433,13 @@ const styles = StyleSheet.create({
   moodSection: {
     width: '100%',
     maxWidth: MAX_CONTENT_WIDTH,
-    marginBottom: spacing.section,
+    marginBottom: 64,
   },
 
   moodGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
+    gap: 10,
   },
 
   moodButton: {
@@ -448,68 +448,68 @@ const styles = StyleSheet.create({
     minHeight: TOUCH_TARGET,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-    borderWidth: 1,
-    borderColor: gold.a30,
-    borderRadius: radius.sm,
-    backgroundColor: surfaces.input,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(212, 175, 55, 0.4)',
+    borderRadius: 20,
+    backgroundColor: 'transparent',
   },
 
   moodButtonSecondRow: {},
 
   moodButtonActive: {
     borderColor: GOLD,
-    backgroundColor: gold.a10,
+    backgroundColor: GOLD,
     ...glow,
   },
 
   moodButtonText: {
-    fontFamily: fonts.ui,
-    fontSize: fontSize.tiny,
-    fontWeight: '700',
-    color: gold.a60,
-    letterSpacing: tracking.normal,
+    fontFamily: 'Cinzel',
+    fontSize: 9,
+    fontWeight: '500',
+    color: 'rgba(212, 175, 55, 0.6)',
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
 
   moodButtonTextActive: {
-    color: SOFT_GOLD,
+    color: DARK_NAVY,
   },
 
   verseSection: {
     width: '100%',
     maxWidth: MAX_CONTENT_WIDTH,
-    marginBottom: spacing.section,
+    marginBottom: 70,
   },
 
   verseBorder: {
     borderWidth: 1,
-    borderColor: gold.a30,
-    borderRadius: radius.sm,
-    backgroundColor: surfaces.input,
-    paddingVertical: spacing.xxl,
-    paddingHorizontal: spacing.xl,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+    borderRadius: 8,
+    backgroundColor: 'rgba(5, 16, 32, 0.16)',
+    paddingVertical: 36,
+    paddingHorizontal: 24,
     alignItems: 'center',
   },
 
   verseLabel: {
-    fontFamily: fonts.ui,
-    fontSize: fontSize.micro,
-    fontWeight: '700',
+    fontFamily: 'Cinzel',
+    fontSize: 8,
+    fontWeight: '500',
     color: GOLD,
-    letterSpacing: tracking.wider,
+    letterSpacing: 1.5,
     textTransform: 'uppercase',
-    marginBottom: spacing.xs,
+    marginBottom: 4,
   },
 
   verseDate: {
-    fontFamily: fonts.ui,
-    fontSize: fontSize.micro,
-    color: gold.a50,
-    letterSpacing: tracking.normal,
+    fontFamily: 'Cinzel',
+    fontSize: 7,
+    color: 'rgba(212, 175, 55, 0.5)',
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
-    marginBottom: spacing.xl,
+    marginBottom: 20,
   },
 
   verseLoading: {
@@ -526,23 +526,23 @@ const styles = StyleSheet.create({
   },
 
   verseText: {
-    fontFamily: fonts.display,
+    fontFamily: 'Playfair Display',
     fontSize: 17,
-    lineHeight: 28,
+    lineHeight: 26,
     fontStyle: 'italic',
-    color: WHITE,
+    color: '#ffffff',
     textAlign: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: 16,
   },
 
   verseReference: {
-    fontFamily: fonts.ui,
-    fontSize: fontSize.tiny,
-    fontWeight: '700',
+    fontFamily: 'Cinzel',
+    fontSize: 9,
+    fontWeight: '500',
     color: GOLD,
-    letterSpacing: tracking.wide,
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
-    marginBottom: spacing.md,
+    marginBottom: 18,
   },
 
   verseFallbackText: {
@@ -559,11 +559,11 @@ const styles = StyleSheet.create({
   },
 
   reflectionLink: {
-    fontFamily: fonts.ui,
-    fontSize: fontSize.tiny,
+    fontFamily: 'Cinzel',
+    fontSize: 8,
     fontWeight: '600',
-    color: gold.a50,
-    letterSpacing: tracking.tight,
+    color: 'rgba(212, 175, 55, 0.6)',
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
 
@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MAX_CONTENT_WIDTH,
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: 62,
   },
 
   actionHeading: {
@@ -611,7 +611,7 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: 34,
   },
 
   talkButtonText: {
@@ -638,15 +638,15 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: 'auto',
     paddingTop: spacing.xl,
-    paddingBottom: spacing.md,
+    paddingBottom: 16,
     alignItems: 'center',
   },
 
   footerText: {
-    fontFamily: fonts.ui,
-    fontSize: fontSize.micro,
-    color: gold.a30,
-    letterSpacing: tracking.wider,
+    fontFamily: 'Cinzel',
+    fontSize: 7,
+    color: 'rgba(212, 175, 55, 0.3)',
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
 });
