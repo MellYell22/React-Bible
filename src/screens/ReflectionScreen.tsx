@@ -295,7 +295,7 @@ export default function ReflectionScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'rgba(5, 16, 32, 0.74)',
+    backgroundColor: '#051020',
   },
   scrollView: {
     flex: 1,
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#d4af37',
     fontFamily: 'Playfair Display',
-    fontWeight: '500',
+    fontWeight: '700',
     letterSpacing: 3,
   },
   titleUnderline: {
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
   translationDropdown: {
     position: 'absolute',
     top: 50,
-    backgroundColor: 'rgba(8, 24, 43, 0.62)',
+    backgroundColor: '#0a1a30',
     borderRadius: 15,
     padding: 8,
     borderWidth: 1,
@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
   saveButtonActive: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#10B981',
+    borderColor: '#7fb894',
   },
   saveButtonContent: {
     flexDirection: 'row',

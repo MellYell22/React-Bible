@@ -1,4 +1,4 @@
-const DAVID_ELEVENLABS_VOICE_ID = 'KdyHP7aXTUxKmw1tVBvn';
+const DAVID_ELEVENLABS_VOICE_ID = 'nPczCjzI2devNBz1zQrb';
 const ELEVENLABS_TTS_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
 
 // Live voice stays on a low-latency model suitable for conversation.

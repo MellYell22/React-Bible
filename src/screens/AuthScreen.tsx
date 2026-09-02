@@ -449,7 +449,7 @@ const DARK_NAVY = '#051020';
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: NAVY,
   },
   scrollContent: {
     flexGrow: 1,
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
 
   headerTitle: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '700',
     color: GOLD,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
@@ -530,7 +530,7 @@ const styles = StyleSheet.create({
   signUpText: {
     color: DARK_NAVY,
     fontSize: 10,
-    fontWeight: '500',
+    fontWeight: '700',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     fontFamily: 'Cinzel',
@@ -538,7 +538,7 @@ const styles = StyleSheet.create({
 
   // Translation Selector
   translationContainer: {
-    position: 'absolute',
+    position: 'relative',
     zIndex: 100,
   },
 
@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
   translationLabel: {
     color: GOLD,
     fontSize: 9,
-    fontWeight: '500',
+    fontWeight: '700',
     letterSpacing: 1,
     textTransform: 'uppercase',
     fontFamily: 'Cinzel',
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 40,
     right: 0,
-    backgroundColor: 'rgba(13, 34, 61, 0.66)',
+    backgroundColor: '#0f2a52',
     borderRadius: 4,
     borderWidth: 1,
     borderColor: GOLD,
@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
 
   mainTitle: {
     fontSize: 36,
-    fontWeight: '500',
+    fontWeight: '700',
     color: '#ffffff',
     letterSpacing: 2,
     textTransform: 'uppercase',
@@ -649,7 +649,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     marginBottom: 8,
-    fontWeight: '500',
+    fontWeight: '700',
     fontFamily: 'Cinzel',
   },
 
@@ -673,7 +673,7 @@ const styles = StyleSheet.create({
     color: GOLD,
     letterSpacing: 1,
     textTransform: 'uppercase',
-    fontWeight: '500',
+    fontWeight: '700',
     fontFamily: 'Cinzel',
   },
 
@@ -763,7 +763,7 @@ const styles = StyleSheet.create({
   signInButtonText: {
     color: DARK_NAVY,
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '700',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     fontFamily: 'Cinzel',
@@ -784,7 +784,7 @@ const styles = StyleSheet.create({
   createAccountText: {
     color: 'rgba(212, 175, 55, 0.7)',
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '700',
     letterSpacing: 1.2,
     textTransform: 'uppercase',
     fontFamily: 'Cinzel',
