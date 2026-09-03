@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { Platform, View, StyleSheet } from 'react-native';
+import { smokyPageBackground } from '../theme';
 
 interface FullScreenBackgroundProps {
   children: React.ReactNode;
@@ -19,7 +20,8 @@ export const FullScreenBackground: React.FC<FullScreenBackgroundProps> = ({ chil
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0b1e3d',
+    minHeight: Platform.OS === 'web' ? ('100dvh' as any) : undefined,
+    ...smokyPageBackground,
   },
   center: {
     justifyContent: 'center',

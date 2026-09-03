@@ -17,7 +17,6 @@ import { getVerseOfTheDay } from '../services/ai';
 import { Scripture } from '../types';
 import { hasProAccess } from '../utils/tier';
 import {
-  NAVY,
   DARK_NAVY,
   GOLD,
   SOFT_GOLD,
@@ -331,7 +330,7 @@ export default function HomeScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: NAVY,
+    backgroundColor: 'transparent',
   },
 
   scrollContent: {

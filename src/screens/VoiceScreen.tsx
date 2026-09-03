@@ -1479,7 +1479,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     overflow: 'hidden',
-    backgroundColor: 'rgba(7, 22, 43, 0.72)',
+    backgroundColor: 'transparent',
     position: 'relative',
   },
   scrollArea: {
@@ -1498,7 +1498,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: 'rgba(7, 22, 43, 0.72)',
+    backgroundColor: 'transparent',
   },
   lockCard: {
     width: '100%',

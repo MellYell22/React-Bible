@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { PLANS } from '../constants';
 import {
-  NAVY,
   DARK_NAVY,
   GOLD,
   IVORY,
@@ -146,7 +145,7 @@ export default function DailyLimitUpgrade({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: NAVY },
+  container: { flex: 1, backgroundColor: 'transparent' },
   content: {
     flexGrow: 1,
     alignItems: 'center',

@@ -20,6 +20,7 @@ import VoiceScreen from './screens/VoiceScreen';
 import ReflectionScreen from './screens/ReflectionScreen';
 import BibleBrowserScreen from './screens/BibleBrowserScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import { smokyPageBackground } from './theme';
 
 type AppRoute = 'Home' | 'Mood' | 'Chat' | 'Voice' | 'Reflection' | 'Bible' | 'Profile';
 
@@ -187,7 +188,7 @@ const styles = StyleSheet.create({
   loadingPage: {
     flex: 1,
     minHeight: Platform.OS === 'web' ? ('100vh' as any) : undefined,
-    backgroundColor: '#0b1e3d',
+    ...smokyPageBackground,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16,
@@ -203,7 +204,7 @@ const styles = StyleSheet.create({
     height: Platform.OS === 'web' ? ('100dvh' as any) : undefined,
     minHeight: 0,
     overflow: 'hidden',
-    backgroundColor: '#0b1e3d',
+    ...smokyPageBackground,
   },
   screenWrap: {
     flex: 1,

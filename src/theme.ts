@@ -40,6 +40,26 @@ export const surfaces = {
   sunken: 'rgba(5, 16, 32, 0.62)',
 } as const;
 
+/**
+ * Shared page ground: the smoky navy/gold treatment used by the accepted hero
+ * and campaign cards. Keep page containers transparent so this can show
+ * through; reserve opaque fills for actual cards, controls, and panels.
+ */
+export const smokyPageBackground = {
+  backgroundColor: NAVY,
+  backgroundImage: [
+    'radial-gradient(ellipse at 50% 30%, rgba(212, 175, 55, 0.16) 0%, rgba(212, 175, 55, 0.04) 36%, rgba(212, 175, 55, 0) 64%)',
+    'radial-gradient(ellipse at 50% 112%, rgba(5, 16, 32, 0.9) 0%, rgba(5, 16, 32, 0.28) 40%, rgba(5, 16, 32, 0) 60%)',
+    'linear-gradient(105deg, rgba(244, 239, 228, 0.08) 0%, rgba(244, 239, 228, 0.03) 14%, rgba(244, 239, 228, 0) 31%)',
+    'linear-gradient(252deg, rgba(244, 239, 228, 0.05) 0%, rgba(244, 239, 228, 0.015) 16%, rgba(244, 239, 228, 0) 34%)',
+    'linear-gradient(180deg, rgba(5, 16, 32, 0.12) 0%, rgba(11, 30, 61, 0) 38%, rgba(5, 16, 32, 0.35) 100%)',
+  ].join(', '),
+  backgroundAttachment: 'fixed',
+  backgroundPosition: 'center',
+  backgroundRepeat: 'no-repeat',
+  backgroundSize: 'cover',
+} as const;
+
 export const danger = {
   text: '#ef4444',
   bg: 'rgba(239, 68, 68, 0.1)',

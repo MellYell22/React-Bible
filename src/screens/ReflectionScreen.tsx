@@ -295,7 +295,7 @@ export default function ReflectionScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#051020',
+    backgroundColor: 'transparent',
   },
   scrollView: {
     flex: 1,

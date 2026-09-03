@@ -443,13 +443,12 @@ export default function AuthScreen() {
 
 const GOLD = '#d4af37';
 const SOFT_GOLD = '#f5d77a';
-const NAVY = '#0b1e3d';
 const DARK_NAVY = '#051020';
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: NAVY,
+    backgroundColor: 'transparent',
   },
   scrollContent: {
     flexGrow: 1,
