@@ -6,7 +6,7 @@ export const PLANS = {
     id: 'free',
     name: 'Free Plan',
     price: '$0',
-    interval: 'mo',
+    interval: 'month',
     priceId: null,
     features: [
       'Daily Verse of the Day',
@@ -18,7 +18,7 @@ export const PLANS = {
     id: 'pro',
     name: "David's Voice Pro",
     price: '$9.99',
-    interval: 'mo',
+    interval: 'month',
     priceId: import.meta.env.VITE_STRIPE_PRICE_ID_PRO || 'price_1TRTQuGDw0P2L0A1MsgZiMeM',
     features: [
       'Unlimited AI chat with David',
