@@ -244,9 +244,5 @@ export const card = {
 
 /** Warm glow used on focused / active elements in the reference. */
 export const glow = {
-  shadowColor: GOLD,
-  shadowOffset: { width: 0, height: 0 },
-  shadowOpacity: 0.22,
-  shadowRadius: 18,
-  elevation: 4,
+  boxShadow: '0 0 18px rgba(212, 175, 55, 0.22)',
 } as const;

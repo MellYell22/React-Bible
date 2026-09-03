@@ -4,7 +4,7 @@ import { X, Quote } from 'lucide-react';
 import { motion, AnimatePresence } from "motion/react";
 import { Scripture } from '../types';
 
-const MotionView = motion(View);
+const MotionView = motion.create(View);
 
 interface VerseOfTheDayModalProps {
   visible: boolean;
@@ -72,10 +72,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#d4af37',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.5,
-    shadowRadius: 30,
+    boxShadow: '0 20px 30px rgba(0, 0, 0, 0.5)',
     elevation: 20,
   },
   closeButton: {

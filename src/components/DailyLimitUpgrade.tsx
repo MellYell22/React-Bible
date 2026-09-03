@@ -196,10 +196,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxl,
     paddingHorizontal: spacing.xl,
     marginBottom: spacing.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
+    boxShadow: '0 6px 16px rgba(0, 0, 0, 0.18)',
     elevation: 2,
   },
 
@@ -212,9 +209,7 @@ const styles = StyleSheet.create({
   planCardFeatured: {
     borderColor: 'rgba(212, 175, 55, 0.28)',
     backgroundColor: 'rgba(5, 16, 32, 0.44)',
-    shadowColor: GOLD,
-    shadowOpacity: 0.12,
-    shadowRadius: 22,
+    boxShadow: '0 0 22px rgba(212, 175, 55, 0.12)',
   },
 
   featuredNote: {

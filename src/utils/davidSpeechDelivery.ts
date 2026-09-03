@@ -36,6 +36,31 @@ const LAUGH_CUE_RE = new RegExp(
   'gi',
 );
 
+// A sentence that is nothing but a bare stage direction ("Chuckles.",
+// "long pause,") with no wrapper characters at all. The cue must be followed
+// directly by punctuation (or end of text), so real sentences like
+// "Smiles like yours matter" or "Pause for a moment" are never touched.
+const STANDALONE_CUE_RE = new RegExp(
+  `(^|[.!?]\\s+)(?:${CUE_ADJ})?(?:${BREATH_WORDS}|${LAUGH_WORDS})(?:\\s+(?:softly|gently|warmly|quietly|lightly))?\\s*(?:[.!?,]+\\s*|$)`,
+  'gi',
+);
+
+/**
+ * Anything still wrapped in [] {} or <> after the cue pass is metadata —
+ * verse footers, action tags, XML/JSON fragments, internal notes. None of it
+ * is spoken content, so it is removed wholesale (paired tags including their
+ * contents) before reaching TTS.
+ */
+const stripNonSpokenMarkup = (text: string): string =>
+  text
+    .replace(/<([a-zA-Z][\w:-]*)[^<>]*>[\s\S]*?<\/\1\s*>/g, ' ')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/\{[^{}]*\}/g, ' ')
+    .replace(/<[^<>\n]{0,160}>/g, ' ')
+    .replace(STANDALONE_CUE_RE, '$1')
+    // Leftover markdown wrappers: drop the symbols, keep the words.
+    .replace(/[*_~`#]+/g, ' ');
+
 const DECIMAL_PLACEHOLDER = '__DAVID_DECIMAL_POINT__';
 
 const protectDecimalPoints = (text: string): string =>
@@ -126,6 +151,7 @@ const preparePlainText = (text: string): string => {
   //  - a laugh/smile cue is removed (TTS can't perform it convincingly)
   t = t.replace(BREATH_CUE_RE, '. ');
   t = t.replace(LAUGH_CUE_RE, ' ');
+  t = stripNonSpokenMarkup(t);
   t = joinLineBreaksConversationally(t);
   t = normalizeQuotesAndSpacing(t);
   t = collapseStackedFiller(t);

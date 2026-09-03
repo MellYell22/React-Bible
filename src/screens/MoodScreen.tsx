@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator
 import { motion } from 'motion/react';
 import { getMoodScriptures, generateSpeech, SPEECH_USER_TAP } from '../services/ai';
 
-const MotionView = motion(View);
+const MotionView = motion.create(View);
 import { MoodResponse } from '../types';
 import {
   Sparkles,
