@@ -524,25 +524,35 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
         <View style={styles.benefitItem}>
           <CheckCircle2 size={16} color="#7fb894" />
           <Text style={styles.benefitText}>
-            {profile?.subscription_tier === 'pro' ? 'Unlimited AI Chat with David' : '3 Mood Searches / Day'}
+            {hasProAccess(profile) || profile?.subscription_tier === 'plus'
+              ? 'Unlimited AI Chat with David'
+              : '5 messages a day with David'}
           </Text>
         </View>
         <View style={styles.benefitItem}>
           <CheckCircle2 size={16} color="#7fb894" />
           <Text style={styles.benefitText}>
-            {profile?.subscription_tier === 'pro' ? 'Live Voice Chat with David' : 'Standard AI Reflections'}
+            {hasProAccess(profile)
+              ? 'Live Voice Chat with David'
+              : profile?.subscription_tier === 'plus'
+                ? 'Unlimited Reflections'
+                : '3 reflections a day'}
           </Text>
         </View>
         <View style={styles.benefitItem}>
           <CheckCircle2 size={16} color="#7fb894" />
           <Text style={styles.benefitText}>
-            {profile?.subscription_tier === 'pro' ? 'Deeper Scripture Reflections' : 'Daily Verse of the Day'}
+            {hasProAccess(profile)
+              ? 'Everything in Bible Plus'
+              : profile?.subscription_tier === 'plus'
+                ? 'Saved favorites, chat history & ad-free'
+                : 'Daily Verse of the Day'}
           </Text>
         </View>
-        {profile?.subscription_tier === 'pro' && (
+        {hasProAccess(profile) && (
           <View style={styles.benefitItem}>
             <CheckCircle2 size={16} color="#7fb894" />
-            <Text style={styles.benefitText}>Deeper Scripture Insights & Ad-free</Text>
+            <Text style={styles.benefitText}>Deeper Scripture Reflections & Priority Responses</Text>
           </View>
         )}
       </View>

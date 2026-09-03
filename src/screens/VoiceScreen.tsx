@@ -24,6 +24,7 @@ import { hasProAccess, OWNER_EMAIL } from '../utils/tier';
 import { prepareDavidTtsPayload } from '../utils/davidSpeechDelivery';
 import { detectMoodKeyFromMessages } from '../utils/davidMoodContext';
 import { getVoiceSessionGreeting } from '../constants/persona';
+import { PLANS } from '../constants';
 
 const IDLE_VOICE_LEVELS = [0.18, 0.26, 0.2, 0.3, 0.22, 0.34, 0.24, 0.31, 0.2];
 
@@ -1244,7 +1245,7 @@ export default function VoiceScreen() {
           <Lock color="#d4af37" size={48} style={{ marginBottom: 20 }} />
           <Text style={styles.lockTitle} role="heading" aria-level={1}>David's Voice Pro</Text>
           <Text style={styles.lockText}>
-            Live voice with David is a David's Voice Pro feature.
+            Live voice with David is a {PLANS.PRO.name} feature — {PLANS.PRO.price}/{PLANS.PRO.interval}.
           </Text>
           <TouchableOpacity
             style={[
@@ -1255,10 +1256,12 @@ export default function VoiceScreen() {
             disabled={upgradeLoading}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel="Upgrade to David's Voice Pro"
+            accessibilityLabel={`Upgrade to ${PLANS.PRO.name}, ${PLANS.PRO.price} per ${PLANS.PRO.interval}`}
           >
             <Text style={styles.lockUpgradeButtonText}>
-              {upgradeLoading ? 'Starting checkout...' : "Get David's Voice Pro"}
+              {upgradeLoading
+                ? 'Starting checkout...'
+                : `Get ${PLANS.PRO.name} — ${PLANS.PRO.price}/${PLANS.PRO.interval}`}
             </Text>
           </TouchableOpacity>
           <Text style={styles.lockUpgradeHint}>Unlock live voice chat with David.</Text>
