@@ -15,7 +15,7 @@ import { useUser } from '../UserContext';
 import { hasPremiumAccess } from '../utils/tier';
 import DailyLimitUpgrade from '../components/DailyLimitUpgrade';
 
-const MotionView = motion(View);
+const MotionView = motion.create(View);
 
 const TRANSLATIONS = ['NIV', 'KJV', 'NLT', 'ESV', 'NKJV', 'CSB'];
 
@@ -368,10 +368,7 @@ const styles = StyleSheet.create({
     padding: 8,
     borderWidth: 1,
     borderColor: 'rgba(212, 175, 55, 0.3)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
+    boxShadow: '0 10px 20px rgba(0, 0, 0, 0.5)',
     elevation: 20,
     width: 140,
   },

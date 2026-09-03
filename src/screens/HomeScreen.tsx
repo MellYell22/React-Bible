@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -219,16 +220,15 @@ export default function HomeScreen({ navigation }: any) {
               multiline={false}
               accessibilityLabel="Tell David how you are feeling"
             />
-            <TouchableOpacity
+            <Pressable
               style={[styles.searchSubmit, !emotionalEntry.trim() && styles.searchSubmitDisabled]}
               onPress={handleEmotionalEntrySubmit}
               disabled={!emotionalEntry.trim()}
               accessibilityRole="button"
               accessibilityLabel="Send to David"
-              activeOpacity={0.75}
             >
               <Text style={styles.searchSubmitText}>SEND</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
 
@@ -381,8 +381,7 @@ const styles = StyleSheet.create({
   searchShellFocused: {
     borderColor: gold.a70,
     backgroundColor: 'rgba(5, 16, 32, 0.82)',
-    shadowOpacity: 0.34,
-    shadowRadius: 24,
+    boxShadow: '0 0 24px rgba(212, 175, 55, 0.34)',
   },
 
   searchInput: {

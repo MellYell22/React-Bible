@@ -41,6 +41,7 @@ declare module 'react-native' {
   export class KeyboardAvoidingView extends React.Component<any> {}
   export class RefreshControl extends React.Component<any> {}
   export class ActivityIndicator extends React.Component<any> {}
+  export class Pressable extends React.Component<any> {}
   export class TouchableOpacity extends React.Component<any> {}
   export class Text extends React.Component<any> {}
 

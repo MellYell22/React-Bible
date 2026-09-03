@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator
 import { motion } from 'motion/react';
 import { ChevronRight, ChevronLeft, BookOpen, Bookmark, Check } from 'lucide-react';
 
-const MotionView = motion(View);
+const MotionView = motion.create(View);
 import { supabase, saveScripture } from '../services/supabase';
 import { Profile } from '../types';
 
@@ -521,10 +521,7 @@ const styles = StyleSheet.create({
     padding: 30,
     borderWidth: 1,
     borderColor: '#d4af37',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
+    boxShadow: '0 10px 20px rgba(0, 0, 0, 0.3)',
     elevation: 10,
   },
   referenceText: {
