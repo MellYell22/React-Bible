@@ -26,13 +26,15 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
    */
   type ProfileSection = 'main' | 'preferences' | 'subscription' | 'saved';
   const [section, setSection] = useState<ProfileSection>('main');
-  /** Plans stay collapsed until the user asks to see them. */
+  /** Prices are shown immediately when the subscription section opens. */
   const [showOtherPlans, setShowOtherPlans] = useState(false);
 
   const openSection = (next: ProfileSection) => {
     setSection(next);
     // Saved content loads on demand, exactly as the old tab did.
     setShowSavedScriptures(next === 'saved');
+    // Pricing must never be hidden behind another tap before checkout.
+    setShowOtherPlans(next === 'subscription');
     scrollViewRef.current?.scrollTo({ y: 0, animated: false });
   };
 
@@ -490,6 +492,33 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
       </>)}
 
       {section === 'subscription' && (<>
+      <View style={{
+        backgroundColor: '#0f2a52',
+        borderRadius: 18,
+        padding: 20,
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(212, 175, 55, 0.35)',
+      }}>
+        <Text style={{
+          color: '#f5d77a',
+          fontSize: 14,
+          fontWeight: 'bold',
+          letterSpacing: 1.5,
+          textAlign: 'center',
+          marginBottom: 14,
+        }}>PLANS & PRICING</Text>
+        <Text style={{ color: '#ffffff', fontSize: 16, textAlign: 'center', marginBottom: 8 }}>
+          {PLANS.PLUS.name} — {PLANS.PLUS.price}/{PLANS.PLUS.interval}
+        </Text>
+        <Text style={{ color: '#ffffff', fontSize: 16, textAlign: 'center', marginBottom: 12 }}>
+          {PLANS.PRO.name} — {PLANS.PRO.price}/{PLANS.PRO.interval}
+        </Text>
+        <Text style={{ color: 'rgba(255,255,255,0.68)', fontSize: 12, lineHeight: 18, textAlign: 'center' }}>
+          You’ll see the same monthly amount again in Stripe before you complete payment.
+        </Text>
+      </View>
+
       <Text style={[styles.sectionTitle, { paddingLeft: 44 }]} role="heading" aria-level={2}>Your Benefits</Text>
       <View style={[styles.benefitsSummary, { paddingLeft: 16 }]}>
         <View style={styles.benefitItem}>
@@ -623,7 +652,9 @@ export default function ProfileScreen({ route, navigation }: { route?: { params?
                     styles.planButtonText, 
                     plan.id === 'pro' && { color: '#0b1e3d' }
                   ]}>
-                    {plan.id === 'pro' ? "Get David's Voice Pro" : `Upgrade to ${plan.name}`}
+                    {plan.id === 'pro'
+                      ? `Get David's Voice Pro — ${plan.price}/${plan.interval}`
+                      : `Upgrade to ${plan.name} — ${plan.price}/${plan.interval}`}
                   </Text>
                 )}
               </TouchableOpacity>
