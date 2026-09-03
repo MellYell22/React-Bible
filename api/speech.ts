@@ -20,6 +20,27 @@ if (requestedModel && ELEVENLABS_MODEL !== requestedModel) {
   );
 }
 
+/**
+ * David's voice is a product decision, not environment config, so the code is
+ * the single source of truth for it.
+ *
+ * It used to read `process.env.ELEVENLABS_VOICE_ID || DAVID_ELEVENLABS_VOICE_ID`,
+ * which meant a stale env var in the hosting dashboard silently outranked every
+ * change made here. That is exactly what happened: the constant below was
+ * updated to the new voice, the deploy went green, and production kept speaking
+ * in the old stock voice because the env var still pointed at it. Nothing
+ * errored, so nothing surfaced.
+ *
+ * The env var is still read, but only to warn when it disagrees — the same
+ * shape already used for ELEVENLABS_MODEL and ELEVENLABS_OUTPUT_FORMAT above.
+ */
+const requestedVoiceId = (process.env.ELEVENLABS_VOICE_ID || '').trim();
+if (requestedVoiceId && requestedVoiceId !== DAVID_ELEVENLABS_VOICE_ID) {
+  console.warn(
+    `[Speech] Ignoring ELEVENLABS_VOICE_ID="${requestedVoiceId}" — David's voice is pinned in code to ${DAVID_ELEVENLABS_VOICE_ID}. Remove or update that environment variable to silence this.`,
+  );
+}
+
 const FAST_OUTPUT_FORMATS = new Set([
   'mp3_22050_32',
   'mp3_44100_32',
@@ -81,7 +102,7 @@ export default async function handler(req: any, res: any) {
     });
   }
 
-  const voiceId = process.env.ELEVENLABS_VOICE_ID || DAVID_ELEVENLABS_VOICE_ID;
+  const voiceId = DAVID_ELEVENLABS_VOICE_ID;
 
   try {
     const speechUrl = `${ELEVENLABS_TTS_URL}/${voiceId}?output_format=${encodeURIComponent(

@@ -698,7 +698,8 @@ app.post("/api/speech", async (req, res) => {
     });
   }
 
-  const voiceId = process.env.ELEVENLABS_VOICE_ID || DAVID_ELEVENLABS_VOICE_ID;
+  // Pinned in code, same as api/speech.ts — see the note there.
+  const voiceId = DAVID_ELEVENLABS_VOICE_ID;
 
   // eleven_multilingual_v2: warmest, most human-sounding model. The turbo model
   // sounded thin/robotic, so we trade a little latency for a genuinely warm voice.
@@ -838,7 +839,7 @@ async function startServer() {
       console.log(`🗄️ Supabase: ${supabase ? "✅ Configured" : "❌ Missing SUPABASE_URL/SERVICE_ROLE_KEY"}`);
       console.log(`🤖 OpenAI: ${process.env.OPENAI_API_KEY ? "✅ Configured" : "❌ Missing OPENAI_API_KEY"}`);
       console.log(`🎙️ ElevenLabs TTS: ${process.env.ELEVENLABS_API_KEY ? "✅ Configured" : "❌ Missing ELEVENLABS_API_KEY"}`);
-      console.log(`🗣️ David Voice: ${process.env.ELEVENLABS_VOICE_ID || DAVID_ELEVENLABS_VOICE_ID} (ElevenLabs)`);
+      console.log(`🗣️ David Voice: ${DAVID_ELEVENLABS_VOICE_ID} (ElevenLabs)`);
       console.log("--------------------------\n");
     });
   }
