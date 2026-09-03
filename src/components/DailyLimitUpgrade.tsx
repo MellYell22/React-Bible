@@ -110,7 +110,9 @@ export default function DailyLimitUpgrade({
           accessibilityLabel={`Upgrade to ${PLANS.PLUS.name}, ${PLANS.PLUS.price} per month`}
           activeOpacity={0.85}
         >
-          <Text style={styles.primaryButtonText}>Upgrade to {PLANS.PLUS.name}</Text>
+          <Text style={styles.primaryButtonText}>
+            Upgrade to {PLANS.PLUS.name} — {PLANS.PLUS.price}/month
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -121,7 +123,9 @@ export default function DailyLimitUpgrade({
           accessibilityLabel={`Upgrade to ${PLANS.PRO.name}, ${PLANS.PRO.price} per month`}
           activeOpacity={0.85}
         >
-          <Text style={styles.secondaryButtonText}>Upgrade to {PLANS.PRO.name}</Text>
+          <Text style={styles.secondaryButtonText}>
+            Upgrade to {PLANS.PRO.name} — {PLANS.PRO.price}/month
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
