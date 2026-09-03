@@ -1,0 +1,108 @@
+name: Clarify subscription pricing
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/clarify-subscription-pricing.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-pricing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Make subscription prices visible before checkout
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/screens/ProfileScreen.tsx')
+          text = path.read_text()
+
+          old = """  /** Plans stay collapsed until the user asks to see them. */
+  const [showOtherPlans, setShowOtherPlans] = useState(false);"""
+          new = """  /** Prices are shown immediately when the subscription section opens. */
+  const [showOtherPlans, setShowOtherPlans] = useState(false);"""
+          if old not in text:
+              raise SystemExit('Expected showOtherPlans block was not found')
+          text = text.replace(old, new, 1)
+
+          old = """    // Saved content loads on demand, exactly as the old tab did.
+    setShowSavedScriptures(next === 'saved');
+    scrollViewRef.current?.scrollTo({ y: 0, animated: false });"""
+          new = """    // Saved content loads on demand, exactly as the old tab did.
+    setShowSavedScriptures(next === 'saved');
+    // Pricing must never be hidden behind another tap before checkout.
+    setShowOtherPlans(next === 'subscription');
+    scrollViewRef.current?.scrollTo({ y: 0, animated: false });"""
+          if old not in text:
+              raise SystemExit('Expected openSection block was not found')
+          text = text.replace(old, new, 1)
+
+          marker = """      {section === 'subscription' && (<>
+      <Text style={[styles.sectionTitle, { paddingLeft: 44 }]} role=\"heading\" aria-level={2}>Your Benefits</Text>"""
+          replacement = """      {section === 'subscription' && (<>
+      <View style={{
+        backgroundColor: '#0f2a52',
+        borderRadius: 18,
+        padding: 20,
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(212, 175, 55, 0.35)',
+      }}>
+        <Text style={{
+          color: '#f5d77a',
+          fontSize: 14,
+          fontWeight: 'bold',
+          letterSpacing: 1.5,
+          textAlign: 'center',
+          marginBottom: 14,
+        }}>PLANS & PRICING</Text>
+        <Text style={{ color: '#ffffff', fontSize: 16, textAlign: 'center', marginBottom: 8 }}>
+          {PLANS.PLUS.name} — {PLANS.PLUS.price}/{PLANS.PLUS.interval}
+        </Text>
+        <Text style={{ color: '#ffffff', fontSize: 16, textAlign: 'center', marginBottom: 12 }}>
+          {PLANS.PRO.name} — {PLANS.PRO.price}/{PLANS.PRO.interval}
+        </Text>
+        <Text style={{ color: 'rgba(255,255,255,0.68)', fontSize: 12, lineHeight: 18, textAlign: 'center' }}>
+          You’ll see the same monthly amount again in Stripe before you complete payment.
+        </Text>
+      </View>
+
+      <Text style={[styles.sectionTitle, { paddingLeft: 44 }]} role=\"heading\" aria-level={2}>Your Benefits</Text>"""
+          if marker not in text:
+              raise SystemExit('Expected subscription section marker was not found')
+          text = text.replace(marker, replacement, 1)
+
+          old = """                    {plan.id === 'pro' ? \"Get David's Voice Pro\" : `Upgrade to ${plan.name}`}"""
+          new = """                    {plan.id === 'pro'
+                      ? `Get David's Voice Pro — ${plan.price}/${plan.interval}`
+                      : `Upgrade to ${plan.name} — ${plan.price}/${plan.interval}`}"""
+          if old not in text:
+              raise SystemExit('Expected plan button label was not found')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+
+      - name: Commit the finished pricing fix and remove this temporary workflow
+        shell: bash
+        run: |
+          rm -f .github/workflows/clarify-subscription-pricing.yml
+          git config user.name "Bible Mood Search QA"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/screens/ProfileScreen.tsx .github/workflows/clarify-subscription-pricing.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "show subscription prices before Stripe checkout"
+          git push origin HEAD:main
