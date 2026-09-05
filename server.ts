@@ -1,3 +1,5 @@
+import { DAVID_VOICE_SETTINGS, DAVID_DEFAULT_MODEL } from './src/utils/davidVoiceSettings.js';
+import { sanitizeForDavidSpeech } from './src/utils/davidSpeechDelivery.js';
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -677,12 +679,7 @@ app.post("/api/speech", async (req, res) => {
     return res.status(400).json({ error: 'Missing text parameter' });
   }
 
-  const cleanText = text.trim()
-    .replace(/<[^>]+>/g, '')
-    .replace(/\.{2,}/g, '')
-    .replace(/\s*—\s*/g, ', ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const cleanText = sanitizeForDavidSpeech(text);
 
   if (!cleanText) {
     return res.status(400).json({ error: 'Text was empty after stripping markup' });
@@ -703,7 +700,7 @@ app.post("/api/speech", async (req, res) => {
 
   // eleven_multilingual_v2: warmest, most human-sounding model. The turbo model
   // sounded thin/robotic, so we trade a little latency for a genuinely warm voice.
-  const FAST_MODEL = process.env.ELEVENLABS_MODEL || 'eleven_multilingual_v2';
+  const FAST_MODEL = process.env.ELEVENLABS_MODEL || DAVID_DEFAULT_MODEL;
   const FAST_FORMAT = 'mp3_44100_128'; // higher quality audio = fuller, less robotic
 
   try {
@@ -711,13 +708,7 @@ app.post("/api/speech", async (req, res) => {
     const requestPayload = {
       text: cleanText,
       model_id: FAST_MODEL,
-      voice_settings: {
-        stability: 0.55,          // steadier, calmer delivery (was 0.42 = erratic)
-        similarity_boost: 0.80,
-        speed: 0.96,              // slightly slower than natural = warm, unhurried (was 1.06)
-        style: 0.0,               // no exaggeration = stops the "yelling"/announcer feel (was 0.2)
-        use_speaker_boost: false, // was true = over-projected/loud; off = softer, more intimate
-      },
+      voice_settings: DAVID_VOICE_SETTINGS,
     };
 
     console.log('[API Request] ElevenLabs text-to-speech', {

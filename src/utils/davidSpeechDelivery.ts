@@ -144,7 +144,7 @@ const applyContractions = (text: string): string =>
     .replace(/\bThey are\b/g, "They're");
 
 const preparePlainText = (text: string): string => {
-  let t = text.trim();
+  let t = text.trim().replace(/…/g, '...');
 
   // Turn writer stage-directions into real speech behavior:
   //  - a breath/pause cue becomes a natural pause (period)
@@ -189,8 +189,7 @@ export function humanizeForTts(
  * Important:
  * - Never insert periods every one or two words.
  * - Never split a grammatical phrase just to manufacture a pause.
- * - Ellipses become a light comma-like pause instead of an extra sentence,
- *   which keeps greetings and gentle lead-ins flowing naturally.
+ * - Occasional ellipses retain a hesitation cue for the voice provider.
  * - Dashes and semicolons become light commas so the voice can keep flowing.
  * - Existing sentence endings remain the main pacing signal.
  */
@@ -200,9 +199,8 @@ export function sanitizeForDavidSpeech(text: string): string {
   let t = preparePlainText(text);
   t = protectDecimalPoints(t);
 
-  // Long/stacked punctuation can create exaggerated, disconnected delivery.
-  // Treat an ellipsis as one light pause rather than a new full sentence.
-  t = t.replace(/\s*\.{2,}\s*/g, ', ');
+  // Keep a deliberate hesitation, but normalize long dot runs to one ellipsis.
+  t = t.replace(/\s*\.{2,}\s*/g, '... ');
   t = t.replace(/!{2,}/g, '!');
   t = t.replace(/\?{2,}/g, '?');
 

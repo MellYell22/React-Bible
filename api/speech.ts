@@ -1,14 +1,16 @@
+import { DAVID_VOICE_SETTINGS, DAVID_DEFAULT_MODEL } from '../src/utils/davidVoiceSettings.js';
 const DAVID_ELEVENLABS_VOICE_ID = 'KdyHP7aXTUxKmw1tVBvn';
 const ELEVENLABS_TTS_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
 
-// Live voice stays on a low-latency model suitable for conversation.
+// Default to expressive speech; retain supported latency overrides.
 const FAST_ELEVENLABS_MODELS = new Set([
+  'eleven_multilingual_v2',
   'eleven_flash_v2_5',
   'eleven_flash_v2',
   'eleven_turbo_v2_5',
   'eleven_turbo_v2',
 ]);
-const DEFAULT_ELEVENLABS_MODEL = 'eleven_flash_v2_5';
+const DEFAULT_ELEVENLABS_MODEL = DAVID_DEFAULT_MODEL;
 const requestedModel = (process.env.ELEVENLABS_MODEL || '').trim();
 const ELEVENLABS_MODEL = FAST_ELEVENLABS_MODELS.has(requestedModel)
   ? requestedModel
@@ -16,7 +18,7 @@ const ELEVENLABS_MODEL = FAST_ELEVENLABS_MODELS.has(requestedModel)
 
 if (requestedModel && ELEVENLABS_MODEL !== requestedModel) {
   console.warn(
-    `[Speech] Ignoring ELEVENLABS_MODEL="${requestedModel}" — not a fast live-voice model. Using ${DEFAULT_ELEVENLABS_MODEL}.`,
+    `[Speech] Ignoring ELEVENLABS_MODEL="${requestedModel}" — not a supported David voice model. Using ${DEFAULT_ELEVENLABS_MODEL}.`,
   );
 }
 
@@ -112,16 +114,7 @@ export default async function handler(req: any, res: any) {
     const requestPayload = {
       text: cleanText,
       model_id: ELEVENLABS_MODEL,
-      voice_settings: {
-        // David should sound like someone sitting beside the user, not an
-        // announcer. Slow the cadence, keep enough variation to avoid a robotic
-        // read, and disable speaker boost so the source audio is not pushed.
-        stability: 0.62,
-        similarity_boost: 0.86,
-        speed: 0.80,
-        style: 0.0,
-        use_speaker_boost: false,
-      },
+      voice_settings: DAVID_VOICE_SETTINGS,
     };
 
     console.log('[API Request] ElevenLabs text-to-speech', {

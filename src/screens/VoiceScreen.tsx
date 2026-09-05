@@ -659,125 +659,6 @@ export default function VoiceScreen() {
     }
   };
 
-  /**
-   * Plays one already-rendered audio clip and resolves when it finishes.
-   * Extracted so the streaming queue below can play David's sentences
-   * back-to-back without duplicating the lifecycle bookkeeping.
-   */
-  const playClipUrl = (audioUrl: string, onStart?: () => void): Promise<void> =>
-    new Promise<void>((resolve, reject) => {
-      const audio = new Audio(audioUrl);
-      let finished = false;
-
-      const finish = () => {
-        if (finished) return;
-        finished = true;
-        currentAudioRef.current = null;
-        currentAudioUrlRef.current = null;
-        audioStopResolverRef.current = null;
-        try {
-          URL.revokeObjectURL(audioUrl);
-        } catch {
-          // Ignore revoke errors.
-        }
-        resolve();
-      };
-
-      currentAudioRef.current = audio;
-      currentAudioUrlRef.current = audioUrl;
-      audioStopResolverRef.current = finish;
-      audio.preload = 'auto';
-      audio.volume = 0.82;
-      audio.onended = finish;
-      audio.onerror = () => {
-        finish();
-        reject(new Error("David's voice audio was returned, but the browser could not play it."));
-      };
-      audio.play().then(() => onStart?.()).catch(reject);
-    });
-
-  /**
-   * David's reply, spoken sentence by sentence as he writes it.
-   *
-   * Two things run at once: text-to-speech renders upcoming sentences while the
-   * current one is still playing. That overlap is the whole point — the user
-   * hears his first sentence roughly a full generation cycle sooner than before.
-   *
-   * Returns false if nothing was ever spoken, so the caller can fall back to
-   * the original one-shot path instead of leaving the user in silence.
-   */
-  const createStreamingSpeaker = (options: {
-    conversationId: number;
-    requestId: number;
-    signal: AbortSignal;
-    onFirstAudio?: () => void;
-  }) => {
-    const clips: Array<Promise<string | null>> = [];
-    let closed = false;
-    let wake: (() => void) | null = null;
-    let spokeAnything = false;
-
-    const nudge = () => {
-      wake?.();
-      wake = null;
-    };
-
-    /** Start rendering a sentence immediately; do not wait for it. */
-    const push = (sentence: string) => {
-      const prepared = prepareDavidTtsPayload(sentence, { isGreeting: false }).speechText;
-      if (!prepared.trim()) return;
-      clips.push(
-        generateSpeech(prepared, {
-          alreadyPrepared: true,
-          signal: options.signal,
-          source: SPEECH_VOICE_MODE,
-        }).catch((error) => {
-          console.log('[David Voice] A sentence failed to render; continuing:', error);
-          return null;
-        }),
-      );
-      nudge();
-    };
-
-    const close = () => {
-      closed = true;
-      nudge();
-    };
-
-    /** Drains the queue in order, waiting for more while the stream is open. */
-    const play = async (): Promise<boolean> => {
-      let index = 0;
-
-      while (true) {
-        if (index >= clips.length) {
-          if (closed) break;
-          await new Promise<void>((resolve) => {
-            wake = resolve;
-          });
-          continue;
-        }
-
-        const url = await clips[index];
-        index += 1;
-
-        if (!isCurrentConversation(options.conversationId, options.requestId)) return spokeAnything;
-        if (options.signal.aborted) return spokeAnything;
-        if (!url || Platform.OS !== 'web') continue;
-
-        await playClipUrl(url, () => {
-          if (!spokeAnything) {
-            spokeAnything = true;
-            options.onFirstAudio?.();
-          }
-        });
-      }
-
-      return spokeAnything;
-    };
-
-    return { push, close, play };
-  };
-
   const playDavidResponseAudio = async (
     text: string,
     options: PlayDavidAudioOptions,
@@ -1007,52 +888,16 @@ export default function VoiceScreen() {
 
       console.log('[David Voice] Sending exact latest user words:', userText);
 
-      // David speaks his first sentence while he is still forming the rest.
-      // Text-to-speech for each sentence starts the moment that sentence is
-      // complete, so the user stops waiting through a whole generation cycle
-      // before hearing anything.
-      const speechController = new AbortController();
-      speechAbortControllerRef.current?.abort();
-      speechAbortControllerRef.current = speechController;
-
-      let firstAudioPlayed = false;
-      const speaker = createStreamingSpeaker({
-        conversationId: localConversationId,
-        requestId,
-        signal: speechController.signal,
-        onFirstAudio: () => {
-          firstAudioPlayed = true;
-          setPhase('speaking');
-        },
+      // Give TTS the complete short reply so its intonation carries across
+      // sentences instead of restarting a separate performance for each one.
+      const response = await getDavidVoiceResponse(nextMessages, {
+        responseLength: 'short',
+        moodKey: detectedMoodKey,
+        usedVerses,
+        userId,
+        liveVoice: true,
+        signal: chatController.signal,
       });
-
-      // Stop the mic before any audio starts, or David hears himself.
-      stopListening(true);
-      stopCurrentAudio();
-
-      const playbackDone = speaker.play().catch((error) => {
-        console.log('[David Voice] Streamed playback failed:', error);
-        return firstAudioPlayed;
-      });
-
-      let response;
-      try {
-        response = await getDavidVoiceResponse(nextMessages, {
-          responseLength: 'short',
-          moodKey: detectedMoodKey,
-          usedVerses,
-          userId,
-          liveVoice: true,
-          signal: chatController.signal,
-          onSentence: (sentence) => {
-            if (!isCurrentConversation(localConversationId, requestId)) return;
-            speaker.push(sentence);
-          },
-        });
-      } finally {
-        // Always close the queue, or the player would wait forever.
-        speaker.close();
-      }
 
       if (chatAbortControllerRef.current === chatController) {
         clearAbortController(chatAbortControllerRef);
@@ -1078,30 +923,13 @@ export default function VoiceScreen() {
       commitMessages(finalMessages);
       setLastResponseText(cleanedResponse);
 
-      const spoke = await playbackDone;
-
-      if (!spoke) {
-        // Streaming produced no audio (no sentences, a TTS failure, or a
-        // non-web platform). Fall back to the original one-shot path so the
-        // user is never left with a silent David.
-        await playDavidResponseAudio(cleanedResponse, {
-          conversationId: localConversationId,
-          requestId,
-          isGreeting: false,
-          resumeListening: shouldResumeListening,
-          onPlaybackStart: () => setLastResponseText(cleanedResponse),
-        });
-        return;
-      }
-
-      if (!isCurrentConversation(localConversationId, requestId)) return;
-
-      if (shouldResumeListening) {
-        setPhase('listening');
-        void startListening({ conversationId: localConversationId });
-      } else {
-        setPhase('idle');
-      }
+      await playDavidResponseAudio(cleanedResponse, {
+        conversationId: localConversationId,
+        requestId,
+        isGreeting: false,
+        resumeListening: shouldResumeListening,
+        onPlaybackStart: () => setLastResponseText(cleanedResponse),
+      });
     } catch (err: any) {
       if (err?.name === 'AbortError') return;
       if (!mountedRef.current) return;
@@ -1143,18 +971,23 @@ export default function VoiceScreen() {
     setError(null);
     setPhase('greeting');
 
-    const firstName =
-      session?.user?.user_metadata?.full_name ||
-      session?.user?.user_metadata?.name ||
-      session?.user?.email?.split('@')?.[0];
-
-    const greeting = getVoiceSessionGreeting(firstName);
+    const greetingKey = `david:last-voice-greeting:${session?.user?.id || profile?.id || 'guest'}`;
+    let lastGreeting: string | null = null;
+    try { lastGreeting = localStorage.getItem(greetingKey); } catch { /* Storage is optional. */ }
+    // Store the unpersonalized line so the picker can exclude it exactly.
+    const greeting = getVoiceSessionGreeting(undefined, {
+      isReturning: Boolean(lastGreeting),
+      lastGreeting,
+    });
 
     await playDavidResponseAudio(greeting, {
       conversationId: nextConversationId,
       isGreeting: true,
       resumeListening: true,
-      onPlaybackStart: () => setLastResponseText(greeting),
+      onPlaybackStart: () => {
+        setLastResponseText(greeting);
+        try { localStorage.setItem(greetingKey, greeting); } catch { /* Storage is optional. */ }
+      },
     });
   };
 
