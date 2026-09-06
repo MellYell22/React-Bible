@@ -19,7 +19,7 @@ export type HumanizeOptions = {
 // Optional leading adjective (soft/deep/gentle/long/brief/thoughtful/quiet).
 const CUE_ADJ = '(?:soft|deep|gentle|long|brief|thoughtful|quiet|slight|little)\\s+';
 const CUE_OPEN = '[\\*_~\\[(]+\\s*'; // one or more wrapper chars, then optional space
-const CUE_CLOSE = '\\s*[\\*_~\\])]+'; // optional space, then one or more wrapper chars
+const CUE_CLOSE = '\\s*[\\*_~\\])]+(?:\\*)?'; // optional space, then one or more wrapper chars
 
 const BREATH_WORDS = 'breath|breathes|breathing|inhale|exhale|sigh|sighs|pause|pauses|beat';
 const LAUGH_WORDS = 'chuckle|chuckles|laugh|laughs|laughing|smile|smiles|smiling|grin|grins|warmly';
@@ -189,8 +189,8 @@ export function humanizeForTts(
  * Important:
  * - Never insert periods every one or two words.
  * - Never split a grammatical phrase just to manufacture a pause.
- * - Occasional ellipses retain a hesitation cue for the voice provider.
- * - Dashes and semicolons become light commas so the voice can keep flowing.
+ * - Keep ellipses as a soft, reflective pause when the words call for one.
+ * - Keep em dashes as a lighter conversational beat instead of flattening them.
  * - Existing sentence endings remain the main pacing signal.
  */
 export function sanitizeForDavidSpeech(text: string): string {
@@ -199,24 +199,34 @@ export function sanitizeForDavidSpeech(text: string): string {
   let t = preparePlainText(text);
   t = protectDecimalPoints(t);
 
-  // Keep a deliberate hesitation, but normalize long dot runs to one ellipsis.
+  // Keep deliberate hesitation, but normalize long dot runs to one ellipsis.
   t = t.replace(/\s*\.{2,}\s*/g, '... ');
   t = t.replace(/!{2,}/g, '!');
   t = t.replace(/\?{2,}/g, '?');
 
-  // Keep internal pauses light and conversational.
-  t = t.replace(/\s*[—–]\s*/g, ', ');
+  // Preserve conversational prosody. Em dashes give ElevenLabs a lighter beat
+  // than a full stop, while semicolons/colons are softened into commas.
+  t = t.replace(/\s*[—–]\s*/g, ' — ');
   t = t.replace(/\s*[;:]+\s*/g, ', ');
   t = t.replace(/,{2,}/g, ',');
 
-  // Let "I'm David" land as one complete thought without chopping the words
-  // around it into artificial micro-pauses.
-  t = t.replace(/\bHey,\s*I'm David,\s*/gi, "Hey, I'm David. ");
-  t = t.replace(/\bHey\s+I'm David,\s*/gi, "Hey, I'm David. ");
+  // Static greetings used to be written as "Hey. I'm David. ...", and an old
+  // cleanup rule then forced "Hey, I'm David." back into another hard stop.
+  // That is the robotic cadence we do NOT want. Treat the introduction as one
+  // spoken thought, then give the next thought a soft ellipsis beat.
+  t = t.replace(/\bHey there\.\s+I'm David\.\s*/gi, "Hey there, I'm David... ");
+  t = t.replace(/\b(Hey|Hi)\.\s+I'm David\.\s*/gi, "$1, I'm David... ");
+  t = t.replace(/\bHey there,\s*I'm David[.!]\s*/gi, "Hey there, I'm David... ");
+  t = t.replace(/\b(Hey|Hi),\s*I'm David[.!]\s*/gi, "$1, I'm David... ");
+
+  // A one-word conversational lead-in can sound clipped when followed by a
+  // hard period. Soften only the opener; do not sprinkle pauses everywhere.
+  t = t.replace(/^(Yeah|Okay|Right|Well)\.\s+(?=[A-Z])/i, '$1... ');
 
   // Clean punctuation spacing without creating new pauses inside phrases.
   t = t
     .replace(/\s+([,.!?])/g, '$1')
+    .replace(/\s+—\s+/g, ' — ')
     .replace(/([.!?])(?=[^\s.!?'"’”)])/g, '$1 ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -257,6 +267,3 @@ export function preSpeechThinkingDelay(text = ''): Promise<void> {
 
   return new Promise(resolve => setTimeout(resolve, delayMs));
 }
-
-export const enhanceSpeechDelivery = (text: string): string =>
-  sanitizeForDavidSpeech(humanizeForTts(text));
