@@ -47,60 +47,57 @@ button, input, textarea {
 }
 
 /* The approved mood landing has one full-width Chat with David CTA.
-   Voice remains available from the permanent Voice navigation tab. */
-#mood-design-shell [role="button"]:has(svg.lucide-mic) {
+   Voice remains available from the permanent Voice navigation tab.
+   React Native Web does not guarantee role="button" on TouchableOpacity,
+   so target the actual lucide icon instead of relying on ARIA output. */
+#mood-design-shell *:has(> svg.lucide-mic) {
   display: none !important;
 }
 
-#mood-design-shell [role="button"]:has(svg.lucide-message-circle) {
+#mood-design-shell *:has(> svg.lucide-message-circle) {
   width: 100% !important;
   flex: 1 1 100% !important;
 }
 
 /* The reference sign-in screen ends its auth actions at Google and moves
    immediately into the mountain banner. Guest auth logic stays in code, but
-   the extra non-reference button is not part of the promoted visual shell. */
-#auth-design-shell div:has(+ [role="img"]) > [role="button"]:last-child,
-#auth-design-shell div:has(+ img) > [role="button"]:last-child {
+   the final non-reference action in the form is visually suppressed. */
+#auth-design-shell div:has(+ img) > div:last-child,
+#auth-design-shell div:has(+ [role="img"]) > div:last-child,
+#auth-design-shell div:has(+ img) > [role="button"]:last-child,
+#auth-design-shell div:has(+ [role="img"]) > [role="button"]:last-child {
   display: none !important;
 }
 
-/* Initial Bible screen: the reference deliberately features six books rather
-   than dumping all 66 into the landing grid. Search results remain unrestricted
-   because this selector only applies while the banner is present. */
-#bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ [role="img"]) > [role="button"],
-#bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ img) > [role="button"] {
+/* Initial Bible screen: the reference deliberately features exactly six books:
+   Genesis, Exodus, Psalms, Proverbs, Isaiah, Matthew. Search results remain
+   unrestricted; the selector below only finds the large initial icon grid. */
+#bible-design-shell div:has(> div:nth-child(10) svg.lucide-book-open) > div:has(svg.lucide-book-open) {
   display: none !important;
 }
 
-#bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ [role="img"]) > [role="button"]:nth-child(1),
-#bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ [role="img"]) > [role="button"]:nth-child(2),
-#bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ [role="img"]) > [role="button"]:nth-child(19),
-#bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ [role="img"]) > [role="button"]:nth-child(20),
-#bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ [role="img"]) > [role="button"]:nth-child(23),
-#bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ [role="img"]) > [role="button"]:nth-child(40),
-#bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ img) > [role="button"]:nth-child(1),
-#bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ img) > [role="button"]:nth-child(2),
-#bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ img) > [role="button"]:nth-child(19),
-#bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ img) > [role="button"]:nth-child(20),
-#bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ img) > [role="button"]:nth-child(23),
-#bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ img) > [role="button"]:nth-child(40) {
+#bible-design-shell div:has(> div:nth-child(10) svg.lucide-book-open) > div:nth-child(1),
+#bible-design-shell div:has(> div:nth-child(10) svg.lucide-book-open) > div:nth-child(2),
+#bible-design-shell div:has(> div:nth-child(10) svg.lucide-book-open) > div:nth-child(19),
+#bible-design-shell div:has(> div:nth-child(10) svg.lucide-book-open) > div:nth-child(20),
+#bible-design-shell div:has(> div:nth-child(10) svg.lucide-book-open) > div:nth-child(23),
+#bible-design-shell div:has(> div:nth-child(10) svg.lucide-book-open) > div:nth-child(40) {
   display: flex !important;
 }
 
 /* Profile reference uses one large circular user glyph, not a square avatar
    frame, and the logout action is text-only. */
-#profile-design-shell div[style*="width: 62px"][style*="height: 62px"] {
+#profile-design-shell *:has(> svg.lucide-circle-user-round):not(:has(> * svg.lucide-circle-user-round)) {
   border-color: transparent !important;
   border-width: 0 !important;
 }
 
-#profile-design-shell div[style*="width: 62px"][style*="height: 62px"] > svg {
+#profile-design-shell *:has(> svg.lucide-circle-user-round) > svg.lucide-circle-user-round {
   width: 58px !important;
   height: 58px !important;
 }
 
-#profile-design-shell [role="button"]:has(svg.lucide-log-out) > svg {
+#profile-design-shell svg.lucide-log-out {
   display: none !important;
 }
 
@@ -237,17 +234,6 @@ button, input, textarea {
 
   #voice-design-shell div:has([aria-label="Send message to David"]) ~ *:last-child {
     padding-left: 50px !important;
-  }
-
-  #bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ [role="img"]) > [role="button"]:nth-child(19),
-  #bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ [role="img"]) > [role="button"]:nth-child(20),
-  #bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ [role="img"]) > [role="button"]:nth-child(23),
-  #bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ [role="img"]) > [role="button"]:nth-child(40),
-  #bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ img) > [role="button"]:nth-child(19),
-  #bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ img) > [role="button"]:nth-child(20),
-  #bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ img) > [role="button"]:nth-child(23),
-  #bible-design-shell div:has(> [role="button"] svg.lucide-book-open):has(~ img) > [role="button"]:nth-child(40) {
-    display: flex !important;
   }
 }
 
