@@ -9,7 +9,7 @@ import { Sparkles, Search, Volume2, Frown, Wind, User, Heart, Flame, Sun, HelpCi
 import { supabase, saveAIFeedback, saveScripture } from '../services/supabase';
 import { Profile } from '../types';
 import { MOODS_DATA, MoodData } from '../constants/moods';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, Mic } from 'lucide-react';
 
 type ReadingMode = 'sanctuary' | 'parchment' | 'midnight';
 type FontSize = 'small' | 'medium' | 'large';
@@ -297,10 +297,16 @@ export default function MoodScreen({ route, navigation }: any) {
             <View style={styles.promptRule} />
             <Text style={styles.promptTitle}>NOT SURE HOW YOU FEEL?</Text>
             <Text style={styles.promptText}>Talk to David and just share what’s on your mind.</Text>
-            <TouchableOpacity style={styles.chatCta} onPress={() => navigation.navigate('Chat')}>
-              <MessageCircle size={19} color="#071a35" />
-              <Text style={styles.chatCtaText}>CHAT WITH DAVID</Text>
-            </TouchableOpacity>
+            <View style={[styles.davidCtaRow, compact && styles.davidCtaRowCompact]}>
+              <TouchableOpacity style={styles.chatCta} onPress={() => navigation.navigate('Chat')}>
+                <MessageCircle size={19} color="#071a35" />
+                <Text style={styles.chatCtaText}>CHAT WITH DAVID</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.voiceCta} onPress={() => navigation.navigate('Voice')}>
+                <Mic size={19} color="#e1b632" />
+                <Text style={styles.voiceCtaText}>VOICE WITH DAVID</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -387,8 +393,12 @@ const styles = StyleSheet.create({
   promptRule: { width: 170, height: 1, backgroundColor: 'rgba(225,182,50,0.72)', marginBottom: 18 },
   promptTitle: { color: '#e1b632', fontFamily: 'Cinzel', fontSize: 16, fontWeight: '700', letterSpacing: 0.8 },
   promptText: { color: '#fff8e7', fontFamily: 'Playfair Display', fontSize: 13, marginTop: 8, textAlign: 'center' },
-  chatCta: { minWidth: 330, maxWidth: '100%', minHeight: 46, marginTop: 15, paddingHorizontal: 28, backgroundColor: '#e1b632', flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center' },
+  davidCtaRow: { width: '100%', maxWidth: 680, marginTop: 15, flexDirection: 'row', gap: 12, justifyContent: 'center' },
+  davidCtaRowCompact: { flexDirection: 'column', alignItems: 'stretch' },
+  chatCta: { flex: 1, minHeight: 46, paddingHorizontal: 24, backgroundColor: '#e1b632', flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e1b632' },
   chatCtaText: { color: '#071a35', fontFamily: 'Cinzel', fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
+  voiceCta: { flex: 1, minHeight: 46, paddingHorizontal: 24, backgroundColor: 'transparent', flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e1b632' },
+  voiceCtaText: { color: '#e1b632', fontFamily: 'Cinzel', fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
   loadingContainer: { paddingVertical: 34, alignItems: 'center' },
   resultContainer: { marginTop: 28, gap: 14 },
   encouragementCard: { borderWidth: 1, borderColor: 'rgba(225,182,50,0.62)', backgroundColor: '#03101f', padding: 18 },
