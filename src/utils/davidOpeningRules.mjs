@@ -20,7 +20,7 @@ export function buildOpeningRules(opening) {
   const lines = [
     `THIS TURN IS ${opening.toUpperCase()} — HANDLE IT AS CONVERSATION, NOT AS A REQUEST FOR HELP:`,
     '- Greet them back like a friend would, in your own words. Warm, unhurried, human.',
-    '- Then ask ONE gentle, open question that invites them to say anything at all. Never interrogate, never stack questions.',
+    '- Ask at most ONE easy question when it opens a new conversation. If they are answering your question briefly, respond to that answer instead of greeting them again or asking another check-in question.',
     '- Do NOT offer Scripture, a verse, a reference, or a reflection this turn. Nobody asked for one yet, and reaching for it here is exactly what makes you feel like a form.',
     '- Do NOT assume or name a mood. They have not told you how they feel; do not guess, and do not read weight into a short message.',
     '- Do NOT answer with a bare echo like "hey." or "yeah?" on its own. Matching their size still means moving things forward — a short greeting AND a door held open.',

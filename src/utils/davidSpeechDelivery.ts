@@ -144,7 +144,7 @@ const applyContractions = (text: string): string =>
     .replace(/\bThey are\b/g, "They're");
 
 const preparePlainText = (text: string): string => {
-  let t = text.trim();
+  let t = text.trim().replace(/…/g, '...');
 
   // Turn writer stage-directions into real speech behavior:
   //  - a breath/pause cue becomes a natural pause (period)
@@ -189,9 +189,8 @@ export function humanizeForTts(
  * Important:
  * - Never insert periods every one or two words.
  * - Never split a grammatical phrase just to manufacture a pause.
- * - Ellipses become a light comma-like pause instead of an extra sentence,
- *   which keeps greetings and gentle lead-ins flowing naturally.
- * - Dashes and semicolons become light commas so the voice can keep flowing.
+ * - Keep ellipses as a soft, reflective pause when the words call for one.
+ * - Keep em dashes as a lighter conversational beat instead of flattening them.
  * - Existing sentence endings remain the main pacing signal.
  */
 export function sanitizeForDavidSpeech(text: string): string {
@@ -200,36 +199,42 @@ export function sanitizeForDavidSpeech(text: string): string {
   let t = preparePlainText(text);
   t = protectDecimalPoints(t);
 
-  // Preserve natural sentence cadence. Periods, ellipses, and dashes are
-  // expressive punctuation that ElevenLabs renders as genuine spoken pauses,
-  // so they are KEPT rather than flattened into commas or stripped out. We only
-  // tidy runaway stacking so delivery never sounds exaggerated — the punctuation
-  // itself (and the pause it creates) always survives.
-  //
-  // Previously this collapsed "..." into a comma, turned every em/en dash into a
-  // comma, and rewrote ":" / ";" as commas. That erased the rise-and-fall of a
-  // real sentence and made David sound like one long run-on clause. The rules
-  // below keep the marks and normalise only their surrounding whitespace.
-  t = t.replace(/\s*\.{2,}\s*/g, '\u2026 '); // "..", "..." -> one ellipsis pause
-  t = t.replace(/!{2,}/g, '!'); // collapse shouting to a single (kept) "!"
-  t = t.replace(/\?{2,}/g, '?'); // collapse repeats to a single (kept) "?"
+  // Both the client and the serverless path run this, so it must be idempotent
+  // and must not destroy expressive punctuation. Ellipses and em dashes are real
+  // spoken pauses to ElevenLabs; only runaway stacking gets tidied. Semicolons
+  // and colons soften to commas, which reads more like speech than punctuation.
+  // Keep deliberate hesitation, but normalize long dot runs to one ellipsis.
+  t = t.replace(/\s*\.{2,}\s*/g, '... ');
+  t = t.replace(/!{2,}/g, '!');
+  t = t.replace(/\?{2,}/g, '?');
 
-  // Dashes stay dashes — a normal, expressive mid-sentence pause. Normalise the
-  // en-dash to an em-dash and give it consistent spacing instead of deleting it.
-  t = t.replace(/\s*[\u2013\u2014]\s*/g, ' \u2014 ');
-  // Colons and semicolons are natural pauses too; keep them, only fix spacing.
-  t = t.replace(/\s*;\s*/g, '; ');
-  t = t.replace(/\s*:\s*/g, ': ');
+  // Preserve conversational prosody. Em dashes give ElevenLabs a lighter beat
+  // than a full stop, while semicolons/colons are softened into commas.
+  t = t.replace(/\s*[—–]\s*/g, ' — ');
+  t = t.replace(/\s*[;:]+\s*/g, ', ');
   t = t.replace(/,{2,}/g, ',');
 
-  // Let "I'm David" land as one complete thought without chopping the words
-  // around it into artificial micro-pauses.
-  t = t.replace(/\bHey,\s*I'm David,\s*/gi, "Hey, I'm David. ");
-  t = t.replace(/\bHey\s+I'm David,\s*/gi, "Hey, I'm David. ");
+  // Treat David's introduction as one spoken thought instead of three clipped
+  // sentences. The ellipsis gives the next thought a softer, human pause.
+  //
+  // The trailing terminator is matched as (?:\.{1,3}|!) rather than a single
+  // [.!]: several greetings already ship with the ellipsis baked in, and a
+  // one-character match would consume only the first dot and then append its
+  // own, producing "I'm David....." on the way to the voice.
+  t = t.replace(/\bHey there\.\s+I'm David(?:\.{1,3}|!)\s*/gi, "Hey there, I'm David... ");
+  t = t.replace(/\b(Hey|Hi)\.\s+I'm David(?:\.{1,3}|!)\s*/gi, "$1, I'm David... ");
+  t = t.replace(/\bHey there,\s*I'm David(?:\.{1,3}|!)\s*/gi, "Hey there, I'm David... ");
+  t = t.replace(/\b(Hey|Hi),\s*I'm David(?:\.{1,3}|!)\s*/gi, "$1, I'm David... ");
+
+  // A one-word conversational lead-in can sound clipped when followed by a
+  // hard period. Soften only the opener; do not sprinkle pauses everywhere.
+  // Same reason as above for accepting an ellipsis that is already there.
+  t = t.replace(/^(Yeah|Okay|Right|Well)(?:\.{1,3})\s+(?=[A-Z])/i, '$1... ');
 
   // Clean punctuation spacing without creating new pauses inside phrases.
   t = t
     .replace(/\s+([,.!?])/g, '$1')
+    .replace(/\s+—\s+/g, ' — ')
     .replace(/([.!?])(?=[^\s.!?'"’”)])/g, '$1 ')
     .replace(/\s+/g, ' ')
     .trim();

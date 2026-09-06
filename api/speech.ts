@@ -1,16 +1,18 @@
 import { Readable } from 'stream';
+import { DAVID_VOICE_SETTINGS, DAVID_DEFAULT_MODEL } from '../src/utils/davidVoiceSettings.js';
 
-const DAVID_ELEVENLABS_VOICE_ID = 'ewxUvnyvvOehYjKjUVKC';
+const DAVID_ELEVENLABS_VOICE_ID = 'KdyHP7aXTUxKmw1tVBvn';
 const ELEVENLABS_TTS_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
 
-// Live voice stays on a low-latency model suitable for conversation.
+// Default to expressive speech; retain supported latency overrides.
 const FAST_ELEVENLABS_MODELS = new Set([
+  'eleven_multilingual_v2',
   'eleven_flash_v2_5',
   'eleven_flash_v2',
   'eleven_turbo_v2_5',
   'eleven_turbo_v2',
 ]);
-const DEFAULT_ELEVENLABS_MODEL = 'eleven_flash_v2_5';
+const DEFAULT_ELEVENLABS_MODEL = DAVID_DEFAULT_MODEL;
 const requestedModel = (process.env.ELEVENLABS_MODEL || '').trim();
 const FALLBACK_ELEVENLABS_MODEL = FAST_ELEVENLABS_MODELS.has(requestedModel)
   ? requestedModel
@@ -27,7 +29,7 @@ const ELEVENLABS_MODEL = ELEVENLABS_MODEL_CANDIDATES[0];
 
 if (requestedModel && !FAST_ELEVENLABS_MODELS.has(requestedModel)) {
   console.warn(
-    `[Speech] Ignoring ELEVENLABS_MODEL="${requestedModel}" — not a fast live-voice model. Using v3 with ${DEFAULT_ELEVENLABS_MODEL} fallback.`,
+    `[Speech] Ignoring ELEVENLABS_MODEL="${requestedModel}" — not a supported David voice model. Using v3 with ${DEFAULT_ELEVENLABS_MODEL} fallback.`,
   );
 }
 
@@ -115,17 +117,6 @@ export default async function handler(req: any, res: any) {
 
   const voiceId = DAVID_ELEVENLABS_VOICE_ID;
 
-  const voiceSettings = {
-    // David should sound like someone sitting beside the user, not an
-    // announcer. Slow the cadence, keep enough variation to avoid a robotic
-    // read, and disable speaker boost so the source audio is not pushed.
-    stability: 0.62,
-    similarity_boost: 0.86,
-    speed: 0.80,
-    style: 0.0,
-    use_speaker_boost: false,
-  };
-
   try {
     // Stream endpoint so playback can begin as chunks arrive.
     const speechUrl = `${ELEVENLABS_TTS_URL}/${voiceId}/stream?output_format=${encodeURIComponent(
@@ -145,7 +136,7 @@ export default async function handler(req: any, res: any) {
         outputFormat: ELEVENLABS_OUTPUT_FORMAT,
         textLength: cleanText.length,
         textPreview: previewLogText(cleanText),
-        voiceSettings,
+        voiceSettings: DAVID_VOICE_SETTINGS,
       });
 
       const attempt = await fetch(speechUrl, {
@@ -155,7 +146,7 @@ export default async function handler(req: any, res: any) {
           'Content-Type': 'application/json',
           Accept: 'audio/mpeg',
         },
-        body: JSON.stringify({ text: cleanText, model_id: model, voice_settings: voiceSettings }),
+        body: JSON.stringify({ text: cleanText, model_id: model, voice_settings: DAVID_VOICE_SETTINGS }),
       });
 
       if (attempt.ok) {

@@ -1,3 +1,5 @@
+import { DAVID_VOICE_SETTINGS, DAVID_DEFAULT_MODEL } from './src/utils/davidVoiceSettings.js';
+import { sanitizeForDavidSpeech } from './src/utils/davidSpeechDelivery.js';
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -26,7 +28,7 @@ import chatHandler from './api/chat.js';
 const ELEVENLABS_TTS_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
 const ELEVENLABS_MODEL = process.env.ELEVENLABS_MODEL || 'eleven_flash_v2_5';
 const ELEVENLABS_OUTPUT_FORMAT = process.env.ELEVENLABS_OUTPUT_FORMAT || 'mp3_22050_32';
-const DAVID_ELEVENLABS_VOICE_ID = 'ewxUvnyvvOehYjKjUVKC';
+const DAVID_ELEVENLABS_VOICE_ID = 'KdyHP7aXTUxKmw1tVBvn';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -678,13 +680,10 @@ app.post("/api/speech", async (req, res) => {
     return res.status(400).json({ error: 'Missing text parameter' });
   }
 
-  // Non-destructive cleanup: strip only HTML/markup and normalize whitespace.
-  // Sentence-ending punctuation (periods, ellipses), dashes, and expressive marks
-  // are preserved so David keeps a natural spoken cadence.
-  const cleanText = text.trim()
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  // Same shared sanitizer api/speech.ts uses, so dev and production prepare
+  // David's words identically. It preserves ellipses and dashes as real spoken
+  // pauses rather than flattening them.
+  const cleanText = sanitizeForDavidSpeech(text);
 
   if (!cleanText) {
     return res.status(400).json({ error: 'Text was empty after stripping markup' });
@@ -704,21 +703,14 @@ app.post("/api/speech", async (req, res) => {
   const voiceId = DAVID_ELEVENLABS_VOICE_ID;
 
   // Model preference order: ElevenLabs v3 first (most expressive), then fall back
-  // to the warm multilingual v2 model if v3 is unavailable for this account/voice.
-  // An explicit ELEVENLABS_MODEL override always wins and skips the fallback.
+  // to DAVID_DEFAULT_MODEL — the warm multilingual v2 model — when v3 is not
+  // available for this account/voice. An explicit ELEVENLABS_MODEL override
+  // always wins and skips the fallback.
   const OVERRIDE_MODEL = process.env.ELEVENLABS_MODEL;
   const MODEL_CANDIDATES = OVERRIDE_MODEL
     ? [OVERRIDE_MODEL]
-    : ['eleven_v3', 'eleven_multilingual_v2'];
+    : ['eleven_v3', DAVID_DEFAULT_MODEL];
   const FAST_FORMAT = 'mp3_44100_128'; // higher quality audio = fuller, less robotic
-  const voiceSettings = {
-    stability: 0.55,          // steadier, calmer delivery
-    similarity_boost: 0.80,
-    speed: 0.96,              // slightly slower than natural = warm, unhurried
-    style: 0.0,               // no exaggeration = stops the "yelling"/announcer feel
-    use_speaker_boost: false, // softer, more intimate
-  };
-
   // Stream directly from ElevenLabs so audio begins playing as chunks arrive.
   const streamUrl = `${ELEVENLABS_TTS_URL}/${voiceId}/stream?output_format=${encodeURIComponent(FAST_FORMAT)}`;
 
@@ -733,7 +725,7 @@ app.post("/api/speech", async (req, res) => {
       body: JSON.stringify({
         text: cleanText,
         model_id: model,
-        voice_settings: voiceSettings,
+        voice_settings: DAVID_VOICE_SETTINGS,
       }),
     });
 
@@ -750,7 +742,7 @@ app.post("/api/speech", async (req, res) => {
         outputFormat: FAST_FORMAT,
         textLength: cleanText.length,
         textPreview: previewLogText(cleanText),
-        voiceSettings,
+        voiceSettings: DAVID_VOICE_SETTINGS,
       });
 
       const attempt = await callElevenLabs(model);
