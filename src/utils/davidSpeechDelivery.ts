@@ -19,7 +19,7 @@ export type HumanizeOptions = {
 // Optional leading adjective (soft/deep/gentle/long/brief/thoughtful/quiet).
 const CUE_ADJ = '(?:soft|deep|gentle|long|brief|thoughtful|quiet|slight|little)\\s+';
 const CUE_OPEN = '[\\*_~\\[(]+\\s*'; // one or more wrapper chars, then optional space
-const CUE_CLOSE = '\\s*[\\*_~\\])]+(?:\\*)?'; // optional space, then one or more wrapper chars
+const CUE_CLOSE = '\\s*[\\*_~\\])]+'; // optional space, then one or more wrapper chars
 
 const BREATH_WORDS = 'breath|breathes|breathing|inhale|exhale|sigh|sighs|pause|pauses|beat';
 const LAUGH_WORDS = 'chuckle|chuckles|laugh|laughs|laughing|smile|smiles|smiling|grin|grins|warmly';
@@ -210,10 +210,8 @@ export function sanitizeForDavidSpeech(text: string): string {
   t = t.replace(/\s*[;:]+\s*/g, ', ');
   t = t.replace(/,{2,}/g, ',');
 
-  // Static greetings used to be written as "Hey. I'm David. ...", and an old
-  // cleanup rule then forced "Hey, I'm David." back into another hard stop.
-  // That is the robotic cadence we do NOT want. Treat the introduction as one
-  // spoken thought, then give the next thought a soft ellipsis beat.
+  // Treat David's introduction as one spoken thought instead of three clipped
+  // sentences. The ellipsis gives the next thought a softer, human pause.
   t = t.replace(/\bHey there\.\s+I'm David\.\s*/gi, "Hey there, I'm David... ");
   t = t.replace(/\b(Hey|Hi)\.\s+I'm David\.\s*/gi, "$1, I'm David... ");
   t = t.replace(/\bHey there,\s*I'm David[.!]\s*/gi, "Hey there, I'm David... ");
@@ -267,3 +265,6 @@ export function preSpeechThinkingDelay(text = ''): Promise<void> {
 
   return new Promise(resolve => setTimeout(resolve, delayMs));
 }
+
+export const enhanceSpeechDelivery = (text: string): string =>
+  sanitizeForDavidSpeech(humanizeForTts(text));
