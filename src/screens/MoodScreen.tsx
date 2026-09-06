@@ -1,36 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, TextInput, useWindowDimensions } from 'react-native';
 import { motion } from 'motion/react';
 import { getMoodScriptures, generateSpeech, SPEECH_USER_TAP } from '../services/ai';
 
 const MotionView = motion.create(View);
 import { MoodResponse } from '../types';
-import {
-  Sparkles,
-  Search,
-  Send,
-  Volume2,
-  Frown,
-  Wind,
-  User,
-  Heart,
-  Flame,
-  Sun,
-  HelpCircle,
-  Layers,
-  Cloud,
-  X,
-  ThumbsUp,
-  ThumbsDown,
-  Bookmark,
-  Check,
-  MessageCircle,
-  Mic,
-} from 'lucide-react';
-import { saveAIFeedback, saveScripture } from '../services/supabase';
+import { Sparkles, Search, Volume2, Frown, Wind, User, Heart, Flame, Sun, HelpCircle, Layers, Cloud, X, ThumbsUp, ThumbsDown, Bookmark, Check } from 'lucide-react';
+import { supabase, saveAIFeedback, saveScripture } from '../services/supabase';
+import { Profile } from '../types';
 import { MOODS_DATA, MoodData } from '../constants/moods';
-import { useUser } from '../UserContext';
-import { hasProAccess } from '../utils/tier';
+import { MessageCircle } from 'lucide-react';
 
 type ReadingMode = 'sanctuary' | 'parchment' | 'midnight';
 type FontSize = 'small' | 'medium' | 'large';
@@ -62,7 +41,7 @@ const THEMES = {
     accent: '#d4af37',
     muted: '#a0a0a0',
     border: 'rgba(255, 255, 255, 0.1)',
-  },
+  }
 };
 
 const FONT_SIZES = {
@@ -86,36 +65,37 @@ const MOOD_CONFIG = [
 ];
 
 const MOOD_VOICE_RESPONSE_INSTRUCTION =
-  "Generate a calm, conversational response based on the user's input. Detect the user's query, then deliver a relevant Bible verse or reflection with a smooth, unhurried pace. Keep responses short, reflective, and responsive to the user's emotional tone.";
+  "Generate a real-time, calm, and conversational voice response based on the user's input. Detect the user's query, then deliver a relevant Bible verse or reflection with a smooth, unhurried pace. Keep responses short, reflective, and responsive to the user's emotional tone.";
 
 const NT_BOOKS = [
-  'Matthew', 'Mark', 'Luke', 'John', 'Acts', 'Romans', '1 Corinthians', '2 Corinthians',
-  'Galatians', 'Ephesians', 'Philippians', 'Colossians', '1 Thessalonians', '2 Thessalonians',
-  '1 Timothy', '2 Timothy', 'Titus', 'Philemon', 'Hebrews', 'James', '1 Peter', '2 Peter',
-  '1 John', '2 John', '3 John', 'Jude', 'Revelation',
+  'Matthew', 'Mark', 'Luke', 'John', 'Acts', 'Romans', '1 Corinthians', '2 Corinthians', 
+  'Galatians', 'Ephesians', 'Philippians', 'Colossians', '1 Thessalonians', '2 Thessalonians', 
+  '1 Timothy', '2 Timothy', 'Titus', 'Philemon', 'Hebrews', 'James', '1 Peter', '2 Peter', 
+  '1 John', '2 John', '3 John', 'Jude', 'Revelation'
 ];
+
+import { useUser } from '../UserContext';
 
 export default function MoodScreen({ route, navigation }: any) {
   const { profile } = useUser();
+  const { width } = useWindowDimensions();
+  const compact = width < 760;
   const [mood, setMood] = useState(route?.params?.mood || '');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<MoodResponse | null>(null);
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
-  const [guidanceExpanded, setGuidanceExpanded] = useState(false);
-  // Roughly where a reply stops fitting a phone screen alongside the actions
-  // beneath it. Longer replies open clamped with a "continue reading" toggle.
-  const isLongGuidance = (result?.encouragement?.length ?? 0) > 420;
   const [testamentFilter, setTestamentFilter] = useState<'all' | 'old' | 'new'>('all');
-  const [readingMode] = useState<ReadingMode>('sanctuary');
-  const [fontSize] = useState<FontSize>('medium');
+  
+  const [readingMode, setReadingMode] = useState<ReadingMode>('sanctuary');
+  const [fontSize, setFontSize] = useState<FontSize>('medium');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [savingId, setSavingId] = useState<number | null>(null);
+  const audioContextRef = React.useRef<AudioContext | null>(null);
 
   const theme = THEMES[readingMode];
   const fonts = FONT_SIZES[fontSize];
-  const voiceIncluded = hasProAccess(profile);
 
   const buildStaticMoodEncouragement = (staticMood: MoodData): string => {
     const reaction = staticMood.davidReaction[0];
@@ -123,7 +103,7 @@ export default function MoodScreen({ route, navigation }: any) {
     const followUp = staticMood.davidFollowUps[0];
 
     if (!reaction || !scripture || !followUp) {
-      return `Yeah. ${staticMood.label.toLowerCase()} can be a lot to carry. Let's sit with God's word for a minute.`;
+      return `yeah… ${staticMood.label.toLowerCase()} can be a lot to carry. let's sit with God's word for a minute.`;
     }
 
     return [
@@ -136,20 +116,17 @@ export default function MoodScreen({ route, navigation }: any) {
 
   React.useEffect(() => {
     if (route?.params?.mood) {
-      void handleInitialSearch(route.params.mood);
+      handleInitialSearch(route.params.mood);
     }
   }, [route?.params?.mood]);
 
   const handleInitialSearch = async (initialMood: string) => {
-    // Ahead of the static-mood early return below, or a reply that was expanded
-    // stays expanded when the next one replaces it.
-    setGuidanceExpanded(false);
     const staticMood = MOODS_DATA.find(m => m.key === initialMood.toUpperCase());
-
+    
     if (staticMood) {
       setResult({
-        scriptures: staticMood.scriptures.map(s => ({ ...s, explanation: "Reflecting on God's word for your heart today." })),
-        encouragement: buildStaticMoodEncouragement(staticMood),
+        scriptures: staticMood.scriptures.map(s => ({ ...s, explanation: 'Reflecting on God\'s word for your heart today.' })),
+        encouragement: buildStaticMoodEncouragement(staticMood)
       });
       setLoading(false);
       return;
@@ -158,10 +135,10 @@ export default function MoodScreen({ route, navigation }: any) {
     setLoading(true);
     try {
       const data = await getMoodScriptures(
-        initialMood,
+        initialMood, 
         profile?.preferred_translation || 'KJV',
         profile?.preferred_response_length || 'medium',
-        MOOD_VOICE_RESPONSE_INSTRUCTION,
+        MOOD_VOICE_RESPONSE_INSTRUCTION
       );
       setResult(data);
       setFeedback(null);
@@ -174,20 +151,14 @@ export default function MoodScreen({ route, navigation }: any) {
 
   const handleSearch = async () => {
     const query = (searchQuery || mood).trim();
-    if (!query || loading) return;
+    if (!query) return;
 
-    setGuidanceExpanded(false);
-
-    const staticMood = MOODS_DATA.find(
-      m => m.label.toLowerCase() === query.toLowerCase() || m.key === query.toUpperCase(),
-    );
-
+    const staticMood = MOODS_DATA.find(m => m.label.toLowerCase() === query.toLowerCase() || m.key === query.toUpperCase());
     if (staticMood) {
       setMood(staticMood.key);
-      setSearchQuery('');
       setResult({
-        scriptures: staticMood.scriptures.map(s => ({ ...s, explanation: "Reflecting on God's word for your heart today." })),
-        encouragement: buildStaticMoodEncouragement(staticMood),
+        scriptures: staticMood.scriptures.map(s => ({ ...s, explanation: 'Reflecting on God\'s word for your heart today.' })),
+        encouragement: buildStaticMoodEncouragement(staticMood)
       });
       setLoading(false);
       return;
@@ -195,16 +166,14 @@ export default function MoodScreen({ route, navigation }: any) {
 
     setLoading(true);
     setMood(query);
-    setSearchQuery('');
     setTestamentFilter('all');
     setFeedback(null);
-
     try {
       const data = await getMoodScriptures(
-        query,
+        query, 
         profile?.preferred_translation || 'KJV',
         profile?.preferred_response_length || 'medium',
-        MOOD_VOICE_RESPONSE_INSTRUCTION,
+        MOOD_VOICE_RESPONSE_INSTRUCTION
       );
       setResult(data);
     } catch (error) {
@@ -224,14 +193,12 @@ export default function MoodScreen({ route, navigation }: any) {
 
   const speakEncouragement = async () => {
     if (!result || isSpeaking) return;
-
+    
     setIsSpeaking(true);
     try {
-      // generateSpeech returns a blob URL — use HTML Audio directly (NOT base64/AudioContext)
       const audioUrl = await generateSpeech(result.encouragement, { source: SPEECH_USER_TAP });
       if (audioUrl) {
         const audio = new Audio(audioUrl);
-        // Read-aloud should feel close and calm, never like a loud media player.
         audio.volume = 0.55;
         audio.onended = () => {
           setIsSpeaking(false);
@@ -253,14 +220,13 @@ export default function MoodScreen({ route, navigation }: any) {
         setIsSpeaking(false);
       }
     } catch (error) {
-      console.error('Speech error:', error);
+      console.error("Speech error:", error);
       setIsSpeaking(false);
     }
   };
 
   const handleFeedback = async (type: 'up' | 'down') => {
     if (!result || !profile) return;
-
     const isHelpful = type === 'up';
     setFeedback(type);
     await saveAIFeedback(profile.id, 'mood', result.encouragement, isHelpful);
@@ -268,15 +234,9 @@ export default function MoodScreen({ route, navigation }: any) {
 
   const handleSave = async (item: any, index: number) => {
     if (!profile || savingId !== null || savedIds.has(index)) return;
-
     setSavingId(index);
     try {
-      await saveScripture(
-        profile.id,
-        item,
-        profile.preferred_translation || 'KJV',
-        mood || 'Search',
-      );
+      await saveScripture(profile.id, item, profile.preferred_translation || 'KJV', mood || 'Search');
       setSavedIds(prev => new Set(prev).add(index));
     } catch (error) {
       console.error('Error saving scripture:', error);
@@ -285,270 +245,116 @@ export default function MoodScreen({ route, navigation }: any) {
     }
   };
 
-  const continueInTextChat = () => {
-    const moodText = mood ? `I'm feeling ${String(mood).toLowerCase()}.` : '';
-    navigation.navigate('Chat', moodText ? {
-      initialPrompt: moodText,
-      source: 'mood-screen',
-      submittedAt: Date.now(),
-    } : undefined);
-  };
-
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.headerContainer}>
-          <Text style={[styles.title, { color: theme.accent, fontFamily: 'Playfair Display' }]} role="heading" aria-level={1}>
-            {mood ? `Reflections on ${mood}` : 'How are you feeling?'}
-          </Text>
+    <View style={styles.container}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+        <View style={styles.headingBlock}>
+          <Text style={styles.title}>{mood ? `REFLECTIONS ON ${mood}` : 'HOW ARE YOU FEELING?'}</Text>
+          <Text style={styles.subtitle}>SELECT A MOOD TO FIND SCRIPTURE, OR TELL DAVID IN YOUR OWN WORDS.</Text>
         </View>
 
-        <View style={styles.searchSection}>
-          <Text style={[styles.searchHelp, { color: theme.muted }]}>TYPE A FEELING, THEN TAP SEND</Text>
-          <View style={[styles.searchBar, { borderColor: theme.border }]}>
-            <View style={styles.searchIconContainer}>
-              <Search size={16} color={theme.accent} />
-            </View>
+        <View style={styles.searchRow}>
+          <View style={styles.searchBox}>
+            <Search size={19} color="#e1b632" />
             <TextInput
-              style={[styles.searchInput, { color: theme.text }]}
+              style={styles.searchInput}
               placeholder="I am feeling..."
-              placeholderTextColor="rgba(255, 255, 255, 0.6)"
+              placeholderTextColor="rgba(255,248,231,0.58)"
               value={searchQuery}
               onChangeText={setSearchQuery}
               onSubmitEditing={handleSearch}
-              returnKeyType="send"
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity role="button" aria-label="Clear search" onPress={() => setSearchQuery('')} style={styles.clearButton}>
-                <X size={14} color={theme.muted} />
+              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                <X size={15} color="#f1d477" />
               </TouchableOpacity>
             )}
-            <TouchableOpacity
-              style={[
-                styles.searchSubmit,
-                { backgroundColor: theme.accent },
-                (!searchQuery.trim() || loading) && styles.searchSubmitDisabled,
-              ]}
-              onPress={handleSearch}
-              disabled={!searchQuery.trim() || loading}
-              accessibilityRole="button"
-              accessibilityLabel="Send feeling"
-            >
-              <Send size={15} color="#0b1e3d" />
-              <Text style={styles.searchSubmitText}>SEND</Text>
-            </TouchableOpacity>
           </View>
+          <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
+            <Text style={styles.searchButtonText}>SEARCH</Text>
+          </TouchableOpacity>
+        </View>
 
-          <View style={styles.moodPills}>
-            {MOOD_CONFIG.map((m) => (
-              <MotionView
-                key={m.key}
-                whileHover={{ scale: 1.02, backgroundColor: 'rgba(212, 175, 55, 0.05)' }}
-                whileTap={{ scale: 0.98 }}
-                style={{ width: '31%', marginBottom: 10 }}
-              >
-                <TouchableOpacity role="button"
-                  style={[
-                    styles.moodPill,
-                    {
-                      borderColor: mood === m.key ? theme.accent : theme.border,
-                      width: '100%',
-                      marginBottom: 0,
-                      backgroundColor: mood === m.key ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
-                    },
-                  ]}
-                  onPress={() => {
-                    setSearchQuery('');
-                    setMood(m.key);
-                    void handleInitialSearch(m.key);
-                  }}
-                >
-                  <m.icon size={18} color={mood === m.key ? theme.accent : theme.muted} style={{ marginBottom: 6 }} />
-                  <Text style={[styles.moodPillText, { color: mood === m.key ? theme.accent : theme.text }]}>
-                    {m.label}
-                  </Text>
-                </TouchableOpacity>
-              </MotionView>
-            ))}
-          </View>
+        <View style={styles.moodGrid}>
+          {MOOD_CONFIG.map((m) => (
+            <TouchableOpacity
+              key={m.key}
+              style={[styles.moodTile, compact && styles.moodTileCompact, mood === m.key && styles.moodTileActive]}
+              onPress={() => {
+                setSearchQuery('');
+                setMood(m.key);
+                handleInitialSearch(m.key);
+              }}
+            >
+              <m.icon size={28} color="#e1b632" strokeWidth={1.8} />
+              <Text style={styles.moodTileText}>{m.label}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {!mood && !loading && (
-          <View style={styles.emptyState}>
-            <Text style={[styles.emptyText, { color: theme.muted }]}>
-              Enter how you're feeling above or select a mood to see scriptures.
-            </Text>
+          <View style={styles.chatPrompt}>
+            <View style={styles.promptRule} />
+            <Text style={styles.promptTitle}>NOT SURE HOW YOU FEEL?</Text>
+            <Text style={styles.promptText}>Talk to David and just share what’s on your mind.</Text>
+            <TouchableOpacity style={styles.chatCta} onPress={() => navigation.navigate('Chat')}>
+              <MessageCircle size={19} color="#071a35" />
+              <Text style={styles.chatCtaText}>CHAT WITH DAVID</Text>
+            </TouchableOpacity>
           </View>
         )}
 
-        {loading && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.accent} />
-          </View>
-        )}
+        {loading && <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#e1b632" /></View>}
 
         {result && !loading && (
           <View style={styles.resultContainer}>
-            <View style={[styles.encouragementCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <View style={styles.guidanceHeader}>
-                <View style={styles.guidanceLabelRow}>
-                  <Sparkles color={theme.accent} size={20} />
-                  <Text style={[styles.guidanceLabel, { color: theme.accent }]}>DAVID'S GUIDANCE</Text>
+            <View style={styles.encouragementCard}>
+              <View style={styles.cardHeaderRow}>
+                <View style={styles.cardLabelRow}>
+                  <Sparkles color="#e1b632" size={18} />
+                  <Text style={styles.cardLabel}>DAVID'S GUIDANCE</Text>
                 </View>
-                <TouchableOpacity role="button" onPress={speakEncouragement} disabled={isSpeaking} style={styles.readAloudButton}>
-                  {isSpeaking ? (
-                    <ActivityIndicator size="small" color={theme.accent} />
-                  ) : (
-                    <Volume2 color={theme.accent} size={18} />
-                  )}
-                  <Text style={[styles.readAloudText, { color: theme.accent }]}>READ ALOUD</Text>
-                </TouchableOpacity>
+                <View style={styles.iconActions}>
+                  <TouchableOpacity onPress={speakEncouragement} disabled={isSpeaking}>
+                    {isSpeaking ? <ActivityIndicator size="small" color="#e1b632" /> : <Volume2 color="#e1b632" size={18} />}
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => navigation.navigate('Chat', { initialPrompt: mood })}>
+                    <MessageCircle color="#e1b632" size={18} />
+                  </TouchableOpacity>
+                </View>
               </View>
+              <Text style={styles.encouragementText}>{result.encouragement}</Text>
+              <View style={styles.feedbackRow}>
+                <Text style={styles.feedbackLabel}>Was this helpful?</Text>
+                <TouchableOpacity onPress={() => handleFeedback('up')} style={styles.feedbackButton}><ThumbsUp size={15} color={feedback === 'up' ? '#e1b632' : 'rgba(241,212,119,0.55)'} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => handleFeedback('down')} style={styles.feedbackButton}><ThumbsDown size={15} color={feedback === 'down' ? '#ef6a72' : 'rgba(241,212,119,0.55)'} /></TouchableOpacity>
+              </View>
+            </View>
 
-              <Text
-                style={[styles.encouragementText, { color: theme.text, fontSize: fonts.verse - 2, fontFamily: 'Playfair Display' }]}
-                numberOfLines={guidanceExpanded ? undefined : 9}
-              >
-                {result.encouragement}
-              </Text>
-              {isLongGuidance && (
-                <TouchableOpacity
-                  role="button"
-                  onPress={() => setGuidanceExpanded(v => !v)}
-                  style={styles.guidanceToggle}
-                >
-                  <Text style={[styles.guidanceToggleText, { color: theme.accent }]}>
-                    {guidanceExpanded ? 'SHOW LESS' : 'CONTINUE READING'}
+            <View style={styles.filterRow}>
+              {(['all', 'old', 'new'] as const).map((filter) => (
+                <TouchableOpacity key={filter} style={[styles.filterButton, testamentFilter === filter && styles.filterButtonActive]} onPress={() => setTestamentFilter(filter)}>
+                  <Text style={[styles.filterText, testamentFilter === filter && styles.filterTextActive]}>
+                    {filter === 'all' ? 'ALL' : filter === 'old' ? 'OLD TESTAMENT' : 'NEW TESTAMENT'}
                   </Text>
                 </TouchableOpacity>
-              )}
-
-              <View style={styles.feedbackContainer}>
-                <Text style={[styles.feedbackLabel, { color: theme.muted }]}>Was this helpful?</Text>
-                <View style={styles.feedbackButtons}>
-                  <TouchableOpacity role="button"
-                    aria-label="This was helpful"
-                    onPress={() => handleFeedback('up')}
-                    style={[styles.feedbackButton, feedback === 'up' && { backgroundColor: 'rgba(127, 184, 148, 0.2)' }]}
-                  >
-                    <ThumbsUp size={16} color={feedback === 'up' ? '#7fb894' : theme.muted} />
-                  </TouchableOpacity>
-                  <TouchableOpacity role="button"
-                    aria-label="This was not helpful"
-                    onPress={() => handleFeedback('down')}
-                    style={[styles.feedbackButton, feedback === 'down' && { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}
-                  >
-                    <ThumbsDown size={16} color={feedback === 'down' ? '#ef4444' : theme.muted} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.continueActions}>
-                <TouchableOpacity role="button"
-                  style={[styles.continueButton, styles.freeChatButton, { backgroundColor: theme.accent }]}
-                  onPress={continueInTextChat}
-                >
-                  <MessageCircle size={15} color="#0b1e3d" />
-                  <Text style={styles.freeChatButtonText}>CHAT WITH DAVID</Text>
-                  <Text style={styles.freeTag}>FREE</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity role="button"
-                  style={[styles.continueButton, styles.voiceButton, { borderColor: theme.accent }]}
-                  onPress={() => navigation.navigate('Voice', { mood })}
-                >
-                  <Mic size={15} color={theme.accent} />
-                  <Text style={[styles.voiceButtonText, { color: theme.accent }]}>VOICE WITH DAVID</Text>
-                  <Text style={[styles.proTag, { color: theme.accent }]}>{voiceIncluded ? 'INCLUDED' : 'PRO'}</Text>
-                </TouchableOpacity>
-              </View>
+              ))}
             </View>
 
-            <View style={styles.filterContainer}>
-              <TouchableOpacity role="button"
-                style={[styles.filterPill, testamentFilter === 'all' && { backgroundColor: theme.accent }]}
-                onPress={() => setTestamentFilter('all')}
-              >
-                <Text style={[styles.filterText, testamentFilter === 'all' && { color: '#fff' }]}>ALL</Text>
-              </TouchableOpacity>
-              <TouchableOpacity role="button"
-                style={[styles.filterPill, testamentFilter === 'old' && { backgroundColor: theme.accent }]}
-                onPress={() => setTestamentFilter('old')}
-              >
-                <Text style={[styles.filterText, testamentFilter === 'old' && { color: '#fff' }]}>OLD TESTAMENT</Text>
-              </TouchableOpacity>
-              <TouchableOpacity role="button"
-                style={[styles.filterPill, testamentFilter === 'new' && { backgroundColor: theme.accent }]}
-                onPress={() => setTestamentFilter('new')}
-              >
-                <Text style={[styles.filterText, testamentFilter === 'new' && { color: '#fff' }]}>NEW TESTAMENT</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={[styles.sectionTitle, { color: theme.muted }]}>
-              {testamentFilter === 'all'
-                ? 'Relevant Scriptures'
-                : testamentFilter === 'old'
-                  ? 'Old Testament Wisdom'
-                  : 'New Testament Hope'}
-            </Text>
-
+            <Text style={styles.sectionTitle}>RELEVANT SCRIPTURES</Text>
             {filteredScriptures.length === 0 ? (
-              <View style={styles.noResults}>
-                <Text style={[styles.noResultsText, { color: theme.muted }]}>
-                  No scriptures found in this testament for your search.
-                </Text>
-              </View>
+              <View style={styles.noResults}><Text style={styles.noResultsText}>No scriptures found in this testament for your search.</Text></View>
             ) : (
               filteredScriptures.map((item, index) => (
-                <View
-                  key={index}
-                  style={[styles.scriptureCard, { backgroundColor: theme.scripture, borderColor: theme.border }]}
-                >
-                  <View style={styles.verseHeader}>
-                    <View style={[styles.verseNumber, { backgroundColor: theme.accent }]}>
-                      <Text style={styles.verseNumberText}>{index + 1}</Text>
-                    </View>
-                    <Text style={[styles.referenceText, { color: theme.accent, fontSize: fonts.ref - 2, marginTop: 0 }]}>
-                      {item.reference}
-                    </Text>
-                  </View>
-
-                  <Text style={[styles.verseText, { color: theme.text, fontSize: fonts.verse - 2, textAlign: 'left', fontFamily: 'Playfair Display' }]}>
-                    “{item.verse}”
-                  </Text>
-
-                  <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-                  <View style={styles.verseActions}>
-                    <TouchableOpacity role="button"
-                      style={[styles.verseActionButton, { borderColor: theme.accent }, savedIds.has(index) && { opacity: 0.7 }]}
-                      onPress={() => handleSave(item, index)}
-                      disabled={savingId === index || savedIds.has(index)}
-                    >
-                      {savingId === index ? (
-                        <ActivityIndicator size="small" color={theme.accent} />
-                      ) : savedIds.has(index) ? (
-                        <Check size={14} color="#7fb894" />
-                      ) : (
-                        <Bookmark size={14} color={theme.accent} />
-                      )}
-                      <Text style={[styles.verseActionButtonText, { color: savedIds.has(index) ? '#7fb894' : theme.accent }]}>
-                        {savedIds.has(index) ? 'SAVED' : 'SAVE VERSE'}
-                      </Text>
+                <View key={`${item.reference}-${index}`} style={styles.scriptureCard}>
+                  <View style={styles.scriptureHeader}>
+                    <Text style={styles.referenceText}>{item.reference}</Text>
+                    <TouchableOpacity onPress={() => handleSave(item, index)} disabled={savingId === index || savedIds.has(index)}>
+                      {savingId === index ? <ActivityIndicator size="small" color="#e1b632" /> : savedIds.has(index) ? <Check size={18} color="#54ba83" /> : <Bookmark size={18} color="#e1b632" />}
                     </TouchableOpacity>
                   </View>
-
-                  <View style={styles.explanationContainer}>
-                    <Text style={[styles.explanationLabel, { color: theme.accent }]}>Reflection</Text>
-                    <Text style={[styles.explanationText, { color: theme.muted, fontSize: fonts.exp - 2, textAlign: 'left' }]}>
-                      {item.explanation}
-                    </Text>
-                  </View>
+                  <Text style={styles.verseText}>“{item.verse}”</Text>
+                  {!!item.explanation && <Text style={styles.explanationText}>{item.explanation}</Text>}
                 </View>
               ))
             )}
@@ -560,359 +366,51 @@ export default function MoodScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-    paddingTop: 40,
-    paddingBottom: 24,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#d4af37',
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-    textAlign: 'center',
-  },
-  headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  searchSection: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  searchHelp: {
-    alignSelf: 'flex-start',
-    marginBottom: 7,
-    fontSize: 8,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-  },
-  searchBar: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: 18,
-    paddingLeft: 13,
-    paddingRight: 5,
-    borderWidth: 1,
-    marginBottom: 12,
-  },
-  searchInput: {
-    flex: 1,
-    minHeight: 42,
-    color: '#ffffff',
-    fontSize: 13,
-    fontFamily: 'Playfair Display',
-    fontStyle: 'italic',
-    paddingLeft: 8,
-  },
-  searchIconContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  clearButton: {
-    padding: 7,
-  },
-  searchSubmit: {
-    minHeight: 34,
-    borderRadius: 15,
-    paddingHorizontal: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  searchSubmitDisabled: {
-    opacity: 0.35,
-  },
-  searchSubmitText: {
-    color: '#0b1e3d',
-    fontSize: 8,
-    fontWeight: '800',
-    letterSpacing: 0.7,
-  },
-  moodPills: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  moodPill: {
-    width: '31%',
-    paddingVertical: 10,
-    borderRadius: 14,
-    marginBottom: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.15)',
-    justifyContent: 'center',
-  },
-  moodPillText: {
-    color: '#ffffff',
-    fontSize: 9,
-    fontWeight: '600',
-    letterSpacing: 0.4,
-  },
-  loadingContainer: {
-    marginTop: 50,
-    alignItems: 'center',
-  },
-  resultContainer: {
-    marginTop: 8,
-  },
-  encouragementCard: {
-    backgroundColor: '#0f2a52',
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
-  },
-  guidanceHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 10,
-  },
-  guidanceLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  guidanceToggle: {
-    marginTop: 10,
-    alignSelf: 'flex-start',
-  },
-
-  guidanceToggleText: {
-    fontFamily: 'Cinzel',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-  },
-
-  guidanceLabel: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    letterSpacing: 1,
-  },
-  readAloudButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    padding: 5,
-  },
-  readAloudText: {
-    fontSize: 7,
-    fontWeight: '700',
-    letterSpacing: 0.7,
-  },
-  encouragementText: {
-    lineHeight: 22,
-    color: '#ffffff',
-    fontWeight: '500',
-    textAlign: 'center',
-    fontStyle: 'italic',
-    fontSize: 14,
-  },
-  continueActions: {
-    marginTop: 14,
-    gap: 8,
-  },
-  continueButton: {
-    width: '100%',
-    minHeight: 42,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  freeChatButton: {
-    borderWidth: 0,
-  },
-  freeChatButtonText: {
-    flex: 1,
-    color: '#0b1e3d',
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  freeTag: {
-    color: '#0b1e3d',
-    fontSize: 8,
-    fontWeight: '900',
-    letterSpacing: 0.7,
-  },
-  voiceButton: {
-    borderWidth: 1,
-    backgroundColor: 'transparent',
-  },
-  voiceButtonText: {
-    flex: 1,
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  proTag: {
-    fontSize: 8,
-    fontWeight: '900',
-    letterSpacing: 0.7,
-  },
-  sectionTitle: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#f5d77a',
-    marginBottom: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-    textAlign: 'center',
-  },
-  scriptureCard: {
-    backgroundColor: '#163d73',
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.1)',
-  },
-  verseText: {
-    lineHeight: 22,
-    color: '#ffffff',
-    fontStyle: 'italic',
-    fontSize: 14,
-  },
-  referenceText: {
-    fontWeight: 'bold',
-    color: '#d4af37',
-    letterSpacing: 1,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
-    marginVertical: 15,
-  },
-  explanationText: {
-    color: '#f5d77a',
-    lineHeight: 18,
-    fontSize: 13,
-  },
-  emptyState: {
-    marginTop: 100,
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  emptyText: {
-    fontSize: 12,
-    textAlign: 'center',
-    lineHeight: 20,
-    letterSpacing: 1,
-  },
-  verseHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  verseNumber: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  verseNumberText: {
-    color: '#fff',
-    fontSize: 9,
-    fontWeight: 'bold',
-  },
-  explanationContainer: {
-    marginTop: 5,
-  },
-  explanationLabel: {
-    fontSize: 9,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 16,
-    gap: 6,
-  },
-  filterPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.3)',
-    backgroundColor: 'rgba(212, 175, 55, 0.05)',
-  },
-  filterText: {
-    fontSize: 8,
-    fontWeight: 'bold',
-    color: '#d4af37',
-    letterSpacing: 0.8,
-  },
-  noResults: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  noResultsText: {
-    fontSize: 14,
-    fontStyle: 'italic',
-    textAlign: 'center',
-  },
-  feedbackContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-    gap: 8,
-  },
-  feedbackLabel: {
-    fontSize: 9,
-    fontStyle: 'italic',
-  },
-  feedbackButtons: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  feedbackButton: {
-    padding: 5,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.1)',
-  },
-  verseActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginBottom: 15,
-  },
-  verseActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  verseActionButtonText: {
-    fontSize: 9,
-    fontWeight: 'bold',
-    letterSpacing: 1,
-  },
+  container: { flex: 1, backgroundColor: '#071a35' },
+  scrollView: { flex: 1 },
+  content: { width: '100%', maxWidth: 1180, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 28, paddingBottom: 42 },
+  headingBlock: { alignItems: 'center', marginBottom: 20 },
+  title: { color: '#e1b632', fontFamily: 'Cinzel', fontSize: 28, fontWeight: '700', letterSpacing: 0.7, textAlign: 'center' },
+  subtitle: { color: '#f1d477', fontFamily: 'Cinzel', fontSize: 9, fontWeight: '600', letterSpacing: 1, marginTop: 7, textAlign: 'center' },
+  searchRow: { flexDirection: 'row', alignItems: 'stretch', marginBottom: 16 },
+  searchBox: { flex: 1, minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 11, borderWidth: 1, borderColor: 'rgba(225,182,50,0.68)', backgroundColor: '#03101f', paddingHorizontal: 14 },
+  searchInput: { flex: 1, color: '#fff8e7', fontFamily: 'Playfair Display', fontSize: 14, fontStyle: 'italic', paddingVertical: 10 },
+  clearButton: { padding: 4 },
+  searchButton: { width: 120, backgroundColor: '#e1b632', borderWidth: 1, borderColor: '#f1d477', alignItems: 'center', justifyContent: 'center' },
+  searchButtonText: { color: '#071a35', fontFamily: 'Cinzel', fontSize: 10, fontWeight: '700', letterSpacing: 1 },
+  moodGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10 },
+  moodTile: { width: '32%', minHeight: 100, borderWidth: 1, borderColor: 'rgba(225,182,50,0.62)', backgroundColor: '#071a35', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  moodTileCompact: { width: '48.5%', minHeight: 92 },
+  moodTileActive: { backgroundColor: '#0a2346', borderWidth: 2, borderColor: '#e1b632' },
+  moodTileText: { color: '#fff8e7', fontFamily: 'Inter', fontSize: 12, fontWeight: '600' },
+  chatPrompt: { alignItems: 'center', marginTop: 28 },
+  promptRule: { width: 170, height: 1, backgroundColor: 'rgba(225,182,50,0.72)', marginBottom: 18 },
+  promptTitle: { color: '#e1b632', fontFamily: 'Cinzel', fontSize: 16, fontWeight: '700', letterSpacing: 0.8 },
+  promptText: { color: '#fff8e7', fontFamily: 'Playfair Display', fontSize: 13, marginTop: 8, textAlign: 'center' },
+  chatCta: { minWidth: 330, maxWidth: '100%', minHeight: 46, marginTop: 15, paddingHorizontal: 28, backgroundColor: '#e1b632', flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center' },
+  chatCtaText: { color: '#071a35', fontFamily: 'Cinzel', fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
+  loadingContainer: { paddingVertical: 34, alignItems: 'center' },
+  resultContainer: { marginTop: 28, gap: 14 },
+  encouragementCard: { borderWidth: 1, borderColor: 'rgba(225,182,50,0.62)', backgroundColor: '#03101f', padding: 18 },
+  cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  cardLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardLabel: { color: '#e1b632', fontFamily: 'Cinzel', fontSize: 10, fontWeight: '700', letterSpacing: 1 },
+  iconActions: { flexDirection: 'row', gap: 16 },
+  encouragementText: { color: '#fff8e7', fontFamily: 'Playfair Display', fontSize: 16, lineHeight: 24 },
+  feedbackRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 9, marginTop: 12 },
+  feedbackLabel: { color: 'rgba(241,212,119,0.72)', fontFamily: 'Inter', fontSize: 10 },
+  feedbackButton: { padding: 4 },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  filterButton: { borderWidth: 1, borderColor: 'rgba(225,182,50,0.48)', paddingHorizontal: 13, paddingVertical: 8, backgroundColor: '#03101f' },
+  filterButtonActive: { backgroundColor: '#e1b632' },
+  filterText: { color: '#f1d477', fontFamily: 'Cinzel', fontSize: 8, fontWeight: '700' },
+  filterTextActive: { color: '#071a35' },
+  sectionTitle: { color: '#e1b632', fontFamily: 'Cinzel', fontSize: 14, fontWeight: '700', letterSpacing: 1, marginTop: 4 },
+  scriptureCard: { borderWidth: 1, borderColor: 'rgba(225,182,50,0.48)', backgroundColor: '#0a2141', padding: 18 },
+  scriptureHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  referenceText: { color: '#e1b632', fontFamily: 'Cinzel', fontSize: 12, fontWeight: '700', letterSpacing: 0.7 },
+  verseText: { color: '#fff8e7', fontFamily: 'Playfair Display', fontSize: 18, lineHeight: 27, fontStyle: 'italic' },
+  explanationText: { color: 'rgba(255,248,231,0.72)', fontFamily: 'Inter', fontSize: 12, lineHeight: 19, marginTop: 10 },
+  noResults: { borderWidth: 1, borderColor: 'rgba(225,182,50,0.38)', padding: 18 },
+  noResultsText: { color: '#f1d477', fontFamily: 'Inter', fontSize: 12, textAlign: 'center' },
 });
