@@ -44,3 +44,31 @@ test('short conversational lead-ins get a softer spoken beat instead of a clippe
   assert.equal(sanitizeForDavidSpeech("Yeah. That's hard."), "Yeah... That's hard.");
   assert.equal(sanitizeForDavidSpeech("Okay. What happened?"), "Okay... What happened?");
 });
+
+test('chapter and verse references survive the pause rules intact', () => {
+  // Colons and semicolons soften to commas so prose reads as speech. A colon
+  // between two digits is not a pause, though -- unguarded, "Zephaniah 3:17"
+  // reaches the voice as "Zephaniah 3, 17" and is spoken "Zephaniah three,
+  // seventeen". Scripture references are the most common thing David says.
+  assert.equal(
+    sanitizeForDavidSpeech('There is a line in Zephaniah 3:17 that I love.'),
+    'There is a line in Zephaniah 3:17 that I love.',
+  );
+  assert.equal(
+    sanitizeForDavidSpeech('Philippians 4:6-7 says do not be anxious.'),
+    'Philippians 4:6-7 says do not be anxious.',
+  );
+  assert.equal(sanitizeForDavidSpeech('John 11:35 is the shortest verse.'), 'John 11:35 is the shortest verse.');
+
+  // Clock times and decimals ride on the same guard.
+  assert.equal(sanitizeForDavidSpeech('We can talk at 3:30 if that works.'), 'We can talk at 3:30 if that works.');
+  assert.equal(sanitizeForDavidSpeech('It costs 3.50 either way.'), 'It costs 3.50 either way.');
+
+  // Prose colons and semicolons still soften, which is the behaviour we want.
+  assert.equal(sanitizeForDavidSpeech('It says this: you are loved.'), 'It says this, you are loved.');
+  assert.equal(sanitizeForDavidSpeech('I meant it; I really did.'), 'I meant it, I really did.');
+
+  // Running it twice must not change the result -- both speech paths sanitize.
+  const once = sanitizeForDavidSpeech('Psalm 23:1 is the one everyone knows.');
+  assert.equal(sanitizeForDavidSpeech(once), once);
+});

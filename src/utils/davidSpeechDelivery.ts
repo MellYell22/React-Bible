@@ -62,12 +62,26 @@ const stripNonSpokenMarkup = (text: string): string =>
     .replace(/[*_~`#]+/g, ' ');
 
 const DECIMAL_PLACEHOLDER = '__DAVID_DECIMAL_POINT__';
+const VERSE_COLON_PLACEHOLDER = '__DAVID_VERSE_COLON__';
 
-const protectDecimalPoints = (text: string): string =>
-  text.replace(/(\d)\.(\d)/g, `$1${DECIMAL_PLACEHOLDER}$2`);
+/**
+ * Punctuation that sits between two digits is part of a number, not a pause.
+ * The cleanup below softens colons and semicolons into commas, which is right
+ * for prose and catastrophic for Scripture: without this guard "Zephaniah 3:17"
+ * reaches ElevenLabs as "Zephaniah 3, 17" and is spoken "Zephaniah three,
+ * seventeen". Chapter:verse references are the single most common thing David
+ * says, so they are shielded here alongside decimals (and, incidentally, clock
+ * times) and restored once the pause rules have run.
+ */
+const protectNumericPunctuation = (text: string): string =>
+  text
+    .replace(/(\d)\.(\d)/g, `$1${DECIMAL_PLACEHOLDER}$2`)
+    .replace(/(\d):(\d)/g, `$1${VERSE_COLON_PLACEHOLDER}$2`);
 
-const restoreDecimalPoints = (text: string): string =>
-  text.replaceAll(DECIMAL_PLACEHOLDER, '.');
+const restoreNumericPunctuation = (text: string): string =>
+  text
+    .replaceAll(DECIMAL_PLACEHOLDER, '.')
+    .replaceAll(VERSE_COLON_PLACEHOLDER, ':');
 
 const joinLineBreaksConversationally = (text: string): string => {
   const lines = text
@@ -80,7 +94,7 @@ const joinLineBreaksConversationally = (text: string): string => {
 };
 
 const normalizeQuotesAndSpacing = (text: string): string => {
-  let t = protectDecimalPoints(text);
+  let t = protectNumericPunctuation(text);
 
   t = t
     .replace(/[\u201c\u201d]/g, '"')
@@ -90,7 +104,7 @@ const normalizeQuotesAndSpacing = (text: string): string => {
     .replace(/([.!?])(?=[^\s.!?'"’”)])/g, '$1 ')
     .trim();
 
-  return restoreDecimalPoints(t);
+  return restoreNumericPunctuation(t);
 };
 
 const collapseStackedFiller = (text: string): string =>
@@ -197,7 +211,7 @@ export function sanitizeForDavidSpeech(text: string): string {
   if (!text) return '';
 
   let t = preparePlainText(text);
-  t = protectDecimalPoints(t);
+  t = protectNumericPunctuation(t);
 
   // Both the client and the serverless path run this, so it must be idempotent
   // and must not destroy expressive punctuation. Ellipses and em dashes are real
@@ -239,7 +253,7 @@ export function sanitizeForDavidSpeech(text: string): string {
     .replace(/\s+/g, ' ')
     .trim();
 
-  t = restoreDecimalPoints(t);
+  t = restoreNumericPunctuation(t);
 
   return t.trim();
 }
