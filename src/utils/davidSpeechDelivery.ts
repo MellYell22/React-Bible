@@ -19,7 +19,7 @@ export type HumanizeOptions = {
 // Optional leading adjective (soft/deep/gentle/long/brief/thoughtful/quiet).
 const CUE_ADJ = '(?:soft|deep|gentle|long|brief|thoughtful|quiet|slight|little)\\s+';
 const CUE_OPEN = '[\\*_~\\[(]+\\s*'; // one or more wrapper chars, then optional space
-const CUE_CLOSE = '\\s*[\\*_~\\])]+'; // optional space, then one or more wrapper chars
+const CUE_CLOSE = '\\s*[\\*_~\\])]+ ';
 
 const BREATH_WORDS = 'breath|breathes|breathing|inhale|exhale|sigh|sighs|pause|pauses|beat';
 const LAUGH_WORDS = 'chuckle|chuckles|laugh|laughs|laughing|smile|smiles|smiling|grin|grins|warmly';
@@ -103,6 +103,21 @@ const collapseStackedFiller = (text: string): string =>
     .replace(/^[\s,.!—–-]+/, '')
     .trim();
 
+/**
+ * A written filler at the beginning of a generated response is one of the
+ * loudest "robot pretending to be human" tells. David can pause naturally
+ * through punctuation; he should never literally say or display "Mm", "Mhmm",
+ * "Hmm", "Um", or "Uh" before the real sentence starts.
+ *
+ * The repeated group also catches hyphenated variants such as "Mm-hm" by
+ * consuming the separator and then matching the next filler token.
+ */
+const stripLeadingFiller = (text: string): string =>
+  text
+    .replace(/^(?:(?:mm+|mhm+|hmm+|hm|um+|uh+|er+)\b[\s,.!?…—–-]*)+/i, '')
+    .replace(/^[\s,.!?…—–-]+/, '')
+    .trim();
+
 const SENTENCE_RE = /[^.!?]+[.!?]+['"’”)]*|[^.!?]+$/g;
 const ENDS_WITH_QUESTION = /\?['"’”)]*\s*$/;
 const ENDS_SENTENCE = /[.!?]['"’”)]*\s*$/;
@@ -155,6 +170,7 @@ const preparePlainText = (text: string): string => {
   t = joinLineBreaksConversationally(t);
   t = normalizeQuotesAndSpacing(t);
   t = collapseStackedFiller(t);
+  t = stripLeadingFiller(t);
   t = applyContractions(t);
 
   return t.trim();
@@ -228,8 +244,10 @@ export function sanitizeForDavidSpeech(text: string): string {
 
   // A one-word conversational lead-in can sound clipped when followed by a
   // hard period. Soften only the opener; do not sprinkle pauses everywhere.
+  // Include Hey/Hi here because "Hey. What's going on?" is exactly the kind of
+  // start-stop greeting that makes an otherwise good voice sound synthetic.
   // Same reason as above for accepting an ellipsis that is already there.
-  t = t.replace(/^(Yeah|Okay|Right|Well)(?:\.{1,3})\s+(?=[A-Z])/i, '$1... ');
+  t = t.replace(/^(Yeah|Okay|Right|Well|Hey|Hi)(?:\.{1,3})\s+(?=[A-Z])/i, '$1... ');
 
   // Clean punctuation spacing without creating new pauses inside phrases.
   t = t
