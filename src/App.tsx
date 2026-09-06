@@ -1,40 +1,29 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Platform,
-  ActivityIndicator,
-  useWindowDimensions,
-} from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import { Analytics } from '@vercel/analytics/react';
 import { initAnalytics, trackEvent } from './services/analytics';
 import { UserProvider, useUser } from './UserContext';
 import AuthScreen from './screens/AuthScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
-import HomeScreen from './screens/HomeScreen';
 import MoodScreen from './screens/MoodScreen';
 import ChatScreen from './screens/ChatScreen';
 import VoiceScreen from './screens/VoiceScreen';
 import ReflectionScreen from './screens/ReflectionScreen';
 import BibleBrowserScreen from './screens/BibleBrowserScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import PricingScreen from './screens/PricingScreen';
+import AppNav from './components/AppNav';
+import { APP_COLORS, APP_FONTS } from './designSystem';
 
-type AppRoute = 'Home' | 'Mood' | 'Chat' | 'Voice' | 'Reflection' | 'Bible' | 'Profile';
+type AppRoute = 'Home' | 'Mood' | 'Chat' | 'Voice' | 'Reflection' | 'Bible' | 'Profile' | 'Pricing';
 
 type RouteState = {
   name: AppRoute;
   params?: Record<string, any>;
 };
 
-const NAV_ITEMS: AppRoute[] = ['Home', 'Mood', 'Chat', 'Voice', 'Bible', 'Profile'];
-const DESKTOP_NAV_BREAKPOINT = 768;
-
 const getInitialRoute = (): RouteState => {
-  if (typeof window === 'undefined') {
-    return { name: 'Home' };
-  }
+  if (typeof window === 'undefined') return { name: 'Mood' };
 
   const params = new URLSearchParams(window.location.search);
   const isStripeSuccess =
@@ -43,40 +32,34 @@ const getInitialRoute = (): RouteState => {
     window.location.pathname.includes('payment-success');
   const isStripeCanceled =
     params.get('canceled') === 'true' ||
+    params.get('showPricing') === 'true' ||
     window.location.pathname.includes('pricing');
 
   if (isStripeSuccess || isStripeCanceled) {
     return {
-      name: 'Profile',
+      name: 'Pricing',
       params: {
         success: isStripeSuccess,
         paymentSuccess: isStripeSuccess,
         canceled: isStripeCanceled,
-        showPricing: true,
         sessionId: params.get('session_id') || undefined,
       },
     };
   }
 
-  return { name: 'Home' };
+  return { name: 'Mood' };
 };
 
 function AppShell() {
   const { session, profile, loading, refreshProfile, signOut } = useUser();
-  const { width } = useWindowDimensions();
   const [route, setRoute] = useState<RouteState>(() => getInitialRoute());
   const [onboardingCompletedLocally, setOnboardingCompletedLocally] = useState(false);
-
-  const isDesktopWeb = Platform.OS === 'web' && width >= DESKTOP_NAV_BREAKPOINT;
-
-  // Stamp first-touch attribution before any in-app navigation rewrites the
-  // URL, then close the funnel if this load is Stripe returning from a paid
-  // checkout. Guarded by a ref so React's dev double-mount cannot double-count.
   const paidTracked = useRef(false);
+
   useEffect(() => {
     initAnalytics();
     if (paidTracked.current) return;
-    if (route.name === 'Profile' && route.params?.paymentSuccess) {
+    if (route.name === 'Pricing' && route.params?.paymentSuccess) {
       paidTracked.current = true;
       trackEvent('checkout_completed');
     }
@@ -89,7 +72,7 @@ function AppShell() {
   const navigation = useMemo(
     () => ({
       navigate: (name: AppRoute, params?: Record<string, any>) => setRoute({ name, params }),
-      goBack: () => setRoute({ name: 'Home' }),
+      goBack: () => setRoute({ name: 'Mood' }),
       setParams: (params?: Record<string, any>) =>
         setRoute((current) => ({
           ...current,
@@ -102,23 +85,20 @@ function AppShell() {
   if (loading) {
     return (
       <View style={styles.loadingPage}>
-        <ActivityIndicator color="#d4af37" size="large" />
+        <ActivityIndicator color={APP_COLORS.gold} size="large" />
         <Text style={styles.loadingText}>Opening Bible Mood Search...</Text>
       </View>
     );
   }
 
-  if (!session) {
-    return <AuthScreen />;
-  }
+  if (!session) return <AuthScreen />;
 
   if (profile && !profile.has_completed_onboarding && !onboardingCompletedLocally) {
     return (
       <OnboardingScreen
         onComplete={async () => {
           setOnboardingCompletedLocally(true);
-          setRoute({ name: 'Home' });
-
+          setRoute({ name: 'Mood' });
           try {
             await refreshProfile(false);
           } catch (error) {
@@ -130,46 +110,20 @@ function AppShell() {
   }
 
   const screenProps = { navigation, route: { name: route.name, params: route.params || {} } };
-
-  const navigationBar = (
-    <View style={[styles.tabBar, isDesktopWeb ? styles.desktopTabBar : styles.mobileTabBar]}>
-      {NAV_ITEMS.map((item) => (
-        <TouchableOpacity
-          key={item}
-          style={styles.tabButton}
-          onPress={() => setRoute({ name: item })}
-          accessibilityRole="button"
-          accessibilityState={{ selected: route.name === item }}
-        >
-          <Text style={[styles.tabText, route.name === item && styles.tabTextActive]}>{item}</Text>
-        </TouchableOpacity>
-      ))}
-      <TouchableOpacity
-        accessibilityRole="button"
-        accessibilityLabel="Log out"
-        style={[styles.tabButton, styles.logoutButton]}
-        onPress={() => void signOut()}
-      >
-        <Text style={styles.logoutText}>Log out</Text>
-      </TouchableOpacity>
-    </View>
-  );
+  const navCurrent = route.name === 'Pricing' || route.name === 'Reflection' ? '' : route.name;
 
   return (
     <View style={styles.appShell}>
-      {isDesktopWeb && navigationBar}
-
+      <AppNav current={navCurrent} navigation={navigation} onLogout={() => void signOut()} />
       <View style={styles.screenWrap}>
-        {route.name === 'Home' && <HomeScreen navigation={navigation} />}
-        {route.name === 'Mood' && <MoodScreen {...screenProps} />}
+        {(route.name === 'Home' || route.name === 'Mood') && <MoodScreen {...screenProps} />}
         {route.name === 'Chat' && <ChatScreen {...screenProps} />}
-        {route.name === 'Voice' && <VoiceScreen />}
+        {route.name === 'Voice' && <VoiceScreen navigation={navigation} />}
         {route.name === 'Reflection' && <ReflectionScreen {...screenProps} />}
         {route.name === 'Bible' && <BibleBrowserScreen />}
         {route.name === 'Profile' && <ProfileScreen {...screenProps} />}
+        {route.name === 'Pricing' && <PricingScreen {...screenProps} />}
       </View>
-
-      {!isDesktopWeb && navigationBar}
     </View>
   );
 }
@@ -187,68 +141,29 @@ const styles = StyleSheet.create({
   loadingPage: {
     flex: 1,
     minHeight: Platform.OS === 'web' ? ('100vh' as any) : undefined,
-    backgroundColor: '#0b1e3d',
+    backgroundColor: APP_COLORS.navy,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16,
   },
   loadingText: {
-    color: '#f5d77a',
-    fontSize: 16,
+    color: APP_COLORS.goldSoft,
+    fontSize: 14,
     fontWeight: '700',
     letterSpacing: 1,
+    fontFamily: APP_FONTS.serif,
   },
   appShell: {
     flex: 1,
     height: Platform.OS === 'web' ? ('100dvh' as any) : undefined,
     minHeight: 0,
     overflow: 'hidden',
-    backgroundColor: '#0b1e3d',
+    backgroundColor: APP_COLORS.navy,
   },
   screenWrap: {
     flex: 1,
     minHeight: 0,
     overflow: 'hidden',
-  },
-  tabBar: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#051020',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-  },
-  desktopTabBar: {
-    flexWrap: 'nowrap',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(212, 175, 55, 0.25)',
-  },
-  mobileTabBar: {
-    flexWrap: 'wrap',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(212, 175, 55, 0.25)',
-  },
-  tabButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  tabText: {
-    color: 'rgba(245, 215, 122, 0.62)',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  tabTextActive: {
-    color: '#d4af37',
-  },
-  logoutButton: {
-    borderLeftWidth: 1,
-    borderLeftColor: 'rgba(212, 175, 55, 0.25)',
-  },
-  logoutText: {
-    color: '#f5d77a',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.8,
+    backgroundColor: APP_COLORS.navy,
   },
 });
