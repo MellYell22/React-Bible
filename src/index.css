@@ -28,6 +28,25 @@ button, input, textarea {
   font: inherit;
 }
 
+/* Approved Bible Mood Search design: the Voice screen must use the same
+   crisp rectangular geometry as the other six screens. This is scoped to
+   the voice route so circular profile/icon artwork elsewhere stays intact. */
+#voice-design-shell,
+#voice-design-shell > div {
+  background: #071a35 !important;
+}
+
+#voice-design-shell * {
+  border-radius: 0 !important;
+}
+
+#voice-design-shell button,
+#voice-design-shell [role="button"],
+#voice-design-shell input,
+#voice-design-shell textarea {
+  border-radius: 0 !important;
+}
+
 ::-webkit-scrollbar {
   width: 7px;
 }
