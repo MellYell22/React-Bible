@@ -91,7 +91,13 @@ function AppShell() {
     );
   }
 
-  if (!session) return <AuthScreen />;
+  if (!session) {
+    return (
+      <View nativeID="auth-design-shell" style={styles.routeShell}>
+        <AuthScreen />
+      </View>
+    );
+  }
 
   if (profile && !profile.has_completed_onboarding && !onboardingCompletedLocally) {
     return (
@@ -110,23 +116,46 @@ function AppShell() {
   }
 
   const screenProps = { navigation, route: { name: route.name, params: route.params || {} } };
-  const navCurrent = route.name === 'Pricing' || route.name === 'Reflection' ? '' : route.name;
 
   return (
     <View style={styles.appShell}>
-      <AppNav current={navCurrent} navigation={navigation} onLogout={() => void signOut()} />
+      <AppNav current={route.name} navigation={navigation} onLogout={() => void signOut()} />
       <View style={styles.screenWrap}>
-        {(route.name === 'Home' || route.name === 'Mood') && <MoodScreen {...screenProps} />}
-        {route.name === 'Chat' && <ChatScreen {...screenProps} />}
-        {route.name === 'Voice' && (
-          <View nativeID="voice-design-shell" style={styles.voiceDesignShell}>
-            <VoiceScreen navigation={navigation} />
+        {(route.name === 'Home' || route.name === 'Mood') && (
+          <View nativeID="mood-design-shell" style={styles.routeShell}>
+            <MoodScreen {...screenProps} />
           </View>
         )}
-        {route.name === 'Reflection' && <ReflectionScreen {...screenProps} />}
-        {route.name === 'Bible' && <BibleBrowserScreen />}
-        {route.name === 'Profile' && <ProfileScreen {...screenProps} />}
-        {route.name === 'Pricing' && <PricingScreen {...screenProps} />}
+        {route.name === 'Chat' && (
+          <View nativeID="chat-design-shell" style={styles.routeShell}>
+            <ChatScreen {...screenProps} />
+          </View>
+        )}
+        {route.name === 'Voice' && (
+          <View nativeID="voice-design-shell" style={styles.routeShell}>
+            <VoiceScreen />
+          </View>
+        )}
+        {route.name === 'Reflection' && (
+          <View nativeID="reflection-design-shell" style={styles.routeShell}>
+            <ReflectionScreen {...screenProps} />
+          </View>
+        )}
+        {route.name === 'Bible' && (
+          <View nativeID="bible-design-shell" style={styles.routeShell}>
+            <BibleBrowserScreen />
+          </View>
+        )}
+        {route.name === 'Profile' && (
+          <View nativeID="profile-design-shell" style={styles.routeShell}>
+            <ProfileScreen {...screenProps} />
+          </View>
+        )}
+        {route.name === 'Pricing' && (
+          <View nativeID="pricing-design-shell" style={styles.routeShell}>
+            <PricingScreen {...screenProps} />
+          </View>
+        )}
       </View>
     </View>
   );
@@ -170,7 +199,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: APP_COLORS.navy,
   },
-  voiceDesignShell: {
+  routeShell: {
     flex: 1,
     minHeight: 0,
     backgroundColor: APP_COLORS.navy,
