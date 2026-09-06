@@ -3,10 +3,15 @@ import assert from "node:assert/strict";
 
 import { buildOpeningRules } from "../src/utils/davidOpeningRules.mjs";
 
-test("no opening produces no rules", () => {
-  assert.equal(buildOpeningRules(null), "");
-  assert.equal(buildOpeningRules(undefined), "");
-  assert.equal(buildOpeningRules(""), "");
+test("no opening produces the substantive live-voice turn rules", () => {
+  for (const opening of [null, undefined, ""]) {
+    const rules = buildOpeningRules(opening);
+    assert.match(rules, /THIS TURN IS SUBSTANTIVE/);
+    assert.match(rules, /ONE genuinely relevant Bible verse/i);
+    assert.match(rules, /ask at most ONE gentle follow-up question/i);
+    assert.match(rules, /no Mm, Mmm, Mhm, Mhmm/i);
+    assert.match(rules, /Write for the ear/i);
+  }
 });
 
 test("every opening type forbids Scripture this turn", () => {
