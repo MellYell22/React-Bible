@@ -19,7 +19,7 @@ export type HumanizeOptions = {
 // Optional leading adjective (soft/deep/gentle/long/brief/thoughtful/quiet).
 const CUE_ADJ = '(?:soft|deep|gentle|long|brief|thoughtful|quiet|slight|little)\\s+';
 const CUE_OPEN = '[\\*_~\\[(]+\\s*'; // one or more wrapper chars, then optional space
-const CUE_CLOSE = '\\s*[\\*_~\\])]+ ';
+const CUE_CLOSE = '\\s*[\\*_~\\])]+'; // optional space, then one or more wrapper chars
 
 const BREATH_WORDS = 'breath|breathes|breathing|inhale|exhale|sigh|sighs|pause|pauses|beat';
 const LAUGH_WORDS = 'chuckle|chuckles|laugh|laughs|laughing|smile|smiles|smiling|grin|grins|warmly';
