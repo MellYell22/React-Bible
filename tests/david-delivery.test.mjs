@@ -5,10 +5,12 @@ import ts from 'typescript';
 const source = fs.readFileSync(new URL('../src/utils/davidSpeechDelivery.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } }).outputText;
 const { sanitizeForDavidSpeech } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+
 test('speech keeps question intonation and thought boundaries without stage directions', () => {
   assert.equal(sanitizeForDavidSpeech('[warmly] You got the job! What part worries you?'), 'You got the job! What part worries you?');
-  assert.equal(sanitizeForDavidSpeech('Take your time... we can talk — whenever you’re ready.'), "Take your time... we can talk, whenever you're ready.");
+  assert.equal(sanitizeForDavidSpeech('Take your time... we can talk — whenever you’re ready.'), "Take your time... we can talk — whenever you're ready.");
 });
+
 test('speech preparation is stable across client and server cleanup', () => {
   const text = 'It is okay... [pause] What feels hardest?';
   const once = sanitizeForDavidSpeech(text);
@@ -21,4 +23,24 @@ test('intentional ellipses survive repeated speech cleanup', () => {
     assert.equal(result, 'I wonder... what changed?');
     assert.equal(sanitizeForDavidSpeech(result), result);
   }
+});
+
+test('David introduction is spoken as one natural thought with a soft pause', () => {
+  assert.equal(
+    sanitizeForDavidSpeech("Hey. I'm David. What's on your mind?"),
+    "Hey, I'm David... What's on your mind?",
+  );
+  assert.equal(
+    sanitizeForDavidSpeech("Hi, I'm David. How are you today?"),
+    "Hi, I'm David... How are you today?",
+  );
+  assert.equal(
+    sanitizeForDavidSpeech("Hey there. I'm David. Take your time — where do you want to start?"),
+    "Hey there, I'm David... Take your time — where do you want to start?",
+  );
+});
+
+test('short conversational lead-ins get a softer spoken beat instead of a clipped stop', () => {
+  assert.equal(sanitizeForDavidSpeech("Yeah. That's hard."), "Yeah... That's hard.");
+  assert.equal(sanitizeForDavidSpeech("Okay. What happened?"), "Okay... What happened?");
 });
