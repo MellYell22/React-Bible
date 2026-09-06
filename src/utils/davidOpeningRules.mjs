@@ -1,21 +1,40 @@
 /**
- * The instruction block David's prompt gets when detectConversationOpening()
- * (see conversationOpening.mjs) classifies a turn as a greeting, small talk,
- * or a low-signal reply rather than something substantive.
+ * The final instruction block David's prompt gets after the broader persona /
+ * mode rules have already been assembled.
  *
- * api/chat.ts (voice) and api/david-chat.ts (text) used to each hand-write
- * their own version of this block. Same intent, different wording, two
- * places to update — exactly the kind of drift that let the free daily
- * message limit go unenforced on one of the two chat paths for a while.
- * This is the one copy both import.
+ * When detectConversationOpening() classifies the turn as a greeting, small
+ * talk, or a low-signal reply, this keeps the moment light and prevents David
+ * from forcing Scripture where it does not belong.
  *
- * Deliberately plain string work, not a model call: this runs on every turn
- * and must be fast, free, and predictable.
+ * When there is NO opening classification, api/chat.ts still calls this helper.
+ * That gives live voice one small, late prompt block that can override older
+ * curiosity-first wording and keep the current product behavior locked in:
+ * when the person has actually named an emotion or struggle, David comforts,
+ * brings one relevant Scripture, then asks at most one gentle question.
+ *
+ * api/david-chat.ts (typed chat) only calls this helper for opening turns, so the
+ * substantive block below is intentionally a live-voice correction rather than
+ * a surprise rewrite of typed-chat behavior.
+ *
+ * Deliberately plain string work, not a model call: this runs on every turn and
+ * must be fast, free, and predictable.
  */
+
+const SUBSTANTIVE_LIVE_VOICE_RULES = [
+  'THIS TURN IS SUBSTANTIVE — THESE LATEST LIVE-CONVERSATION RULES OVERRIDE EARLIER CURIOSITY-FIRST LANGUAGE:',
+  '- If the person clearly names an emotion, pain, fear, grief, conflict, or other personal struggle, do NOT make them answer an intake question before helping. "I\'m sad" is enough context to comfort them without inventing why they are sad.',
+  '- In that same reply, bring ONE genuinely relevant Bible verse or biblical line naturally, then give ONE brief plain-language sentence about why it fits exactly what they said. Never stack verses and never turn it into a sermon.',
+  '- After the verse/comfort, ask at most ONE gentle follow-up question when it helps, such as what happened or how long they have felt that way. If a question is not needed, let the thought land and stop.',
+  '- If they ask a direct factual/casual question or make a neutral statement, answer that naturally. Do not force Scripture into every substantive turn.',
+  '- The newest thing they said is the center. Move forward. Do not circle back, repeat an earlier question, or make them re-explain something they already answered.',
+  '- Never begin with filler sounds or written vocalizations: no Mm, Mmm, Mhm, Mhmm, Hmm, Hm, Um, Uh, or Er. Start with actual words.',
+  '- Write for the ear, not the page: use contractions, commas, an occasional ellipsis for a real reflective pause, and an em dash for a pivot. Do not chop one thought into a row of short period-separated sentences.',
+  '- Keep the whole voice reply compact and human. Warm first, Scripture second when the moment calls for it, then one question at most.',
+].join('\n');
 
 /** @param {'greeting'|'small-talk'|'low-signal'|null|undefined} opening */
 export function buildOpeningRules(opening) {
-  if (!opening) return '';
+  if (!opening) return SUBSTANTIVE_LIVE_VOICE_RULES;
 
   const lines = [
     `THIS TURN IS ${opening.toUpperCase()} — HANDLE IT AS CONVERSATION, NOT AS A REQUEST FOR HELP:`,

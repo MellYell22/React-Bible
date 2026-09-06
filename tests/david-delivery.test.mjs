@@ -43,4 +43,13 @@ test('David introduction is spoken as one natural thought with a soft pause', ()
 test('short conversational lead-ins get a softer spoken beat instead of a clipped stop', () => {
   assert.equal(sanitizeForDavidSpeech("Yeah. That's hard."), "Yeah... That's hard.");
   assert.equal(sanitizeForDavidSpeech("Okay. What happened?"), "Okay... What happened?");
+  assert.equal(sanitizeForDavidSpeech("Hey. What's going on?"), "Hey... What's going on?");
+  assert.equal(sanitizeForDavidSpeech("Hi. How are you feeling today?"), "Hi... How are you feeling today?");
+});
+
+test('leading filler sounds never reach David display or speech', () => {
+  assert.equal(sanitizeForDavidSpeech("Mm. That's a lot to carry."), "That's a lot to carry.");
+  assert.equal(sanitizeForDavidSpeech("Mhmm... What happened?"), 'What happened?');
+  assert.equal(sanitizeForDavidSpeech("Mm-hm. I get it."), 'I get it.');
+  assert.equal(sanitizeForDavidSpeech("Um... give me a second."), 'give me a second.');
 });
