@@ -118,7 +118,11 @@ function AppShell() {
       <View style={styles.screenWrap}>
         {(route.name === 'Home' || route.name === 'Mood') && <MoodScreen {...screenProps} />}
         {route.name === 'Chat' && <ChatScreen {...screenProps} />}
-        {route.name === 'Voice' && <VoiceScreen navigation={navigation} />}
+        {route.name === 'Voice' && (
+          <View nativeID="voice-design-shell" style={styles.voiceDesignShell}>
+            <VoiceScreen navigation={navigation} />
+          </View>
+        )}
         {route.name === 'Reflection' && <ReflectionScreen {...screenProps} />}
         {route.name === 'Bible' && <BibleBrowserScreen />}
         {route.name === 'Profile' && <ProfileScreen {...screenProps} />}
@@ -164,6 +168,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     overflow: 'hidden',
+    backgroundColor: APP_COLORS.navy,
+  },
+  voiceDesignShell: {
+    flex: 1,
+    minHeight: 0,
     backgroundColor: APP_COLORS.navy,
   },
 });
