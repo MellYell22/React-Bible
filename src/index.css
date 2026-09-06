@@ -47,6 +47,30 @@ button, input, textarea {
   border-radius: 0 !important;
 }
 
+/* Match the locked Voice mockup: gold start action, navy/gold end action,
+   and no legacy red control treatment. */
+#voice-design-shell [aria-label="Start Conversation"] {
+  background: #e1b632 !important;
+  border-color: #f1d477 !important;
+}
+
+#voice-design-shell [aria-label="End Conversation"] {
+  background: #071a35 !important;
+  border-color: #e1b632 !important;
+}
+
+#voice-design-shell [aria-label="End Conversation"] span,
+#voice-design-shell [aria-label="End Conversation"] svg {
+  color: #e1b632 !important;
+  fill: #e1b632 !important;
+  stroke: #e1b632 !important;
+}
+
+#voice-design-shell [aria-label="Send message to David"] {
+  background: #e1b632 !important;
+  border-color: #f1d477 !important;
+}
+
 ::-webkit-scrollbar {
   width: 7px;
 }
