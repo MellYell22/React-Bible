@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Bookmark, Check, ChevronDown, ChevronRight, ChevronUp, HelpCircle, LogOut, Mail, Settings, ShieldCheck, Trash2, UserCircle2 } from 'lucide-react';
 import { useUser } from '../UserContext';
 import { supabase, deleteSavedScripture, getSavedScriptures, toggleMemorized, updateScriptureCategory } from '../services/supabase';
@@ -8,7 +8,9 @@ import { APP_COLORS, APP_FONTS } from '../designSystem';
 import { openCustomerPortal } from '../services/stripe';
 import { OWNER_EMAIL, hasProAccess } from '../utils/tier';
 
-type Section = 'account' | 'saved' | 'settings' | 'help' | null;
+const SUPPORT_EMAIL = 'contact@aa-designs.com';
+
+type Section = 'account' | 'subscription' | 'saved' | 'settings' | 'help' | null;
 
 export default function ProfileScreen({ navigation }: any) {
   const { profile, signOut, refreshProfile } = useUser();
@@ -18,6 +20,10 @@ export default function ProfileScreen({ navigation }: any) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+
+  const tier = profile?.subscription_tier;
+  const isOwner = profile?.email?.toLowerCase() === OWNER_EMAIL.toLowerCase() || tier === 'owner';
+  const isPaid = tier === 'plus' || tier === 'pro' || isOwner;
 
   const loadSaved = async () => {
     if (!profile) return;
@@ -52,9 +58,6 @@ export default function ProfileScreen({ navigation }: any) {
   const toggleSection = (next: Exclude<Section, null>) => setSection((current) => current === next ? null : next);
 
   const handleSubscription = async () => {
-    const tier = profile?.subscription_tier;
-    const isPaid = tier === 'plus' || tier === 'pro' || tier === 'owner' || profile?.email?.toLowerCase() === OWNER_EMAIL.toLowerCase();
-
     if (!isPaid || profile?.id === 'guest') {
       navigation?.navigate('Pricing');
       return;
@@ -68,9 +71,13 @@ export default function ProfileScreen({ navigation }: any) {
     }
   };
 
+  const contactSupport = () => {
+    void Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Bible%20AI%20Companion%20Support`);
+  };
+
   const menuRows = [
     { key: 'account' as const, label: 'Account Information', icon: UserCircle2, onPress: () => toggleSection('account') },
-    { key: 'subscription' as const, label: 'Subscription', icon: ShieldCheck, onPress: () => void handleSubscription() },
+    { key: 'subscription' as const, label: 'Subscription', icon: ShieldCheck, onPress: () => toggleSection('subscription') },
     { key: 'saved' as const, label: 'Saved Reflections', icon: Bookmark, onPress: () => toggleSection('saved') },
     { key: 'settings' as const, label: 'Settings', icon: Settings, onPress: () => toggleSection('settings') },
     { key: 'help' as const, label: 'Help & Support', icon: HelpCircle, onPress: () => toggleSection('help') },
@@ -89,7 +96,7 @@ export default function ProfileScreen({ navigation }: any) {
       <View style={styles.menuList}>
         {menuRows.map((row) => {
           const Icon = row.icon;
-          const isOpen = row.key !== 'subscription' && section === row.key;
+          const isOpen = section === row.key;
           return (
             <TouchableOpacity key={row.key} style={styles.menuRow} onPress={row.onPress}>
               <View style={styles.menuLabelWrap}><Icon size={16} color={APP_COLORS.gold} /><Text style={styles.menuLabel}>{row.label}</Text></View>
@@ -103,7 +110,29 @@ export default function ProfileScreen({ navigation }: any) {
         <View style={styles.detailPanel}>
           <Text style={styles.detailTitle}>ACCOUNT INFORMATION</Text>
           <View style={styles.infoRow}><Mail size={15} color={APP_COLORS.gold} /><Text style={styles.infoText}>{profile?.email || 'Guest'}</Text></View>
-          <View style={styles.infoRow}><ShieldCheck size={15} color={APP_COLORS.gold} /><Text style={styles.infoText}>Plan: {profile?.email === OWNER_EMAIL ? 'Owner' : (profile?.subscription_tier || 'free').toUpperCase()}</Text></View>
+          <View style={styles.infoRow}><ShieldCheck size={15} color={APP_COLORS.gold} /><Text style={styles.infoText}>Plan: {isOwner ? 'Owner' : (profile?.subscription_tier || 'free').toUpperCase()}</Text></View>
+        </View>
+      )}
+
+      {section === 'subscription' && (
+        <View style={styles.detailPanel}>
+          <Text style={styles.detailTitle}>SUBSCRIPTION</Text>
+          {status && <Text style={styles.statusText}>{status}</Text>}
+          <Text style={styles.helpText}>Current plan: {isOwner ? 'OWNER' : (profile?.subscription_tier || 'free').toUpperCase()}</Text>
+          {isPaid && !isOwner ? (
+            <>
+              <Text style={styles.subscriptionNote}>You can update billing details, view invoices, or cancel your subscription through Stripe.</Text>
+              <TouchableOpacity style={styles.cancelButton} onPress={() => void handleSubscription()}>
+                <Text style={styles.cancelButtonText}>CANCEL SUBSCRIPTION</Text>
+              </TouchableOpacity>
+            </>
+          ) : isOwner ? (
+            <Text style={styles.subscriptionNote}>Owner access does not have a cancellable subscription.</Text>
+          ) : (
+            <TouchableOpacity style={styles.manageButton} onPress={() => navigation?.navigate('Pricing')}>
+              <Text style={styles.manageButtonText}>VIEW PLANS</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -171,7 +200,11 @@ export default function ProfileScreen({ navigation }: any) {
       {section === 'help' && (
         <View style={styles.detailPanel}>
           <Text style={styles.detailTitle}>HELP & SUPPORT</Text>
-          <Text style={styles.helpText}>Need help with your account, subscription, or Bible AI Companion? Contact support from your account email and include the issue you’re seeing.</Text>
+          <Text style={styles.helpText}>Need help with your account, subscription, or Bible AI Companion? Contact AA Designs support and include the issue you’re seeing.</Text>
+          <TouchableOpacity style={styles.contactRow} onPress={contactSupport}>
+            <Mail size={16} color={APP_COLORS.gold} />
+            <Text style={styles.contactEmail}>{SUPPORT_EMAIL}</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -212,6 +245,11 @@ const styles = StyleSheet.create({
   smallButton: { minHeight: 34, borderWidth: 1, borderColor: APP_COLORS.borderSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: 10 },
   smallButtonText: { color: APP_COLORS.gold, fontFamily: APP_FONTS.sans, fontSize: 9, fontWeight: '700' },
   statusText: { color: APP_COLORS.goldSoft, fontFamily: APP_FONTS.sans, fontSize: 10, marginBottom: 10 },
+  subscriptionNote: { color: APP_COLORS.muted, fontFamily: APP_FONTS.sans, fontSize: 11, lineHeight: 18, marginTop: 8, marginBottom: 14 },
+  cancelButton: { minHeight: 42, borderWidth: 1, borderColor: '#ef6a72', alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  cancelButtonText: { color: '#ef6a72', fontFamily: APP_FONTS.serif, fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
+  manageButton: { minHeight: 42, borderWidth: 1, borderColor: APP_COLORS.gold, alignItems: 'center', justifyContent: 'center', marginTop: 14 },
+  manageButtonText: { color: APP_COLORS.gold, fontFamily: APP_FONTS.serif, fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
   settingLabel: { color: APP_COLORS.gold, fontFamily: APP_FONTS.serif, fontSize: 9, fontWeight: '700', letterSpacing: 0.8, marginBottom: 8 },
   optionRow: { flexDirection: 'row', gap: 8 },
   optionButton: { flex: 1, minHeight: 38, borderWidth: 1, borderColor: APP_COLORS.border, alignItems: 'center', justifyContent: 'center' },
@@ -224,6 +262,8 @@ const styles = StyleSheet.create({
   toggleBox: { width: 24, height: 24, borderWidth: 1, borderColor: APP_COLORS.gold, alignItems: 'center', justifyContent: 'center' },
   toggleBoxActive: { backgroundColor: APP_COLORS.gold },
   helpText: { color: APP_COLORS.cream, fontFamily: APP_FONTS.sans, fontSize: 12, lineHeight: 19 },
+  contactRow: { minHeight: 42, marginTop: 14, borderTopWidth: 1, borderTopColor: APP_COLORS.borderSoft, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  contactEmail: { color: APP_COLORS.gold, fontFamily: APP_FONTS.sans, fontSize: 12, fontWeight: '600' },
   logoutButton: { minHeight: 46, marginTop: 22, borderWidth: 1, borderColor: APP_COLORS.gold, backgroundColor: APP_COLORS.navyDeep, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   logoutText: { color: APP_COLORS.cream, fontFamily: APP_FONTS.serif, fontSize: 10, fontWeight: '700', letterSpacing: 1.1 },
 });
